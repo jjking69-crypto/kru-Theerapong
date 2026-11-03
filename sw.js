@@ -1,5 +1,5 @@
 // ตัวช่วยให้ติดตั้งเป็นแอปได้ และเปิดหน้าแอปได้เร็วขึ้น
-const CACHE = 'khru-app-v1';
+const CACHE = 'khru-app-v2';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon.png'];
 
 self.addEventListener('install', e => {

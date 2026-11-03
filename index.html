@@ -9,14 +9,14 @@
   <!-- ตั้งค่าแอป -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1767ee">
-  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="icon" type="image/png" href="favicon.png?v=2">
 
   <!-- สำหรับ iPad / iPhone -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ครูธีรพงศ์">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 
   <style>
     html, body { margin: 0; height: 100%; background: #1767ee; overflow: hidden; }
@@ -40,11 +40,11 @@
     }
     #splash.hide { opacity: 0; pointer-events: none; }
     .logo {
-      width: 132px; height: 132px; border-radius: 34px; background: #fff;
-      display: grid; place-items: center; box-shadow: 0 16px 40px #0b2a6b66;
+      width: 180px; height: 180px; border-radius: 50%;
+      display: grid; place-items: center; filter: drop-shadow(0 16px 30px #0b2a6b66);
       animation: pop 1.6s ease-in-out infinite;
     }
-    .logo img { width: 112px; height: 112px; object-fit: contain; }
+    .logo img { width: 180px; height: 180px; object-fit: contain; }
     @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
     h1 { margin: 6px 0 0; font-size: 28px; }
     p  { margin: 0; font-size: 17px; color: #dbe8ff; }
@@ -65,7 +65,7 @@
 <body>
 
   <div id="splash">
-    <div class="logo"><img src="icon-192.png" alt="ตราโรงเรียน"></div>
+    <div class="logo"><img src="icon-512.png?v=2" alt="ห้องเรียนครูธีรพงศ์"></div>
     <h1>ห้องเรียนครูธีรพงศ์</h1>
     <p id="msg">โรงเรียนวัดทุ่งแฝก</p>
     <div class="dots" id="dots"><i></i><i></i><i></i></div>
