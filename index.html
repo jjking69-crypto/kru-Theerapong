@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ห้องเรียนครูธีรพงศ์</title>
+  <meta name="description" content="ระบบส่งงาน ดูคะแนน และเลี้ยงสัตว์ ห้องเรียนครูธีรพงศ์ โรงเรียนวัดทุ่งแฝก">
+
+  <!-- ตั้งค่าแอป -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1767ee">
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- สำหรับ iPad / iPhone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ครูธีรพงศ์">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #1767ee; overflow: hidden; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+    /* หน้าระบบ (Apps Script) เต็มจอ */
+    #app {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      border: 0; background: #eef4ff;
+      padding-top: env(safe-area-inset-top);
+      box-sizing: border-box;
+    }
+
+    /* หน้าเปิดแอป */
+    #splash {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      background: linear-gradient(135deg, #1557d8 0%, #1f86f8 55%, #3fa0ff 100%);
+      color: #fff; text-align: center; padding: 24px;
+      transition: opacity .5s ease;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    .logo {
+      width: 132px; height: 132px; border-radius: 34px; background: #fff;
+      display: grid; place-items: center; box-shadow: 0 16px 40px #0b2a6b66;
+      animation: pop 1.6s ease-in-out infinite;
+    }
+    .logo img { width: 112px; height: 112px; object-fit: contain; }
+    @keyframes pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+    h1 { margin: 6px 0 0; font-size: 28px; }
+    p  { margin: 0; font-size: 17px; color: #dbe8ff; }
+    .dots { display: flex; gap: 8px; margin-top: 6px; }
+    .dots i { width: 12px; height: 12px; border-radius: 50%; background: #fff; opacity: .4; animation: blink 1.2s infinite; }
+    .dots i:nth-child(2) { animation-delay: .2s; }
+    .dots i:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+    .btn {
+      margin-top: 10px; border: 0; border-radius: 999px; padding: 14px 26px;
+      background: #ffd54a; color: #3d2200; font-size: 18px; font-weight: 700;
+      box-shadow: 0 6px 0 #c58a00; display: none;
+    }
+    .btn.show { display: inline-block; }
+  </style>
+</head>
+<body>
+
+  <div id="splash">
+    <div class="logo"><img src="icon-192.png" alt="ตราโรงเรียน"></div>
+    <h1>ห้องเรียนครูธีรพงศ์</h1>
+    <p id="msg">โรงเรียนวัดทุ่งแฝก</p>
+    <div class="dots" id="dots"><i></i><i></i><i></i></div>
+    <button class="btn" id="retry" onclick="openApp()">↻ ลองเปิดใหม่</button>
+  </div>
+
+  <iframe id="app" title="ห้องเรียนครูธีรพงศ์" allow="camera; clipboard-write"></iframe>
+
+  <script>
+    // ====== ลิงก์ระบบ (ลิงก์ /exec ของ Apps Script) ======
+    // ถ้าเปลี่ยนลิงก์ Deploy ใหม่ ให้แก้บรรทัดนี้บรรทัดเดียว
+    var APP_URL = 'https://script.google.com/macros/s/AKfycbx_rRJwt6Bu1hFEQ1jww1UuyPYYog2FuxtHI1dt-h8aLpSZy0nV3k_jlqfPWdUt6BYd/exec';
+
+    var frame = document.getElementById('app');
+    var splash = document.getElementById('splash');
+    var msg = document.getElementById('msg');
+    var retry = document.getElementById('retry');
+    var dots = document.getElementById('dots');
+    var slowTimer;
+
+    function openApp() {
+      if (!navigator.onLine) {
+        showProblem('ไม่มีอินเทอร์เน็ต กรุณาต่อเน็ตแล้วลองใหม่');
+        return;
+      }
+
+      splash.classList.remove('hide');
+      msg.textContent = 'กำลังเปิดห้องเรียน...';
+      dots.style.display = '';
+      retry.classList.remove('show');
+
+      frame.src = APP_URL + (APP_URL.indexOf('?') < 0 ? '?' : '&') + 'app=1&t=' + Date.now();
+
+      clearTimeout(slowTimer);
+      slowTimer = setTimeout(function () {
+        msg.textContent = 'ใช้เวลานานกว่าปกติ… ถ้ายังไม่ขึ้น แตะปุ่มด้านล่าง';
+        retry.classList.add('show');
+      }, 20000);
+    }
+
+    function showProblem(text) {
+      splash.classList.remove('hide');
+      msg.textContent = text;
+      dots.style.display = 'none';
+      retry.classList.add('show');
+    }
+
+    frame.addEventListener('load', function () {
+      if (!frame.src) return;
+      clearTimeout(slowTimer);
+      setTimeout(function () { splash.classList.add('hide'); }, 600);
+    });
+
+    window.addEventListener('offline', function () {
+      showProblem('อินเทอร์เน็ตหลุด กรุณาต่อเน็ตแล้วแตะ "ลองเปิดใหม่"');
+    });
+
+    // ลงทะเบียนให้ติดตั้งเป็นแอปได้
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+    }
+
+    openApp();
+  </script>
+</body>
+</html>
