@@ -12,6 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="report.css">
 </head>
 <body>
   <header class="top">
@@ -43,14 +44,15 @@
     <label class="drop" id="drop">
       <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls" multiple hidden>
       <span class="drop-ic">⇪</span>
-      <span class="drop-t"><b>ลากไฟล์ ปพ.5 มาวางที่นี่</b> หรือแตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)</span>
-      <span class="drop-s">ระบบจะอ่านชั้น ห้อง และรหัสวิชาจากชีต "ตั้งค่า" แล้วจัดเข้าช่องวิชาให้เอง</span>
+      <span class="drop-t"><b>ลากไฟล์ ปพ.5 / ปพ.6 มาวางที่นี่</b> หรือแตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)</span>
+      <span class="drop-s">ระบบแยกชนิดไฟล์ อ่านชั้น ห้อง และรหัสวิชาจากในไฟล์ แล้วจัดเข้าช่องให้เอง (ปพ.5 รายวิชา / ปพ.6 ใบรายงานทั้งห้อง)</span>
     </label>
 
     <nav class="tabs" role="tablist">
       <button data-tab="subjects" role="tab">รายวิชา</button>
       <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
       <button data-tab="student" role="tab">รายบุคคล</button>
+      <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
     </nav>
 
     <section id="view"></section>
@@ -70,8 +72,10 @@
   <div id="toasts" aria-live="polite"></div>
   <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
 
-  <script src="xlsx.full.min.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
   <script src="parser.js"></script>
+  <script src="pp6parser.js"></script>
+  <script src="report.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

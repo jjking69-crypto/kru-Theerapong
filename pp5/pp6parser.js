@@ -1,0 +1,465 @@
+/*
+ * ตัวถอดข้อมูลไฟล์ ปพ.6 (แบบรายงานการพัฒนาคุณภาพผู้เรียนรายบุคคล ทั้งห้อง)
+ * ชีตที่ใช้: ผลสัมฤทธิ์ฯ เทอม 1/2, บันทึกเวลาเรียน, บันทึกสุขภาพและพฤติกรรมนักเรียน,
+ * การคิดวิเคราะห์และเขียน, คุณลักษณะอันพึงประสงค์, สมรรถนะของผู้เรียน, ข้อมูลทั้งหมด,
+ * ใบรายงานผลการเรียน รายบุคคล (ผู้ลงนาม ตารางตัวชี้วัด โลโก้ และลายเซ็น)
+ *
+ * ไม่ใช้ค่าเกรด/เกรดเฉลี่ยที่คำนวณไว้ในไฟล์ (มักเป็น #VALUE! เมื่อยังไม่มีคะแนนภาค 2)
+ * แต่เก็บคะแนนดิบไว้ให้ส่วนรายงานคำนวณเองตามสูตรเดียวกับไฟล์
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory;
+  else root.PP6Parser = factory(root.XLSX);
+})(typeof self !== 'undefined' ? self : this, function (XLSX) {
+  'use strict';
+
+  var ERR_RE = /^#(DIV\/0!|N\/A|VALUE!|REF!|NAME\?|NUM!|NULL!)$/;
+  var REPORT_SHEET = 'ใบรายงานผลการเรียน รายบุคคล';
+
+  function enc(r, c) { return XLSX.utils.encode_cell({ r: r, c: c }); }
+  function cell(ws, r, c) {
+    if (!ws) return null;
+    var x = ws[enc(r, c)];
+    if (!x || x.t === 'e' || x.t === 'z') return null;
+    var v = x.v;
+    if (typeof v === 'string') {
+      v = v.replace(/\s+/g, ' ').trim();
+      if (v === '' || ERR_RE.test(v)) return null;
+    }
+    return v;
+  }
+  function norm(v) { return v == null ? '' : String(v).replace(/\s+/g, ''); }
+  function num(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    var s = String(v).replace(/,/g, '').trim();
+    return /^-?\d+(\.\d+)?$/.test(s) ? parseFloat(s) : null;
+  }
+  function str(v) { return v == null ? '' : String(v).replace(/\s+/g, ' ').trim(); }
+  function bounds(ws) { return XLSX.utils.decode_range(ws['!ref'] || 'A1:A1'); }
+  function sheet(wb, name) {
+    if (wb.Sheets[name]) return wb.Sheets[name];
+    var want = norm(name);
+    for (var i = 0; i < wb.SheetNames.length; i++) if (norm(wb.SheetNames[i]) === want) return wb.Sheets[wb.SheetNames[i]];
+    return null;
+  }
+  function find(ws, pred, r0, r1, c0, c1) {
+    if (!ws) return null;
+    var b = bounds(ws);
+    r1 = Math.min(r1 == null ? b.e.r : r1, b.e.r);
+    c1 = Math.min(c1 == null ? b.e.c : c1, b.e.c);
+    for (var r = r0 || 0; r <= r1; r++) for (var c = c0 || 0; c <= c1; c++) {
+      var v = cell(ws, r, c);
+      if (v != null && pred(norm(v), v)) return { r: r, c: c, v: v };
+    }
+    return null;
+  }
+  function eq(t) { t = norm(t); return function (v) { return v === t; }; }
+  function starts(t) { t = norm(t); return function (v) { return v.indexOf(t) === 0; }; }
+  // ค่าในเซลล์ถัดไปทางขวาของป้ายกำกับ
+  function after(ws, label, r0, r1) {
+    var f = find(ws, eq(label), r0 || 0, r1 == null ? 3 : r1);
+    if (!f) return null;
+    for (var c = f.c + 1; c <= f.c + 8; c++) { var v = cell(ws, f.r, c); if (v != null) return v; }
+    return null;
+  }
+  // หัวตาราง "เลขที่" แล้วแถวนักเรียนที่คอลัมน์ A เป็นตัวเลขและมีชื่อ
+  function header(ws) { return find(ws, eq('เลขที่'), 0, 8, 0, 3); }
+  function rows(ws, hr, firstNameCol) {
+    var b = bounds(ws), out = [];
+    for (var r = hr + 1; r <= b.e.r; r++) {
+      var no = num(cell(ws, r, 0));
+      if (no == null) { if (out.length && cell(ws, r, 0) != null) break; continue; }
+      var first = cell(ws, r, firstNameCol);
+      if (first && typeof first === 'string') out.push({ r: r, no: no });
+    }
+    return out;
+  }
+  function round(v, d) { if (v == null) return null; var p = Math.pow(10, d == null ? 2 : d); return Math.round(v * p) / p; }
+
+  // ---------- ผลสัมฤทธิ์รายภาค ----------
+  function parseTerm(ws) {
+    var out = { subjects: [], byNo: {}, students: [], info: {} };
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r, b = bounds(ws);
+    out.info = {
+      year: num(after(ws, 'ปีการศึกษา', 0, hr - 1)),
+      className: str(after(ws, 'ชั้น', 0, hr - 1)),
+      teacher: str(after(ws, 'ครูประจำชั้น', 0, hr - 1))
+    };
+    for (var c = 0; c <= b.e.c; c++) {
+      if (norm(cell(ws, hr + 2, c)) === 'เก็บ' && norm(cell(ws, hr + 2, c + 1)) === 'สอบ') {
+        var name = cell(ws, hr, c), code = cell(ws, hr + 1, c);
+        if (!name || name === 0 || !code || code === 0) continue;
+        out.subjects.push({ name: str(name), code: str(code).replace(/\s+/g, ''), col: c });
+      }
+    }
+    rows(ws, hr + 2, 3).forEach(function (s) {
+      var sc = {};
+      out.subjects.forEach(function (sub) {
+        var a = num(cell(ws, s.r, sub.col)), e = num(cell(ws, s.r, sub.col + 1)), t = num(cell(ws, s.r, sub.col + 2));
+        if (t == null && a != null && e != null) t = a + e;
+        sc[sub.code] = (a == null && e == null && t == null) ? null : { collect: a, exam: e, total: t };
+      });
+      out.byNo[s.no] = sc;
+      out.students.push({
+        no: s.no, id: str(cell(ws, s.r, 1)), prefix: str(cell(ws, s.r, 2)),
+        first: str(cell(ws, s.r, 3)), last: str(cell(ws, s.r, 4))
+      });
+    });
+    return out;
+  }
+
+  // ---------- หน่วยกิตจากชีตข้อมูลทั้งหมด ----------
+  function parseCredits(ws, level) {
+    var out = {};
+    if (!ws) return out;
+    var b = bounds(ws), tables = [];
+    for (var r = 0; r <= Math.min(b.e.r, 120); r++) for (var c = 0; c <= b.e.c; c++) {
+      var v = norm(cell(ws, r, c));
+      var m = v.match(/^ตารางคิดหน่วยกิต.*?(\d)-(\d)$/);
+      if (m) tables.push({ r: r, c: c, lo: +m[1], hi: +m[2] });
+    }
+    var t = tables.filter(function (x) { return level >= x.lo && level <= x.hi; })[0] || tables[0];
+    if (!t) return out;
+    var hdr = find(ws, eq('วิชา'), t.r, t.r + 3, t.c, t.c + 1);
+    var r0 = hdr ? hdr.r + 1 : t.r + 2;
+    for (var r2 = r0; r2 <= r0 + 30; r2++) {
+      var name = cell(ws, r2, t.c);
+      if (!name) continue;
+      if (norm(name) === 'รวม') break;
+      out[norm(name)] = { hours: num(cell(ws, r2, t.c + 1)), credit: num(cell(ws, r2, t.c + 2)) };
+    }
+    return out;
+  }
+
+  // ---------- เวลาเรียน ----------
+  function parseAttendance(ws) {
+    var out = {};
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r;
+    var g = {
+      t1: find(ws, eq('ภาคเรียนที่ 1'), hr, hr), t2: find(ws, eq('ภาคเรียนที่ 2'), hr, hr),
+      year: find(ws, starts('สรุปเวลาเรียน'), hr, hr)
+    };
+    var pct = find(ws, starts('คิดเป็นร้อยละ'), hr + 1, hr + 1);
+    rows(ws, hr + 1, 3).forEach(function (s) {
+      var a = {};
+      for (var k in g) if (g[k]) a[k] = { total: num(cell(ws, s.r, g[k].c)), present: num(cell(ws, s.r, g[k].c + 1)) };
+      if (a.year) {
+        a.year.pct = pct ? num(cell(ws, s.r, pct.c)) : null;
+        if (a.year.pct == null && a.year.total) a.year.pct = round(a.year.present / a.year.total * 100, 2);
+      }
+      out[s.no] = a;
+    });
+    return out;
+  }
+
+  // ---------- สุขภาพและพฤติกรรม ----------
+  function parseHealth(ws) {
+    var out = {};
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r;
+    var t1 = find(ws, eq('ภาคเรียนที่ 1'), hr, hr), t2 = find(ws, eq('ภาคเรียนที่ 2'), hr, hr);
+    var beh = find(ws, starts('พฤติกรรม'), hr, hr);
+    rows(ws, hr + 1, 3).forEach(function (s) {
+      out[s.no] = {
+        t1: t1 ? { w: num(cell(ws, s.r, t1.c)), h: num(cell(ws, s.r, t1.c + 1)) } : {},
+        t2: t2 ? { w: num(cell(ws, s.r, t2.c)), h: num(cell(ws, s.r, t2.c + 1)) } : {},
+        behavior: beh ? str(cell(ws, s.r, beh.c)) : ''
+      };
+    });
+    return out;
+  }
+
+  // ---------- อ่าน คิดวิเคราะห์ เขียน ----------
+  function parseRTW(ws) {
+    var out = { items: [], byNo: {} };
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r;
+    var ind = find(ws, eq('ตัวชี้วัด'), hr, hr);
+    var tot = find(ws, eq('รวม'), hr, hr), res = find(ws, eq('ผลการประเมิน'), hr, hr);
+    if (ind && tot) {
+      for (var c = ind.c; c < tot.c; c++) {
+        var name = cell(ws, hr + 1, c);
+        if (!name) continue;
+        var mx = null;
+        for (var r = hr + 1; r <= hr + 6; r++) { var m = norm(cell(ws, r, c)).match(/^(\d+)คะแนน$/); if (m) { mx = +m[1]; break; } }
+        out.items.push({ name: str(name), max: mx, col: c });
+      }
+    }
+    var label = ['การอ่าน', 'คิดวิเคราะห์', 'การเขียน'];
+    out.items.forEach(function (it, i) { it.short = label[i] || it.name; });
+    rows(ws, hr + 1, 2).forEach(function (s) {
+      var scores = out.items.map(function (it) { return num(cell(ws, s.r, it.col)); });
+      var total = tot ? num(cell(ws, s.r, tot.c)) : null;
+      if (total == null && scores.every(function (x) { return x != null; })) total = scores.reduce(function (a, b) { return a + b; }, 0);
+      out.byNo[s.no] = { scores: scores, total: total, result: res ? str(cell(ws, s.r, res.c)) : '' };
+    });
+    out.items.forEach(function (it) { delete it.col; });
+    return out;
+  }
+
+  // ---------- คุณลักษณะอันพึงประสงค์ ----------
+  function parseCharacteristics(ws) {
+    var out = { items: [], byNo: {} };
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r;
+    var sum = find(ws, eq('สรุป'), hr, hr, 0, 20);
+    var start = find(ws, starts('คุณลักษณะ'), hr, hr, 0, 20);
+    var cols = [];
+    if (start) for (var c = start.c; c < (sum ? sum.c : start.c + 8); c++) {
+      var name = cell(ws, hr + 1, c);
+      if (name) { cols.push(c); out.items.push(str(name).replace(/^ข้อ\s*\d+\s*/, '')); }
+    }
+    rows(ws, hr + 1, 2).forEach(function (s) {
+      out.byNo[s.no] = {
+        items: cols.map(function (c) { return str(cell(ws, s.r, c)); }),
+        summary: sum ? str(cell(ws, s.r, sum.c)) : ''
+      };
+    });
+    return out;
+  }
+
+  // ---------- สมรรถนะของผู้เรียน ----------
+  function parseCompetencies(ws) {
+    var out = { groups: [], byNo: {} };
+    if (!ws) return out;
+    var h = header(ws);
+    if (!h) return out;
+    var hr = h.r;
+    var heads = [];
+    for (var c = 3; c <= 30; c++) {
+      var v = cell(ws, hr, c);
+      if (v && /^ความสามารถ/.test(norm(v))) heads.push({ c: c, name: str(v) });
+    }
+    heads.forEach(function (g, i) {
+      var end = i + 1 < heads.length ? heads[i + 1].c - 1 : g.c + 6;
+      var items = [];
+      for (var c = g.c; c <= end; c++) {
+        var n = cell(ws, hr + 1, c);
+        if (!n) { if (i + 1 >= heads.length) break; continue; } // กลุ่มสุดท้าย: หยุดเมื่อเจอช่องว่าง
+        items.push({ name: str(n), col: c });
+      }
+      out.groups.push({ name: g.name, items: items });
+    });
+    rows(ws, hr + 1, 2).forEach(function (s) {
+      out.byNo[s.no] = out.groups.map(function (g) { return g.items.map(function (it) { return str(cell(ws, s.r, it.col)); }); });
+    });
+    out.groups.forEach(function (g) { g.items = g.items.map(function (it) { return it.name; }); });
+    return out;
+  }
+
+  // ---------- ใบรายงาน: ผู้ลงนาม ตารางตัวชี้วัด ข้อความสาเหตุ ----------
+  function parseReportSheet(ws) {
+    var out = { signers: [], indicators: {}, reason: '', nameCells: [] };
+    if (!ws) return out;
+    var b = bounds(ws);
+    for (var r = 0; r <= b.e.r; r++) for (var c = 0; c <= b.e.c; c++) {
+      var v = cell(ws, r, c);
+      if (typeof v !== 'string') continue;
+      var m = v.match(/^\((.+)\)$/);
+      if (m) {
+        var name = str(m[1]), pos = '';
+        for (var k = 0; k <= 2 && !pos; k++) { var p = str(cell(ws, r + 1, c + k)); if (/^ตำแหน่ง/.test(p)) pos = p.replace(/^ตำแหน่ง\s*/, ''); }
+        out.nameCells.push({ r: r, c: c, name: name, position: pos });
+        if (!out.signers.some(function (s) { return s.name === name && s.position === pos; })) out.signers.push({ name: name, position: pos });
+      }
+      if (!out.reason && /^เป็นผู้ที่ผ่านเกณฑ์/.test(v)) out.reason = v;
+    }
+    var hd = find(ws, eq('ตัวชี้วัดทั้งหมด'));
+    if (hd) {
+      var nameCol = find(ws, starts('กลุ่มสาระ'), hd.r, hd.r, 0, hd.c);
+      for (var r2 = hd.r + 1; r2 <= hd.r + 20; r2++) {
+        var n = cell(ws, r2, nameCol ? nameCol.c : hd.c - 2);
+        if (!n || /^รวม/.test(norm(n))) break;
+        out.indicators[norm(n)] = { total: num(cell(ws, r2, hd.c)), passed: num(cell(ws, r2, hd.c + 1)) };
+      }
+    }
+    return out;
+  }
+
+  // ---------- รูปภาพในชีตใบรายงาน (โลโก้ / ลายเซ็น) ----------
+  function zfind(zip, path) { return XLSX.CFB.find(zip, '/' + path.replace(/^\/+/, '')); }
+  function zipText(zip, path) {
+    var f = zfind(zip, path);
+    if (!f || !f.content) return null;
+    var u = f.content instanceof Uint8Array ? f.content : new Uint8Array(f.content);
+    if (typeof TextDecoder !== 'undefined') return new TextDecoder('utf-8').decode(u);
+    return Buffer.from(u).toString('utf8');
+  }
+  function zipBytes(zip, path) {
+    var f = zfind(zip, path);
+    if (!f || !f.content) return null;
+    return f.content instanceof Uint8Array ? f.content : new Uint8Array(f.content);
+  }
+  function rels(xml) {
+    var out = {}, re = /<Relationship\b[^>]*>/g, m;
+    while ((m = re.exec(xml || ''))) {
+      var id = (m[0].match(/\bId="([^"]+)"/) || [])[1], t = (m[0].match(/\bTarget="([^"]+)"/) || [])[1];
+      if (id && t) out[id] = t;
+    }
+    return out;
+  }
+  function resolve(base, target) {
+    if (target.charAt(0) === '/') return target.slice(1);
+    var parts = base.split('/'); parts.pop();
+    target.split('/').forEach(function (p) { if (p === '..') parts.pop(); else if (p !== '.') parts.push(p); });
+    return parts.join('/');
+  }
+  function toDataURL(bytes, path) {
+    var ext = (path.match(/\.(\w+)$/) || [])[1] || 'png';
+    var mime = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', bmp: 'image/bmp' }[ext.toLowerCase()] || 'image/png';
+    var bin = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    var b64 = typeof btoa !== 'undefined' ? btoa(bin) : Buffer.from(bin, 'binary').toString('base64');
+    return 'data:' + mime + ';base64,' + b64;
+  }
+  function extractImages(buf, sheetName, nameCells, roleOf) {
+    var res = { roles: {}, all: [] };
+    try {
+      var zip = XLSX.CFB.read(buf, { type: 'array' });
+      var wbXml = zipText(zip, 'xl/workbook.xml');
+      var wbRels = rels(zipText(zip, 'xl/_rels/workbook.xml.rels'));
+      var re = /<sheet\b[^>]*>/g, m, sheetPath = null;
+      while ((m = re.exec(wbXml || ''))) {
+        var nm = (m[0].match(/\bname="([^"]+)"/) || [])[1] || '';
+        nm = nm.replace(/&amp;/g, '&');
+        var rid = (m[0].match(/\br:id="([^"]+)"/) || [])[1];
+        if (norm(nm) === norm(sheetName) && wbRels[rid]) sheetPath = resolve('xl/workbook.xml', wbRels[rid]);
+      }
+      if (!sheetPath) return res;
+      var sRelsPath = sheetPath.replace(/([^/]+)$/, '_rels/$1.rels');
+      var sRels = rels(zipText(zip, sRelsPath));
+      var drawingPath = null;
+      for (var k in sRels) if (/drawings\//.test(sRels[k])) drawingPath = resolve(sheetPath, sRels[k]);
+      if (!drawingPath) return res;
+      var dXml = zipText(zip, drawingPath) || '';
+      var dRels = rels(zipText(zip, drawingPath.replace(/([^/]+)$/, '_rels/$1.rels')));
+      var anchors = dXml.split(/<xdr:(?:twoCellAnchor|oneCellAnchor|absoluteAnchor)\b/).slice(1);
+      var seen = {};
+      anchors.forEach(function (a) {
+        var col = +((a.match(/<xdr:from>\s*<xdr:col>(\d+)<\/xdr:col>/) || [])[1] || 0);
+        var row = +((a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/) || [])[1] || 0);
+        var emb = (a.match(/r:embed="([^"]+)"/) || [])[1];
+        if (!emb || !dRels[emb]) return;
+        var path = resolve(drawingPath, dRels[emb]);
+        var bytes = zipBytes(zip, path);
+        if (!bytes) return;
+        if (!seen[path]) { seen[path] = toDataURL(bytes, path); res.all.push(seen[path]); }
+        var url = seen[path];
+        var role = null;
+        if (row <= 1 && col <= 4) role = 'logo';
+        else {
+          var best = null, bd = 1e9;
+          nameCells.forEach(function (nc) {
+            var dr = nc.r - row;
+            if (dr < -1 || dr > 6) return;
+            var d = Math.abs(dr) + Math.abs(nc.c - col) * 0.6;
+            if (d < bd) { bd = d; best = nc; }
+          });
+          if (best) role = roleOf(best);
+        }
+        if (role && !res.roles[role]) res.roles[role] = url;
+      });
+    } catch (e) {
+      if (typeof console !== 'undefined') console.warn('extractImages', e);
+    }
+    return res;
+  }
+
+  function isPP6(wb) {
+    return !!(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1') && (sheet(wb, REPORT_SHEET) || sheet(wb, 'บันทึกเวลาเรียน')));
+  }
+
+  function parse(wb, buf) {
+    var t1 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1'));
+    if (!t1.students.length) throw new Error('ไม่พบรายชื่อนักเรียนในชีต "ผลสัมฤทธิ์ฯ เทอม 1"');
+    var t2 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 2'));
+    var attWs = sheet(wb, 'บันทึกเวลาเรียน');
+    var info = t1.info;
+    var className = info.className || str(after(attWs, 'ชั้น', 0, 1));
+    var year = info.year || num(after(attWs, 'ปีการศึกษา', 0, 1));
+    var stage = /มัธยม/.test(className) ? 'ม' : 'ป';
+    var lm = className.match(/(\d+)\s*\/\s*(\d+)/) || className.match(/(\d+)/);
+    var level = lm ? +lm[1] : null, room = lm && lm[2] ? +lm[2] : 1;
+    if (!level) throw new Error('ไม่พบชั้นเรียน (เช่น "ประถมศึกษาปีที่ 4/2") ในชีตผลสัมฤทธิ์');
+
+    var credits = parseCredits(sheet(wb, 'ข้อมูลทั้งหมด'), level);
+    var subjects = t1.subjects.map(function (s) {
+      var cr = credits[norm(s.name)] || {};
+      var m = s.code.match(/^[ก-ฮ]\d(\d)(\d)/);
+      return { code: s.code, name: s.name, credit: cr.credit != null ? cr.credit : null, hours: cr.hours || null, basic: m ? m[2] === '1' && +m[1] === level : true };
+    });
+
+    var rep = parseReportSheet(sheet(wb, REPORT_SHEET));
+    var teacherName = info.teacher || '';
+    function roleOf(s) {
+      var p = s.position || '';
+      if (/รองผู้อำนวยการ/.test(p)) return 'deputy';
+      if (/ผู้อำนวยการ/.test(p)) return 'director';
+      if (/ครู/.test(p) || norm(s.name) === norm(teacherName)) return 'teacher';
+      return null;
+    }
+    var signers = { teacher: { name: teacherName, position: 'ครูประจำชั้น' }, deputy: null, director: null };
+    rep.signers.forEach(function (s) { var r = roleOf(s); if (r && r !== 'teacher' && !signers[r]) signers[r] = s; });
+    var school = '';
+    [signers.director, signers.deputy].forEach(function (s) {
+      var m = s && s.position.match(/(โรงเรียน.+)$/);
+      if (!school && m) school = m[1];
+    });
+
+    var images = buf ? extractImages(buf, REPORT_SHEET, rep.nameCells, roleOf) : { roles: {}, all: [] };
+    var att = parseAttendance(attWs);
+    var health = parseHealth(sheet(wb, 'บันทึกสุขภาพและพฤติกรรมนักเรียน'));
+    var rtw = parseRTW(sheet(wb, 'การคิดวิเคราะห์และเขียน'));
+    var chars = parseCharacteristics(sheet(wb, 'คุณลักษณะอันพึงประสงค์'));
+    var comp = parseCompetencies(sheet(wb, 'สมรรถนะของผู้เรียน'));
+
+    var students = t1.students.map(function (s) {
+      var name = (s.prefix + s.first + ' ' + s.last).trim();
+      return {
+        no: s.no, id: s.id, prefix: s.prefix, first: s.first, last: s.last, name: name,
+        t1: t1.byNo[s.no] || {}, t2: t2.byNo[s.no] || {},
+        attendance: att[s.no] || null, health: health[s.no] || null,
+        rtw: rtw.byNo[s.no] || null, characteristics: chars.byNo[s.no] || null,
+        competencies: comp.byNo[s.no] || null
+      };
+    });
+
+    return {
+      format: 'pp6', version: 1,
+      meta: {
+        year: year, className: className, stage: stage, level: level, room: room,
+        levelName: stage + '.' + level, teacher: teacherName, school: school,
+        signers: signers, reason: rep.reason, termMax: 50
+      },
+      subjects: subjects,
+      indicatorTable: rep.indicators,
+      rtwItems: rtw.items,
+      characteristicItems: chars.items,
+      competencyGroups: comp.groups,
+      images: images.roles,
+      allImages: images.all,
+      students: students
+    };
+  }
+
+  function parseArrayBuffer(buf) {
+    var u8 = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    var wb = XLSX.read(u8, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false, bookVBA: false });
+    return parse(wb, u8);
+  }
+
+  return { isPP6: isPP6, parse: parse, parseArrayBuffer: parseArrayBuffer };
+});

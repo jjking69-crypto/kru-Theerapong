@@ -1,0 +1,99 @@
+/* ---------- แผงควบคุมใบรายงาน ---------- */
+.rc-panel { padding: 14px 16px; margin-bottom: 14px; }
+.rc-panel h3 { margin: 0 0 10px; font-size: 16px; }
+.rc-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: flex-end; }
+.rc-opt { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rc-opt > span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.seg button { border: 0; background: none; padding: 7px 12px; font-weight: 600; font-size: 14px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--brand); color: #fff; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: 14.5px; }
+.rc-signers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+.rc-signers .card { padding: 10px 12px; box-shadow: none; display: grid; gap: 6px; }
+.rc-signers b { font-size: 13.5px; }
+.rc-signers input[type=text] { border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; width: 100%; font-size: 14px; }
+.rc-sig-pick { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rc-sig-pick img { height: 34px; max-width: 110px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.rc-sig-pick select { min-width: 0; flex: 1; }
+.rc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.rc-actions .btn { padding: 8px 14px; }
+.rc-progress { margin-top: 10px; height: 8px; border-radius: 99px; background: #e6ebf3; overflow: hidden; display: none; }
+.rc-progress.on { display: block; }
+.rc-progress i { display: block; height: 100%; background: var(--brand); width: 0; transition: width .2s; }
+.rc-ptext { font-size: 13px; color: var(--muted); margin-top: 4px; min-height: 18px; }
+
+.rc-preview-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.rc-preview-bar select { flex: 1 1 220px; max-width: 380px; }
+.rc-preview { display: flex; flex-direction: column; align-items: center; gap: 16px; background: #dfe5ee; border-radius: var(--radius); padding: 16px 8px; overflow: hidden; }
+.rc-scale { transform-origin: top left; }
+.rc-fit { overflow: hidden; box-shadow: 0 4px 18px #17233a33; background: #fff; flex: none; }
+
+/* ---------- หน้ากระดาษใบรายงาน (ออกแบบที่ A4 แนวตั้ง) ---------- */
+.rc-page {
+  width: 210mm; height: 297mm; padding: 11mm 13mm 10mm; background: #fff; color: #111;
+  font-family: "Sarabun", "TH Sarabun New", "Leelawadee UI", Tahoma, sans-serif;
+  font-size: 11.5pt; line-height: 1.32; position: relative; overflow: hidden; box-sizing: border-box;
+  display: flex; flex-direction: column;
+}
+.rc-page * { box-sizing: border-box; }
+.rc-page h4 { font-size: 12.5pt; margin: 3.5mm 0 1.5mm; font-weight: 700; }
+.rc-head { text-align: center; position: relative; }
+.rc-logo { height: 25mm; display: block; margin: 0 auto 1mm; }
+.rc-title { font-size: 16pt; font-weight: 700; margin: 0; }
+.rc-tag { position: absolute; right: 0; top: 0; border: 1.2px solid #111; border-radius: 2mm; padding: 0.5mm 3mm; font-weight: 700; font-size: 13pt; }
+.rc-sub { font-size: 12pt; }
+.rc-who { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6mm; font-size: 12.5pt; margin-top: 1mm; }
+.rc-who b { font-weight: 700; }
+.rc-line { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5mm 5mm; }
+.rc-t { width: 100%; border-collapse: collapse; font-size: 11pt; }
+.rc-t th, .rc-t td { border: 0.8px solid #333; padding: 0.9mm 1.6mm; text-align: center; white-space: normal; position: static; background: none; color: #111; }
+.rc-t th { background: #eef1f6; font-weight: 700; line-height: 1.2; }
+.rc-t td.l, .rc-t th.l { text-align: left; }
+.rc-t tr.grp td { background: #f5f6f8; font-weight: 700; text-align: left; }
+.rc-t tr.sum td { font-weight: 700; }
+.rc-t small { font-weight: 400; font-size: 9.5pt; }
+.rc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.rc-box { border: 0.8px solid #333; padding: 2mm 3mm; min-height: 18mm; }
+.rc-dots { border-bottom: 1px dotted #555; height: 7.5mm; }
+.rc-sign { text-align: center; margin-top: 3mm; font-size: 11.5pt; line-height: 1.35; }
+.rc-sign .sig { height: 13mm; display: flex; align-items: flex-end; justify-content: center; margin-bottom: -4mm; position: relative; z-index: 1; }
+.rc-sign .sig img { max-height: 15mm; max-width: 45mm; object-fit: contain; }
+.rc-sign .ln { white-space: nowrap; }
+.rc-signs { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: auto; }
+.rc-cb { display: inline-block; width: 3.6mm; height: 3.6mm; border: 1px solid #111; vertical-align: -0.5mm; margin-right: 1.4mm; position: relative; background: #fff; }
+.rc-cb.on::after { content: ""; position: absolute; left: 0.9mm; top: -0.6mm; width: 1.2mm; height: 2.6mm; border: solid #111; border-width: 0 0.55mm 0.55mm 0; transform: rotate(45deg); }
+.rc-sumlist { display: grid; gap: 2mm; font-size: 12pt; }
+.rc-sumlist .it { display: grid; grid-template-columns: 7mm 1fr; }
+.rc-sumlist .opts { display: flex; flex-wrap: wrap; gap: 0.5mm 8mm; margin-top: 0.5mm; }
+.rc-page .op { white-space: nowrap; display: inline-block; margin-right: 6mm; }
+.rc-sumlist .op, .rc-verdict .op { margin-right: 0; }
+.rc-dense { font-size: 10.5pt; line-height: 1.25; }
+.rc-dense .rc-t { font-size: 10pt; }
+.rc-dense .rc-t th, .rc-dense .rc-t td { padding: 0.55mm 1.4mm; }
+.rc-dense h4 { margin: 2.6mm 0 1.2mm; font-size: 11.5pt; }
+.rc-dense .rc-sign { margin-top: 1mm; }
+.rc-verdict { border: 1.2px solid #111; border-radius: 2mm; padding: 3mm 4mm; margin-top: 4mm; font-size: 13pt; }
+.rc-verdict .big { font-size: 14pt; font-weight: 700; display: flex; gap: 10mm; flex-wrap: wrap; }
+.rc-note { font-size: 9.5pt; color: #444; margin-top: 1mm; }
+.rc-foot { margin-top: auto; font-size: 8.5pt; color: #777; text-align: right; }
+.rc-blank { display: grid; place-items: center; color: #bbb; font-size: 11pt; }
+
+/* ---------- พื้นที่ซ่อนสำหรับถ่ายภาพหน้าเป็น PDF ---------- */
+#rcStage { position: fixed; left: -12000px; top: 0; width: 210mm; background: #fff; z-index: -1; }
+
+/* ---------- พิมพ์ผ่านเบราว์เซอร์ ---------- */
+#rcPrint { display: none; }
+@media print {
+  body.rc-printing > *:not(#rcPrint) { display: none !important; }
+  body.rc-printing #rcPrint { display: block; }
+  body.rc-printing { background: #fff; }
+  #rcPrint .sheet { break-after: page; page-break-after: always; overflow: hidden; position: relative; }
+  #rcPrint .sheet:last-child { break-after: auto; page-break-after: auto; }
+  #rcPrint .sheet.a4 { width: 210mm; height: 296mm; }
+  #rcPrint .sheet.half { width: 297mm; height: 209mm; display: flex; }
+  #rcPrint .sheet.half .slot { width: 148.5mm; height: 209mm; overflow: hidden; position: relative; }
+  #rcPrint .sheet.half .slot + .slot { border-left: 0.3mm dashed #999; }
+  #rcPrint .sheet.half .slot > .rc-page { transform: scale(0.7071); transform-origin: top left; }
+  #rcPrint .rc-page, #rcPrint .rc-t th, #rcPrint .rc-t tr.grp td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -117,6 +117,11 @@
     return name.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() + ext;
   }
 
+  function pp6FileName(meta, original) {
+    var ext = (original.match(/\.(xlsm|xlsx|xls)$/i) || ['.xlsx'])[0].toLowerCase();
+    return (meta.levelName + '-' + meta.room + '_ปพ6_รายงานผลรายบุคคล_ปี' + meta.year).replace(/[\\/:*?"<>|]+/g, '-') + ext;
+  }
+
   function readFile(file) {
     return new Promise(function (res, rej) {
       var fr = new FileReader();
@@ -137,21 +142,25 @@
       await new Promise(function (r) { setTimeout(r, 30); });
       try {
         var buf = await readFile(f);
-        var data = PP5Parser.parseArrayBuffer(new Uint8Array(buf));
+        var u8 = new Uint8Array(buf);
+        var wb = XLSX.read(u8, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false, bookVBA: false });
+        var isPP6 = PP6Parser.isPP6(wb);
+        var data = isPP6 ? PP6Parser.parse(wb, u8) : PP5Parser.parseWorkbook(wb);
         var meta = data.meta;
-        var key = recKey(meta);
-        var slot = slotOf(meta);
-        var existed = records.some(function (r) { return r.key === key; });
+        var slot = isPP6 ? 'pp6' : slotOf(meta);
+        var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
+        var existed = records.filter(function (r) { return r.key === key; })[0];
         var rec = {
           key: key, year: meta.year, level: meta.level, room: meta.room, slot: slot,
-          fileName: newFileName(meta, f.name), origName: f.name, size: f.size,
+          fileName: isPP6 ? pp6FileName(meta, f.name) : newFileName(meta, f.name), origName: f.name, size: f.size,
           uploadedAt: Date.now(), blob: new Blob([buf], { type: f.type || 'application/vnd.ms-excel.sheet.macroEnabled.12' }),
-          data: data
+          data: data, settings: existed && existed.settings ? existed.settings : undefined
         };
         await DB.put(rec);
         records = records.filter(function (r) { return r.key !== key; }).concat([rec]);
         last = rec; ok++;
-        var where = meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
+        var where = isPP6 ? meta.levelName + '/' + meta.room + ' ใบรายงาน ปพ.6' : meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
+        if (isPP6 && !expected) state.tab = 'report';
         if (expected && (expected.level !== meta.level || expected.room !== meta.room || expected.slot !== slot)) {
           toast('ไฟล์นี้เป็นของ ' + where + ' (ตามชีตตั้งค่า) จึงจัดเก็บไว้ที่ช่องนั้นแทน', 'info');
         } else {
@@ -190,9 +199,30 @@
     return list.length ? list : [1];
   }
   function classRecords() {
-    return records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room; })
+    return records.filter(function (r) { return r.slot !== 'pp6' && r.year === state.year && r.level === state.level && r.room === state.room; })
       .sort(function (a, b) { return slotOrder(a.slot) - slotOrder(b.slot) || a.data.meta.code.localeCompare(b.data.meta.code); });
   }
+  function pp6Record() {
+    return records.filter(function (r) { return r.slot === 'pp6' && r.year === state.year && r.level === state.level && r.room === state.room; })[0] || null;
+  }
+  async function removeRecord(rec) {
+    if (!confirm('ลบไฟล์ ' + rec.fileName + ' ออกจากระบบ?')) return;
+    await DB.del(rec.key);
+    records = records.filter(function (r) { return r.key !== rec.key; });
+    toast('ลบแล้ว', 'info');
+    render();
+  }
+  var reportCtx = {
+    esc: esc, toast: toast,
+    classRecords: function () { return classRecords(); },
+    pp6Record: function () { return pp6Record(); },
+    className: function () { return 'ป.' + state.level + '/' + state.room; },
+    save: function (rec) { return DB.put(rec); },
+    rerender: function () { render(); },
+    pickFor: function (slot) { pickFor(slot); },
+    download: function (rec) { download(rec); },
+    remove: function (rec) { removeRecord(rec); }
+  };
   function slotOrder(s) {
     for (var i = 0; i < CORE.length; i++) if (CORE[i].slot === s) return i;
     return 100;
@@ -261,10 +291,12 @@
     }
     $('roomSel').innerHTML = opts;
 
-    var any = classRecords()[0] || records[0];
+    var any = classRecords()[0] || records.filter(function (r) { return r.slot !== 'pp6'; })[0];
     if (any) {
       var m = any.data.meta;
       $('schoolLine').textContent = 'โรงเรียน' + (m.school || '') + (m.district ? ' อ.' + m.district : '') + (m.province ? ' จ.' + m.province : '');
+    } else if (pp6Record() || records[0]) {
+      $('schoolLine').textContent = (pp6Record() || records[0]).data.meta.school || '';
     }
 
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
@@ -277,6 +309,7 @@
     var cls = 'ป.' + state.level + '/' + state.room;
     if (state.tab === 'subjects') renderSubjects(cls);
     else if (state.tab === 'summary') renderSummary(cls);
+    else if (state.tab === 'report') PP6Report.render(view, reportCtx);
     else renderStudent(cls);
     saveUI();
   }
@@ -638,11 +671,7 @@
       else if (act === 'replace') pickFor(a.dataset.slot);
       else if (act === 'download' && rec) download(rec);
       else if (act === 'delete' && rec) {
-        if (!confirm('ลบไฟล์ ' + rec.fileName + ' ออกจากระบบ?')) return;
-        await DB.del(rec.key);
-        records = records.filter(function (r) { return r.key !== rec.key; });
-        toast('ลบแล้ว', 'info');
-        render();
+        removeRecord(rec);
       } else if (act === 'prev' || act === 'next') {
         var studs = classStudents(classRecords());
         var i = studs.findIndex(function (s) { return s.key === state.student; }) + (act === 'next' ? 1 : -1);
