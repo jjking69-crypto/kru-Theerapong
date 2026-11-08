@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>วิเคราะห์ผล ปพ.5</title>
+  <meta name="description" content="อัปโหลดไฟล์ ปพ.5 แต่ละวิชา แล้วดูคะแนนตามตัวชี้วัดและเกรดรายบุคคล">
+  <meta name="theme-color" content="#1767ee">
+  <link rel="icon" type="image/png" href="../favicon.png?v=2">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <a class="home" href="../" title="กลับหน้าแอปห้องเรียน">‹</a>
+      <div class="brand">
+        <h1>วิเคราะห์ผลการเรียน ปพ.5</h1>
+        <p id="schoolLine">อัปโหลดไฟล์ ปพ.5 ของแต่ละวิชา แล้วดูผลรายบุคคล</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="picker card">
+      <div class="field">
+        <label for="yearSel">ปีการศึกษา</label>
+        <select id="yearSel"></select>
+      </div>
+      <div class="field grow">
+        <span class="lbl">ชั้น</span>
+        <div class="chips" id="levelChips" role="tablist"></div>
+      </div>
+      <div class="field">
+        <label for="roomSel">ห้อง</label>
+        <select id="roomSel"></select>
+      </div>
+    </section>
+
+    <label class="drop" id="drop">
+      <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls" multiple hidden>
+      <span class="drop-ic">⇪</span>
+      <span class="drop-t"><b>ลากไฟล์ ปพ.5 มาวางที่นี่</b> หรือแตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)</span>
+      <span class="drop-s">ระบบจะอ่านชั้น ห้อง และรหัสวิชาจากชีต "ตั้งค่า" แล้วจัดเข้าช่องวิชาให้เอง</span>
+    </label>
+
+    <nav class="tabs" role="tablist">
+      <button data-tab="subjects" role="tab">รายวิชา</button>
+      <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
+      <button data-tab="student" role="tab">รายบุคคล</button>
+    </nav>
+
+    <section id="view"></section>
+
+    <p class="privacy">ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบไม่อ่านเลขประจำตัวประชาชน
+      · <button class="link" id="clearAll">ล้างข้อมูลทั้งหมด</button></p>
+  </main>
+
+  <dialog id="modal">
+    <div class="modal-h">
+      <h2 id="modalTitle"></h2>
+      <button class="x" id="modalClose" aria-label="ปิด">×</button>
+    </div>
+    <div id="modalBody"></div>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+  <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
+
+  <script src="xlsx.full.min.js"></script>
+  <script src="parser.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
