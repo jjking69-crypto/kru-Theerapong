@@ -3,7 +3,7 @@
   'use strict';
 
   var CHAR_PASS = ['ดีเยี่ยม', 'ดี', 'ผ่าน'];
-  var LIBS = ['vendor/html2canvas.min.js', 'vendor/jspdf.umd.min.js', 'vendor/jszip.min.js'];
+  var LIBS = window.PP5_LIBS || ['vendor/html2canvas.min.js', 'vendor/jspdf.umd.min.js', 'vendor/jszip.min.js'];
   var ctx = null;     // ตัวช่วยจาก app.js
   var busyRun = false;
 
@@ -330,6 +330,15 @@
     var url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    // รุ่น Apps Script: เก็บสำเนาไว้ใน Google Drive ด้วย
+    var store = window.PP5_STORE;
+    if (store && store.saveOutput) {
+      store.saveOutput(blob, name).then(function () {
+        ctx.toast('บันทึกสำเนาไว้ใน Google Drive แล้ว (โฟลเดอร์ "PDF ใบรายงาน")', 'ok');
+      }, function (e) {
+        ctx.toast('บันทึกสำเนาลง Drive ไม่สำเร็จ: ' + (e && e.message ? e.message : e), 'err');
+      });
+    }
   }
 
   function progress(p, text) {

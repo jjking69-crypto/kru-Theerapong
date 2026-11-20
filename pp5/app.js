@@ -20,7 +20,8 @@
   var GRADE_COLOR = { '4': '#0f8a4f', '3.5': '#2f9e5d', '3': '#4a9f2f', '2.5': '#8a9a12', '2': '#b88300', '1.5': '#cf6a10', '1': '#d24b1c', '0': '#c62f3a' };
 
   // ---------- ฐานข้อมูลในเครื่อง ----------
-  var DB = {
+  // ที่เก็บข้อมูล: ค่าเริ่มต้นคือ IndexedDB ในเครื่อง; รุ่น Apps Script กำหนด window.PP5_STORE (เก็บใน Google Drive)
+  var LocalDB = {
     db: null,
     open: function () {
       var self = this;
@@ -47,6 +48,7 @@
     del: function (key) { return this.tx('readwrite', function (s) { return s.delete(key); }); },
     clear: function () { return this.tx('readwrite', function (s) { return s.clear(); }); }
   };
+  var DB = window.PP5_STORE || LocalDB;
 
   // ---------- สถานะ ----------
   var records = [];           // ไฟล์ทั้งหมดที่อัปโหลด
@@ -135,6 +137,7 @@
   async function handleFiles(files, expected) {
     files = Array.prototype.filter.call(files, function (f) { return /\.(xlsm|xlsx|xls)$/i.test(f.name); });
     if (!files.length) { toast('กรุณาเลือกไฟล์ Excel (.xlsm / .xlsx)', 'err'); return; }
+    if (typeof XLSX === 'undefined') { toast('ยังโหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) กรุณารีเฟรชหน้าแล้วลองใหม่', 'err'); return; }
     var last = null, ok = 0;
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
@@ -156,7 +159,8 @@
           uploadedAt: Date.now(), blob: new Blob([buf], { type: f.type || 'application/vnd.ms-excel.sheet.macroEnabled.12' }),
           data: data, settings: existed && existed.settings ? existed.settings : undefined
         };
-        await DB.put(rec);
+        var saved = await DB.put(rec);
+        if (saved && typeof saved === 'object') Object.assign(rec, saved);
         records = records.filter(function (r) { return r.key !== key; }).concat([rec]);
         last = rec; ok++;
         var where = isPP6 ? meta.levelName + '/' + meta.room + ' ใบรายงาน ปพ.6' : meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
@@ -217,7 +221,7 @@
     classRecords: function () { return classRecords(); },
     pp6Record: function () { return pp6Record(); },
     className: function () { return 'ป.' + state.level + '/' + state.room; },
-    save: function (rec) { return DB.put(rec); },
+    save: function (rec) { return DB.saveSettings ? DB.saveSettings(rec) : DB.put(rec); },
     rerender: function () { render(); },
     pickFor: function (slot) { pickFor(slot); },
     download: function (rec) { download(rec); },
@@ -291,12 +295,15 @@
     }
     $('roomSel').innerHTML = opts;
 
-    var any = classRecords()[0] || records.filter(function (r) { return r.slot !== 'pp6'; })[0];
+    var withData = records.filter(function (r) { return r.data; });
+    var any = classRecords().filter(function (r) { return r.data; })[0] || withData.filter(function (r) { return r.slot !== 'pp6'; })[0];
     if (any) {
       var m = any.data.meta;
       $('schoolLine').textContent = 'โรงเรียน' + (m.school || '') + (m.district ? ' อ.' + m.district : '') + (m.province ? ' จ.' + m.province : '');
-    } else if (pp6Record() || records[0]) {
-      $('schoolLine').textContent = (pp6Record() || records[0]).data.meta.school || '';
+    } else if (withData[0]) {
+      $('schoolLine').textContent = withData[0].data.meta.school || '';
+    } else if (records[0] && records[0].school) {
+      $('schoolLine').textContent = records[0].school;
     }
 
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
@@ -306,6 +313,20 @@
 
   function render() {
     renderPicker();
+    // รุ่นที่เก็บข้อมูลบนเซิร์ฟเวอร์: โหลดข้อมูลของห้องที่เลือกเมื่อจำเป็น
+    if (DB.ensureData) {
+      var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+      if (need.length) {
+        view.innerHTML = '<div class="card empty-state"><b>กำลังโหลดข้อมูล ' + need.length + ' ไฟล์...</b>จาก Google Drive</div>';
+        DB.ensureData(need).then(function () {
+          if (need.every(function (r) { return r.data; })) render();
+          else view.innerHTML = '<div class="card empty-state"><b>โหลดข้อมูลไม่ครบ</b>ลองรีเฟรชหน้าอีกครั้ง</div>';
+        }, function (err) {
+          view.innerHTML = '<div class="card empty-state"><b>โหลดข้อมูลไม่สำเร็จ</b>' + esc(err && err.message ? err.message : err) + '</div>';
+        });
+        return;
+      }
+    }
     var cls = 'ป.' + state.level + '/' + state.room;
     if (state.tab === 'subjects') renderSubjects(cls);
     else if (state.tab === 'summary') renderSummary(cls);
@@ -699,6 +720,7 @@
   }
 
   function download(rec) {
+    if (DB.download) return DB.download(rec);
     var url = URL.createObjectURL(rec.blob);
     var a = document.createElement('a');
     a.href = url; a.download = rec.fileName;
@@ -710,7 +732,7 @@
   $('modal').addEventListener('click', function (e) { if (e.target === $('modal')) $('modal').close(); });
   $('clearAll').addEventListener('click', async function () {
     if (!records.length) { toast('ยังไม่มีข้อมูล', 'info'); return; }
-    if (!confirm('ลบไฟล์และคะแนนทั้งหมด ' + records.length + ' ไฟล์ออกจากเครื่องนี้?')) return;
+    if (!confirm('ลบไฟล์และคะแนนทั้งหมด ' + records.length + ' ไฟล์' + (DB === LocalDB ? 'ออกจากเครื่องนี้' : 'ออกจากระบบ (ย้ายไฟล์ใน Drive ไปถังขยะ)') + '?')) return;
     await DB.clear();
     records = [];
     render();
@@ -724,8 +746,12 @@
       records = await DB.all();
     } catch (e) {
       console.error(e);
-      toast('เบราว์เซอร์นี้เก็บข้อมูลในเครื่องไม่ได้ (อาจเป็นโหมดไม่ระบุตัวตน) ข้อมูลจะหายเมื่อปิดหน้า', 'err');
-      DB.put = DB.del = DB.clear = function () { return Promise.resolve(); };
+      if (DB === LocalDB) {
+        toast('เบราว์เซอร์นี้เก็บข้อมูลในเครื่องไม่ได้ (อาจเป็นโหมดไม่ระบุตัวตน) ข้อมูลจะหายเมื่อปิดหน้า', 'err');
+        DB.put = DB.del = DB.clear = function () { return Promise.resolve(); };
+      } else {
+        toast('เชื่อมต่อที่เก็บข้อมูลไม่สำเร็จ: ' + (e && e.message ? e.message : e), 'err');
+      }
     }
     if (records.length && !records.some(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room; })) {
       var r0 = records[0];
