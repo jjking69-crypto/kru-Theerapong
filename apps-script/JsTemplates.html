@@ -1,0 +1,328 @@
+<script>
+/*
+ * สร้างไฟล์ ปพ.5 / ปพ.6 ในรูปแบบต้นฉบับของโรงเรียน โดยใช้ไฟล์ต้นฉบับเป็นแม่แบบ
+ *   ปพ.5 = โปรแกรม ปพ.5 ระดับประถมศึกษา (เก็บคะแนนตามตัวชี้วัด) ของครูหนุ่ม
+ *   ปพ.6 = แบบบันทึกผลสัมฤทธิ์ทางการเรียน/ใบรายงานรายบุคคลของโรงเรียน
+ * เขียนเฉพาะเซลล์ที่ครูกรอก (ไม่แตะสูตร มาโคร รูปแบบ หรือการจัดหน้าพิมพ์)
+ * data = null หมายถึงสร้างแม่แบบเปล่า (ล้างข้อมูลนักเรียนทั้งหมด)
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory;
+  else root.PP5Templates = factory(root.XlsxFill);
+})(typeof self !== 'undefined' ? self : this, function (XF) {
+  'use strict';
+
+  var C = function (n) { return XF.colName(n); };
+  function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ''); }
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+  function str(v) { return v == null ? '' : String(v); }
+  function noSchoolPrefix(s) { return str(s).replace(/^โรงเรียน\s*/, ''); }
+  function stageName(stage, level) { return (stage === 'ม' ? 'มัธยมศึกษาปีที่ ' : 'ประถมศึกษาปีที่ ') + level; }
+
+  function detect(sheetNames) {
+    var has = function (n) { return sheetNames.indexOf(n) >= 0; };
+    if (has('ตั้งค่า') && has('บันทึกมาเรียน_T1') && has('คะแนนเก็บตามตัวชี้วัด')) return 'pp5';
+    if (has('ผลสัมฤทธิ์ฯ เทอม 1') && has('ผลสัมฤทธิ์ฯ รายปีการศึกษา')) return 'pp6';
+    return null;
+  }
+
+  // ---------- ปพ.5 ครูหนุ่ม ----------
+  async function fillPP5(book, data) {
+    var m = data ? data.meta : null, studs = data ? data.students : [];
+    if (studs.length > 40) throw new Error('แม่แบบ ปพ.5 รองรับนักเรียนได้สูงสุด 40 คน (ห้องนี้มี ' + studs.length + ' คน)');
+    var set = await book.sheet('ตั้งค่า');
+    if (m) {
+      var put = { C11: m.year, C12: noSchoolPrefix(m.school), C17: m.gradeName || stageName(m.stage, m.level), F17: m.room, C18: m.group || m.subject,
+        C19: m.code, C20: m.subject, C21: (data.hours && data.hours.year) || m.hours, C22: m.credit, C23: m.type, C24: m.maxCollect, C25: m.maxFinal, C26: m.teacher };
+      Object.keys(put).forEach(function (a) { if (put[a] != null && put[a] !== '') set.set(a, put[a], a === 'C22'); }); // หน่วยกิตเขียนทับสูตรได้
+      ['subdistrict:C13', 'district:C14', 'province:C15', 'office:C16'].forEach(function (x) { var p = x.split(':'); if (m[p[0]]) set.set(p[1], m[p[0]]); });
+    } else {
+      ['C18', 'C19', 'C20', 'C26', 'C27', 'C28'].forEach(function (a) { set.clear(a); });
+    }
+
+    var ro = await book.sheet('รายชื่อนักเรียน');
+    ro.clearRange(2, 8, 6, 45);
+    studs.forEach(function (s) {
+      var r = 5 + s.no;
+      if (s.no < 1 || s.no > 40) return;
+      ro.set('B' + r, s.id ? (isFinite(+s.id) ? +s.id : s.id) : null);
+      ro.set('C' + r, s.nid4 || null);
+      ro.set('D' + r, s.prefix || null); ro.set('E' + r, s.first || null); ro.set('F' + r, s.last || null);
+      ro.set('H' + r, s.first ? (s.status || 'ปกติ') : null);
+    });
+
+    // มาตรฐาน: 3 บล็อก (A, R, AI) แถว 6-15 คอลัมน์ รหัส/คำอธิบาย
+    var st = await book.sheet('มาตรฐาน'), stds = [];
+    if (data) {
+      var known = {};
+      (data.standards || []).forEach(function (x) { if (x.code && !known[norm(x.code)]) { known[norm(x.code)] = 1; stds.push(x); } });
+      data.indicators.forEach(function (i) { if (i.std && !known[norm(i.std)]) { known[norm(i.std)] = 1; stds.push({ code: i.std, text: '' }); } });
+    }
+    [1, 18, 35].forEach(function (s0, bi) {
+      for (var r = 6; r <= 15; r++) {
+        st.clear(C(s0 + 1) + r); st.clear(C(s0 + 2) + r);
+        var x = stds[bi * 10 + (r - 6)];
+        if (x) { st.set(C(s0 + 1) + r, x.code); st.set(C(s0 + 2) + r, x.text || null); }
+      }
+    });
+
+    // ตัวชี้วัด: 4 บล็อก (A, P, AE, AT) แถว 6-15: ภาคเรียน มาตรฐาน รหัส คำอธิบาย
+    var it = await book.sheet('ตัวชี้วัด'), byIdx = {};
+    (data ? data.indicators : []).forEach(function (i) { byIdx[i.idx] = i; });
+    [1, 16, 31, 46].forEach(function (s0) {
+      for (var r = 6; r <= 15; r++) {
+        var idx = [1, 16, 31, 46].indexOf(s0) * 10 + (r - 5); // ลำดับตามตำแหน่ง (คอลัมน์ ที่ เป็นสูตร =A6+1)
+        [1, 2, 4, 6].forEach(function (o) { it.clear(C(s0 + o) + r); });
+        var x = idx != null ? byIdx[idx] : null;
+        if (x) { it.set(C(s0 + 1) + r, x.term || 1); it.set(C(s0 + 2) + r, x.std || null); it.set(C(s0 + 4) + r, x.code || null); it.set(C(s0 + 6) + r, x.text || null); }
+      }
+    });
+
+    // คะแนนเก็บตามตัวชี้วัด: หาคอลัมน์ของแต่ละลำดับจากแถว 3
+    var sc = await book.sheet('คะแนนเก็บตามตัวชี้วัด'), colOf = {};
+    for (var k = 1; k <= 40; k++) colOf[k] = 4 + Math.floor((k - 1) / 8) * 27 + ((k - 1) % 8) * 3; // บล็อกละ 8 ตัวชี้วัด คอลัมน์ละ 3
+    Object.keys(colOf).forEach(function (idx) {
+      var col = C(colOf[idx]), x = byIdx[idx];
+      sc.set(col + 7, x && x.max != null ? x.max : null);
+      for (var r = 9; r <= 48; r++) sc.clear(col + r);
+      studs.forEach(function (s) { var v2 = s.scores ? num(s.scores[idx]) : null; if (v2 != null) sc.set(col + (8 + s.no), v2); });
+    });
+
+    // เวลาเรียน (สรุป) และบันทึกรายวัน (ล้าง เพราะระบบเก็บเฉพาะยอดรวม)
+    for (var t = 1; t <= 2; t++) { var day = await book.sheet('บันทึกมาเรียน_T' + t); if (day) day.clearRange(4, 200, 7, 46); }
+    var at = await book.sheet('สรุปเวลาเรียน');
+    if (data) { if (data.hours.t1 != null) at.set('G3', data.hours.t1); if (data.hours.t2 != null) at.set('L3', data.hours.t2); }
+    at.clearRange(4, 7, 7, 46); at.clearRange(9, 12, 7, 46);
+    studs.forEach(function (s) {
+      var r = 6 + s.no, a = s.attendance || {};
+      [['t1', 'D'], ['t2', 'I']].forEach(function (p) {
+        var x = a[p[0]] || {}, c0 = XF.colNum(p[1]);
+        var h = data.hours[p[0]];
+        var present = num(x.present) != null ? x.present : (h != null ? h - (num(x.sick) || 0) - (num(x.leave) || 0) - (num(x.absent) || 0) : null);
+        at.set(C(c0) + r, num(x.sick) || 0); at.set(C(c0 + 1) + r, num(x.leave) || 0); at.set(C(c0 + 2) + r, num(x.absent) || 0);
+        if (present != null) at.set(C(c0 + 3) + r, present);
+      });
+    });
+
+    // ปลายภาค และ ร/มส
+    var ev = await book.sheet('ประเมินผลการเรียน');
+    ev.clearRange(91, 91, 7, 46); ev.clearRange(93, 93, 7, 46); ev.clearRange(97, 97, 7, 46);
+    studs.forEach(function (s) {
+      var r = 6 + s.no, res = s.result || {};
+      if (num(res.final) != null) ev.set('CM' + r, res.final);
+      if (res.rms) ev.set('CS' + r, res.rms);
+    });
+
+    // กิจกรรมพัฒนาผู้เรียน (ชั่วโมงที่เข้าร่วม: ผ่าน = เต็ม, ไม่ผ่าน = 0)
+    var ac = await book.sheet('ประเมินกิจกรรมพัฒนาผู้เรียน');
+    var full = { D: num(ac.get('D5')) || 40, J: num(ac.get('J5')) || 40, Q: num(ac.get('Q5')) || 30, AA: num(ac.get('AA5')) || 10 };
+    ['D', 'J', 'P', 'Q', 'Z', 'AA'].forEach(function (col) { for (var r = 7; r <= 46; r++) ac.clear(col + r); });
+    studs.forEach(function (s) {
+      var r = 6 + s.no, a = s.activities || {};
+      var hrs = function (v, col) { return !v ? null : /^ผ/.test(v) ? full[col] : 0; };
+      if (hrs(a.guidance, 'D') != null) ac.set('D' + r, hrs(a.guidance, 'D'));
+      if (hrs(a.scout, 'J') != null) ac.set('J' + r, hrs(a.scout, 'J'));
+      if (a.clubName) ac.set('P' + r, a.clubName);
+      if (hrs(a.club, 'Q') != null) ac.set('Q' + r, hrs(a.club, 'Q'));
+      if (a.social) { ac.set('Z' + r, 'บำเพ็ญประโยชน์'); ac.set('AA' + r, hrs(a.social, 'AA')); }
+    });
+
+    // คุณลักษณะ 0-3 (ข้อ 1-10 ที่คอลัมน์ D, F, H, ...)
+    var ch = await book.sheet('ประเมินคุณลักษณะ');
+    for (var i = 0; i < 10; i++) for (var r2 = 8; r2 <= 47; r2++) ch.clear(C(4 + i * 2) + r2);
+    studs.forEach(function (s) {
+      var items = (s.characteristics && s.characteristics.items) || {};
+      for (var k = 1; k <= 10; k++) { var v3 = num(items[k]); if (v3 != null) ch.set(C(4 + (k - 1) * 2) + (7 + s.no), v3); }
+    });
+
+    // อ่าน / คิด / เขียน: ภาค 1 ครั้งที่ 1-4 (D,F,H,J) ภาค 2 (N,P,R,T)
+    var map = { 'ประเมินการอ่าน': 'read', 'ประเมินการคิด': 'think', 'ประเมินการเขียน': 'write' };
+    for (var name in map) {
+      var ws = await book.sheet(name);
+      if (!ws) continue;
+      ['D', 'F', 'H', 'J', 'N', 'P', 'R', 'T'].forEach(function (col) { for (var r = 8; r <= 47; r++) ws.clear(col + r); });
+      studs.forEach(function (s) {
+        var w = s.rtw || {};
+        [['t1', ['D', 'F', 'H', 'J']], ['t2', ['N', 'P', 'R', 'T']]].forEach(function (p) {
+          var v = num((w[p[0]] || {})[map[name]]);
+          // แจกคะแนน 4 ครั้งให้ค่าเฉลี่ยเท่าเดิม (เช่น 2.25 -> 3,2,2,2)
+          if (v != null) { var tot = Math.round(v * 4), b0 = Math.floor(tot / 4), rem = tot - b0 * 4; p[1].forEach(function (col, k) { ws.set(col + (7 + s.no), b0 + (k < rem ? 1 : 0)); }); }
+        });
+      });
+    }
+  }
+
+  // ---------- ปพ.6 ของโรงเรียน ----------
+  async function fillPP6(book, data) {
+    var m = data ? data.meta : null, studs = data ? data.students : [], subs = data ? data.subjects : [];
+    var T1 = await book.sheet('ผลสัมฤทธิ์ฯ เทอม 1');
+    if (studs.length > 36) throw new Error('แม่แบบ ปพ.6 รองรับนักเรียนได้สูงสุด 36 คน (ห้องนี้มี ' + studs.length + ' คน)');
+    var oldTeacher = str(T1.get('AA1')).trim();
+    var cls = m ? (m.className || stageName(m.stage, m.level) + '/' + m.room) : null;
+
+    // จำนวนช่องวิชาในแม่แบบ (แถว 4 = เก็บ/สอบ/รวม)
+    var slots = 0;
+    while (norm(T1.get(C(6 + slots * 3) + 4)) === 'เก็บ') slots++;
+    if (subs.length > slots) throw new Error('แม่แบบ ปพ.6 มีช่องรายวิชา ' + slots + ' วิชา แต่ข้อมูลมี ' + subs.length + ' วิชา');
+
+    // หัวกระดาษของแต่ละชีต (ค่าถัดจากป้าย)
+    async function header(sheetName, labels) {
+      var ws = await book.sheet(sheetName);
+      if (!ws || !m) return;
+      for (var c = 1; c <= 40; c++) {
+        var lab = norm(ws.get(C(c) + 1));
+        if (!(lab in labels)) continue;
+        for (var k = c + 1; k <= c + 6; k++) {
+          var v = ws.get(C(k) + 1);
+          if (ws.isFormula(C(k) + 1)) break;
+          if (v != null && v !== '') { ws.set(C(k) + 1, labels[lab]); break; }
+        }
+      }
+    }
+    var L = m ? { 'ปีการศึกษา': m.year, 'ชั้น': cls, 'ครูประจำชั้น': m.teacher || '' } : {};
+    for (var n = 0; n < book.order.length; n++) await header(book.order[n], L);
+
+    // รายวิชา: รหัส (แถว 3) + ชื่อ/ชม./หน่วยกิต ในชีตข้อมูลทั้งหมด
+    for (var i = 0; i < slots; i++) T1.set(C(6 + i * 3) + 3, subs[i] ? subs[i].code : null);
+    var info = await book.sheet('ข้อมูลทั้งหมด');
+    if (info && data) {
+      for (var r = 1; r <= 60; r++) for (var c = 1; c <= 30; c++) {
+        var v = norm(info.get(C(c) + r));
+        if (/^ตารางคิดหน่วยกิต/.test(v) && norm(info.get(C(c) + (r + 1))) === 'วิชา') {
+          for (var j = 0; j < slots; j++) {
+            var rr = r + 2 + j, s = subs[j];
+            if (norm(info.get(C(c) + rr)) === 'รวม') break;
+            info.set(C(c) + rr, s ? s.name : null); info.set(C(c + 1) + rr, s ? s.hours : null); info.set(C(c + 2) + rr, s ? s.credit : null);
+          }
+        }
+        if (v === 'ป.' + m.level && c <= 6 && /^[ก-ฮ]\d/.test(norm(info.get(C(c + 1) + r)))) {
+          for (var j2 = 0; j2 < 10; j2++) if (subs[j2]) info.set(C(c + 1 + j2) + r, subs[j2].code);
+        }
+      }
+    }
+
+    // คะแนนภาค 1 (แถว 5-40) และคะแนนทั้งปี (ล่าง: ภาค 2 = ทั้งปี - ภาค 1)
+    var low = 0;
+    for (var r3 = 42; r3 <= 50; r3++) if (norm(T1.get('A' + r3)) === 'เลขที่') { low = r3 + 3; break; }
+    T1.clearRange(2, 5, 5, 40);
+    T1.clearRange(6, 5 + slots * 3, 5, 40);
+    if (low) T1.clearRange(6, 5 + slots * 3, low, low + 35);
+    studs.forEach(function (s) {
+      var r = 4 + s.no;
+      T1.set('B' + r, s.id ? (isFinite(+s.id) ? +s.id : s.id) : null);
+      T1.set('C' + r, s.prefix || null); T1.set('D' + r, s.first || null); T1.set('E' + r, s.last || null);
+      subs.forEach(function (sub, k) {
+        var a = (s.t1 || {})[sub.code], b = (s.t2 || {})[sub.code], c0 = 6 + k * 3;
+        if (a) { if (num(a.collect) != null) T1.set(C(c0) + r, a.collect); if (num(a.exam) != null) T1.set(C(c0 + 1) + r, a.exam); }
+        if (low && a && b) {
+          var lr = low - 1 + s.no;
+          T1.set(C(c0) + lr, (num(a.collect) || 0) + (num(b.collect) || 0));
+          T1.set(C(c0 + 1) + lr, (num(a.exam) || 0) + (num(b.exam) || 0));
+        }
+      });
+    });
+
+    var A = await book.sheet('บันทึกเวลาเรียน');
+    A.clearRange(6, 9, 4, 39);
+    studs.forEach(function (s) {
+      var a = s.attendance || {}, r = 3 + s.no, a1 = a.t1 || {}, a2 = a.t2 || {};
+      if (num(a1.total) != null) A.set('F' + r, a1.total); if (num(a1.present) != null) A.set('G' + r, a1.present);
+      A.set('H' + r, num(a2.total) != null ? a2.total : 0); if (num(a2.present) != null) A.set('I' + r, a2.present);
+    });
+
+    var H = await book.sheet('บันทึกสุขภาพและพฤติกรรมนักเรียน');
+    H.clearRange(6, 10, 4, 39);
+    studs.forEach(function (s) {
+      var h = s.health || {}, r = 3 + s.no, h1 = h.t1 || {}, h2 = h.t2 || {};
+      [['F', h1.w], ['G', h1.h], ['H', h2.w], ['I', h2.h]].forEach(function (p) { if (num(p[1]) != null) H.set(p[0] + r, p[1]); });
+      if (h.behavior) H.set('J' + r, h.behavior);
+    });
+
+    var W = await book.sheet('การคิดวิเคราะห์และเขียน');
+    W.clearRange(5, 7, 7, 42);
+    studs.forEach(function (s) { var w = (s.rtw && s.rtw.scores) || []; ['E', 'F', 'G'].forEach(function (c, k) { if (num(w[k]) != null) W.set(c + (6 + s.no), w[k]); }); });
+
+    var CH = await book.sheet('คุณลักษณะอันพึงประสงค์');
+    CH.clearRange(5, 12, 7, 42);
+    studs.forEach(function (s) { var it = (s.characteristics && s.characteristics.items) || []; for (var k = 0; k < 8; k++) if (it[k]) CH.set(C(5 + k) + (6 + s.no), it[k]); });
+
+    var P = await book.sheet('สมรรถนะของผู้เรียน');
+    P.clearRange(5, 21, 7, 42);
+    studs.forEach(function (s) {
+      var flat = [];
+      (s.competencies || []).forEach(function (g) { (g || []).forEach(function (v) { flat.push(v); }); });
+      flat.slice(0, 17).forEach(function (v, k) { if (v) P.set(C(5 + k) + (6 + s.no), v); });
+    });
+
+    // ใบรายงาน: ตารางตัวชี้วัด ผู้ลงนาม และสาเหตุ
+    var R = await book.sheet('ใบรายงานผลการเรียน รายบุคคล');
+    if (R && data) {
+      var hd = null;
+      for (var r4 = 1; r4 <= 20 && !hd; r4++) for (var c4 = 1; c4 <= 30; c4++) if (norm(R.get(C(c4) + r4)) === 'ตัวชี้วัดทั้งหมด') { hd = { r: r4, c: c4 }; break; }
+      if (hd) {
+        var basic = subs.filter(function (s) { return s.basic; });
+        for (var k = 0; k < 12; k++) {
+          var row = hd.r + 1 + k, nm = norm(R.get(C(hd.c - 2) + row));
+          if (/^รวม/.test(nm) || !nm) break;
+          var sub = basic.filter(function (s) { return norm(s.name) === nm; })[0] || basic[k];
+          var x = sub ? (data.indicatorTable[norm(sub.name)] || {}) : {};
+          R.set(C(hd.c) + row, num(x.total)); R.set(C(hd.c + 1) + row, num(x.passed));
+        }
+      }
+      var sg = m.signers || {};
+      for (var r5 = 1; r5 <= 60; r5++) for (var c5 = 1; c5 <= 45; c5++) {
+        var val = R.get(C(c5) + r5);
+        if (typeof val !== 'string') continue;
+        var mm = /^\((.+)\)$/.exec(val.trim());
+        if (mm) {
+          var pos = '';
+          for (var k2 = 0; k2 <= 2 && !pos; k2++) { var p2 = R.get(C(c5 + k2) + (r5 + 1)); if (typeof p2 === 'string' && /^ตำแหน่ง/.test(p2)) pos = p2; }
+          var who = /รองผู้อำนวยการ/.test(pos) ? sg.deputy : /ผู้อำนวยการ/.test(pos) ? sg.director : norm(mm[1]) === norm(oldTeacher) ? { name: m.teacher } : null;
+          if (who && who.name) R.set(C(c5) + r5, '(' + who.name + ')');
+        } else if (/^เป็นผู้ที่ผ่านเกณฑ์/.test(val) && m.reason) R.set(C(c5) + r5, m.reason);
+      }
+      // ครูประจำชั้นเปลี่ยน: เอารูปลายเซ็นของครูคนเดิมออกจากใบรายงาน
+      if (oldTeacher && m.teacher && norm(oldTeacher) !== norm(m.teacher)) await removeSignature(book, 'ใบรายงานผลการเรียน รายบุคคล', oldTeacher, R);
+    }
+    // แม่แบบเปล่า: เอาลายเซ็นของครูประจำชั้น (เฉพาะคน) ออก คงโลโก้และลายเซ็นผู้บริหารไว้
+    if (R && !data && oldTeacher) await removeSignature(book, 'ใบรายงานผลการเรียน รายบุคคล', oldTeacher, R);
+  }
+
+  async function removeSignature(book, sheetName, personName, ws) {
+    var dp = await book.drawingOf(sheetName);
+    if (!dp) return;
+    var xml = await book.zip.file(dp).async('string');
+    var names = [];
+    Object.keys(ws.rows).forEach(function (r) {
+      Object.keys(ws.rows[r].cells).forEach(function (c) {
+        var v = ws.get(XF.colName(+c) + r);
+        if (typeof v === 'string' && /^\(.+\)$/.test(v.trim())) names.push({ r: +r - 1, c: +c - 1, name: v.trim().slice(1, -1) });
+        // ป้าย "ลงชื่อ.....ครูประจำชั้น" (ชื่อในวงเล็บแถวถัดไปอาจเป็นสูตร)
+        else if (typeof v === 'string' && /^ลงชื่อ.*ครูประจำชั้น/.test(norm(v))) names.push({ r: +r, c: +c - 1, name: personName });
+      });
+    });
+    var parts = xml.split(/(?=<xdr:(?:twoCellAnchor|oneCellAnchor|absoluteAnchor)\b)/);
+    var out = parts.filter(function (a) {
+      if (!/^<xdr:(twoCellAnchor|oneCellAnchor)/.test(a) || !/<xdr:pic\b/.test(a)) return true;
+      var col = +((a.match(/<xdr:from>\s*<xdr:col>(\d+)<\/xdr:col>/) || [])[1] || 0);
+      var row = +((a.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/) || [])[1] || 0);
+      var best = null, bd = 1e9;
+      names.forEach(function (nc) { var dr = nc.r - row; if (dr < -1 || dr > 6) return; var d = Math.abs(dr) + Math.abs(nc.c - col) * 0.6; if (d < bd) { bd = d; best = nc; } });
+      return !(best && norm(best.name) === norm(personName));
+    });
+    book.zip.file(dp, out.join(''));
+  }
+
+  /** สร้างไฟล์: kind = 'pp5' | 'pp6', template = ไบต์ของแม่แบบ, data = ข้อมูล (null = แม่แบบเปล่า) */
+  async function build(kind, template, data) {
+    var book = await XF.open(template);
+    var k = detect(book.order);
+    if (k !== kind) throw new Error('แม่แบบไม่ใช่ไฟล์ ' + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ' รูปแบบต้นฉบับ');
+    if (kind === 'pp5') await fillPP5(book, data); else await fillPP6(book, data);
+    return book.output();
+  }
+
+  return { build: build, detect: detect };
+});
+
+</script>

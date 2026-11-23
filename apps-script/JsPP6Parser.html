@@ -67,9 +67,11 @@
   // หัวตาราง "เลขที่" แล้วแถวนักเรียนที่คอลัมน์ A เป็นตัวเลขและมีชื่อ
   function header(ws) { return find(ws, eq('เลขที่'), 0, 8, 0, 3); }
   function rows(ws, hr, firstNameCol) {
-    var b = bounds(ws), out = [];
+    var b = bounds(ws), out = [], last = null;
     for (var r = hr + 1; r <= b.e.r; r++) {
       var no = num(cell(ws, r, 0));
+      if (no == null && cell(ws, r, 0) == null && last != null && last < 60) no = last + 1; // เลขที่เป็นสูตรที่ยังไม่คำนวณ
+      if (no != null) last = no;
       if (no == null) { if (out.length && cell(ws, r, 0) != null) break; continue; }
       out.push({ r: r, no: no, first: str(cell(ws, r, firstNameCol)) });
     }
@@ -92,8 +94,8 @@
     for (var c = 0; c <= b.e.c; c++) {
       if (norm(cell(ws, hr + 2, c)) === 'เก็บ' && norm(cell(ws, hr + 2, c + 1)) === 'สอบ') {
         var name = cell(ws, hr, c), code = cell(ws, hr + 1, c);
-        if (!name || name === 0 || !code || code === 0) continue;
-        out.subjects.push({ name: str(name), code: str(code).replace(/\s+/g, ''), col: c });
+        if (!code || code === 0 || name === 0) continue;
+        out.subjects.push({ name: name ? str(name) : '', code: str(code).replace(/\s+/g, ''), col: c, slot: out.subjects.length });
       }
     }
     rows(ws, hr + 2, 3).forEach(function (s) {
@@ -113,9 +115,32 @@
     return out;
   }
 
+  // ตารางล่างของชีตเทอม 1: "กรอกคะแนนเก็บ และคะแนนสอบ ทั้งภาคปีการศึกษา"
+  function parseYearBlock(ws, subjects) {
+    var out = {};
+    if (!ws) return out;
+    var first = header(ws);
+    if (!first) return out;
+    var h2 = find(ws, eq('เลขที่'), first.r + 5, null, 0, 0);
+    if (!h2) return out;
+    var b = bounds(ws);
+    for (var r = h2.r + 1; r <= b.e.r; r++) {
+      var no = num(cell(ws, r, 0));
+      if (no == null) continue;
+      var o = {};
+      subjects.forEach(function (sub) {
+        var a = num(cell(ws, r, sub.col)), e = num(cell(ws, r, sub.col + 1));
+        if (a != null || e != null) o[sub.code] = { collect: a, exam: e };
+      });
+      if (Object.keys(o).length) out[no] = o;
+    }
+    return out;
+  }
+
   // ---------- หน่วยกิตจากชีตข้อมูลทั้งหมด ----------
   function parseCredits(ws, level) {
     var out = {};
+    Object.defineProperty(out, '_list', { value: [], enumerable: false });
     if (!ws) return out;
     var b = bounds(ws), tables = [];
     for (var r = 0; r <= Math.min(b.e.r, 120); r++) for (var c = 0; c <= b.e.c; c++) {
@@ -132,6 +157,7 @@
       if (!name) continue;
       if (norm(name) === 'รวม') break;
       out[norm(name)] = { hours: num(cell(ws, r2, t.c + 1)), credit: num(cell(ws, r2, t.c + 2)) };
+      out._list.push({ name: str(name), hours: num(cell(ws, r2, t.c + 1)), credit: num(cell(ws, r2, t.c + 2)) });
     }
     return out;
   }
@@ -262,7 +288,7 @@
   }
 
   // ---------- ใบรายงาน: ผู้ลงนาม ตารางตัวชี้วัด ข้อความสาเหตุ ----------
-  function parseReportSheet(ws) {
+  function parseReportSheet(ws, subjects) {
     var out = { signers: [], indicators: {}, reason: '', nameCells: [] };
     if (!ws) return out;
     var b = bounds(ws);
@@ -277,12 +303,16 @@
         if (!out.signers.some(function (s) { return s.name === name && s.position === pos; })) out.signers.push({ name: name, position: pos });
       }
       if (!out.reason && /^เป็นผู้ที่ผ่านเกณฑ์/.test(v)) out.reason = v;
+      // ป้าย "ลงชื่อ......ครูประจำชั้น" ใช้ระบุรูปลายเซ็นครู (กรณีชื่อในวงเล็บเป็นสูตรที่ยังไม่คำนวณ)
+      if (/^ลงชื่อ.*ครูประจำชั้น/.test(norm(v))) out.nameCells.push({ r: r + 1, c: c, name: '', position: 'ครูประจำชั้น' });
     }
     var hd = find(ws, eq('ตัวชี้วัดทั้งหมด'));
     if (hd) {
       var nameCol = find(ws, starts('กลุ่มสาระ'), hd.r, hd.r, 0, hd.c);
-      for (var r2 = hd.r + 1; r2 <= hd.r + 20; r2++) {
+      var basic = (subjects || []).filter(function (s) { return s.basic; });
+      for (var r2 = hd.r + 1, k = 0; r2 <= hd.r + 20; r2++, k++) {
         var n = cell(ws, r2, nameCol ? nameCol.c : hd.c - 2);
+        if (!n && num(cell(ws, r2, hd.c)) != null && basic[k]) n = basic[k].name; // ชื่อเป็นสูตรที่ยังไม่คำนวณ
         if (!n || /^รวม/.test(norm(n))) break;
         out.indicators[norm(n)] = { total: num(cell(ws, r2, hd.c)), passed: num(cell(ws, r2, hd.c + 1)) };
       }
@@ -387,6 +417,21 @@
     var t1 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1'));
     if (!t1.students.length) throw new Error('ไม่พบรายชื่อนักเรียนในชีต "ผลสัมฤทธิ์ฯ เทอม 1"');
     var t2 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 2'));
+    // ไฟล์ที่ยังไม่เคยคำนวณ: ภาค 2 = คะแนนทั้งปี (ตารางล่างของชีตเทอม 1) - ภาค 1
+    var hasT2 = Object.keys(t2.byNo).some(function (no) { var x = t2.byNo[no]; return Object.keys(x).some(function (k) { return x[k] && x[k].total != null; }); });
+    if (!hasT2) {
+      var yr = parseYearBlock(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1'), t1.subjects);
+      Object.keys(yr).forEach(function (no) {
+        var a = t1.byNo[no] || {}, y = yr[no], o = t2.byNo[no] = t2.byNo[no] || {};
+        Object.keys(y).forEach(function (code) {
+          var yy = y[code], aa = a[code];
+          if (!yy || !aa) return;
+          var c2 = yy.collect != null && aa.collect != null ? yy.collect - aa.collect : null;
+          var e2 = yy.exam != null && aa.exam != null ? yy.exam - aa.exam : null;
+          if (c2 != null || e2 != null) o[code] = { collect: c2, exam: e2, total: (c2 || 0) + (e2 || 0) };
+        });
+      });
+    }
     var attWs = sheet(wb, 'บันทึกเวลาเรียน');
     var info = t1.info;
     var className = info.className || str(after(attWs, 'ชั้น', 0, 1));
@@ -398,12 +443,14 @@
 
     var credits = parseCredits(sheet(wb, 'ข้อมูลทั้งหมด'), level);
     var subjects = t1.subjects.map(function (s) {
-      var cr = credits[norm(s.name)] || {};
+      if (!s.name && credits._list[s.slot]) s.name = credits._list[s.slot].name; // ชื่อวิชาเป็นสูตรที่ยังไม่คำนวณ
+      var cr = credits[norm(s.name)] || credits._list[s.slot] || {};
       var m = s.code.match(/^[ก-ฮ]\d(\d)(\d)/);
-      return { code: s.code, name: s.name, credit: cr.credit != null ? cr.credit : null, hours: cr.hours || null, basic: m ? m[2] === '1' && +m[1] === level : true };
+      var credit = cr.credit != null ? cr.credit : cr.hours ? cr.hours / 40 : null; // สูตรในไฟล์: หน่วยกิต = ชั่วโมง/40
+      return { code: s.code, name: s.name, credit: credit, hours: cr.hours || null, basic: m ? m[2] === '1' && +m[1] === level : true };
     });
 
-    var rep = parseReportSheet(sheet(wb, REPORT_SHEET));
+    var rep = parseReportSheet(sheet(wb, REPORT_SHEET), subjects);
     var teacherName = info.teacher || '';
     function roleOf(s) {
       var p = s.position || '';

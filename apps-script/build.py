@@ -26,6 +26,7 @@ WEB = HERE.parent / 'pp5'
 SRC = HERE / 'src'
 
 CDN_XLSX = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+CDN_JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 
 
 def read(p):
@@ -66,10 +67,12 @@ def build():
         'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย')
 
     parts = [('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
-             ('JsModel', WEB / 'model.js'), ('JsGrid', WEB / 'grid.js'), ('JsEditor', WEB / 'editor.js'),
+             ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'),
+             ('JsGrid', WEB / 'grid.js'), ('JsEditor', WEB / 'editor.js'),
              ('JsPublic', WEB / 'public.js'), ('JsPublish', WEB / 'publish.js'),
              ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]
     html = replace_once(html, '<script src="vendor/xlsx.full.min.js"></script>', '<script src="' + CDN_XLSX + '"></script>')
+    html = replace_once(html, '<script src="vendor/jszip.min.js"></script>', '<script src="' + CDN_JSZIP + '"></script>')
     html = re.sub(r'  <script src="[a-z0-9]+\.js"></script>\n', '', html)
     if re.search(r'(src|href)="(?!https://|#)', html):
         raise SystemExit('ยังมีไฟล์ที่อ้างแบบ relative เหลืออยู่')

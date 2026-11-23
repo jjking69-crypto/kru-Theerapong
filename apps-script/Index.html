@@ -68,12 +68,16 @@
 
   <div id="toasts" aria-live="polite"></div>
   <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
+  <input type="file" id="fileTpl" accept=".xlsm,.xlsx" hidden>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <?!= include('JsStore') ?>
   <?!= include('JsParser') ?>
   <?!= include('JsPP6Parser') ?>
   <?!= include('JsModel') ?>
+  <?!= include('JsXlsxFill') ?>
+  <?!= include('JsTemplates') ?>
   <?!= include('JsGrid') ?>
   <?!= include('JsEditor') ?>
   <?!= include('JsPublic') ?>

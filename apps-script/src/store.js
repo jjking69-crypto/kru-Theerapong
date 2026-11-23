@@ -8,6 +8,7 @@
     'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
   ];
+  function b64ToBytes(b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
 
   var PIN_KEY = 'pp5-pin';
   function getPin() { try { return localStorage.getItem(PIN_KEY) || ''; } catch (e) { return window.__pp5pin || ''; } }
@@ -78,6 +79,14 @@
     download: function (rec) {
       if (rec.url) window.open(rec.url, '_blank', 'noopener');
       else alert('ไม่พบลิงก์ไฟล์ใน Drive');
+    },
+    templateInfo: function () { return call('api_templateInfo'); },
+    getTemplate: async function (kind) {
+      var t = await call('api_getTemplate', [kind]);
+      return t ? { name: t.name, bytes: b64ToBytes(t.b64) } : null;
+    },
+    putTemplate: async function (kind, bytes, name) {
+      return call('api_saveTemplate', [kind, await blobToB64(new Blob([bytes])), name]);
     },
     publish: function (key, pub) { return call('api_publish', [key, JSON.stringify(pub)]); },
     unpublish: function (key) { return call('api_unpublish', [key]); },

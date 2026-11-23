@@ -243,3 +243,9 @@ dialog::backdrop { background: #0b1a3a77; }
 .rc-yt { border-collapse: collapse; font-size: 14.5px; }
 .rc-yt th, .rc-yt td { border-bottom: 1px solid var(--line); padding: 6px 14px; text-align: left; }
 .pub-preview { min-height: 0; background: #eef3fb; border-radius: var(--radius); padding: 14px; }
+
+/* ---------- แม่แบบรูปแบบต้นฉบับ ---------- */
+.tpl-card { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 12px 14px; margin-bottom: 14px; }
+.tpl-it { display: inline-block; margin: 0 10px 0 6px; font-size: 14.5px; color: var(--muted); }
+.tpl-it.ok { color: var(--ok); font-weight: 600; }
+.tpl-it small { font-weight: 400; color: var(--muted); }

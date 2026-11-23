@@ -27,16 +27,20 @@
     open: function () {
       var self = this;
       return new Promise(function (res, rej) {
-        var rq = indexedDB.open('pp5-analyzer', 1);
-        rq.onupgradeneeded = function () { rq.result.createObjectStore('files', { keyPath: 'key' }); };
+        var rq = indexedDB.open('pp5-analyzer', 2);
+        rq.onupgradeneeded = function () {
+          var db = rq.result;
+          if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'key' });
+          if (!db.objectStoreNames.contains('templates')) db.createObjectStore('templates', { keyPath: 'kind' });
+        };
         rq.onsuccess = function () { self.db = rq.result; res(); };
         rq.onerror = function () { rej(rq.error); };
       });
     },
-    tx: function (mode, fn) {
+    tx: function (mode, fn, store) {
       var self = this;
       return new Promise(function (res, rej) {
-        var t = self.db.transaction('files', mode), st = t.objectStore('files'), out;
+        var t = self.db.transaction(store || 'files', mode), st = t.objectStore(store || 'files'), out;
         var r = fn(st);
         if (r) r.onsuccess = function () { out = r.result; };
         t.oncomplete = function () { res(out); };
@@ -47,7 +51,15 @@
     all: function () { return this.tx('readonly', function (s) { return s.getAll(); }); },
     put: function (rec) { return this.tx('readwrite', function (s) { return s.put(rec); }); },
     del: function (key) { return this.tx('readwrite', function (s) { return s.delete(key); }); },
-    clear: function () { return this.tx('readwrite', function (s) { return s.clear(); }); }
+    clear: function () { return this.tx('readwrite', function (s) { return s.clear(); }); },
+    // แม่แบบไฟล์รูปแบบต้นฉบับ (ปพ.5 / ปพ.6)
+    getTemplate: function (kind) { return this.tx('readonly', function (s) { return s.get(kind); }, 'templates'); },
+    putTemplate: function (kind, bytes, name) { return this.tx('readwrite', function (s) { return s.put({ kind: kind, bytes: bytes, name: name, savedAt: Date.now() }); }, 'templates'); },
+    templateInfo: function () {
+      return this.tx('readonly', function (s) { return s.getAll(); }, 'templates').then(function (all) {
+        var o = {}; (all || []).forEach(function (t) { o[t.kind] = { name: t.name, savedAt: t.savedAt }; }); return o;
+      });
+    }
   };
   var DB = window.PP5_STORE || LocalDB;
 
@@ -94,7 +106,10 @@
       var hits = CORE.filter(function (c) { return c.letter === letter; });
       if (hits.length === 1) return hits[0].slot;
       if (hits.length > 1) {
+        // ส มีสองช่อง: ตัดสินจากชื่อวิชา (บางชั้นใช้รหัสซ้ำกัน เช่น ป.2 ประวัติศาสตร์ / การป้องกันการทุจริต = ส12102)
         if (/ประวัติ/.test(meta.subject)) return 'his';
+        if (/สังคม/.test(meta.subject)) return 'soc';
+        if (meta.subject) return 'x-' + code + '-' + meta.subject.replace(/\s+/g, '');
         var tail = m ? m[5] : '';
         var t = hits.filter(function (c) { return c.tail === tail; })[0];
         return t ? t.slot : hits[0].slot;
@@ -169,6 +184,10 @@
         last = rec; ok++;
         var where = isPP6 ? meta.levelName + '/' + meta.room + ' ใบรายงาน ปพ.6' : meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
         if (isPP6 && !expected) state.tab = 'report';
+        var tk = window.PP5Templates ? PP5Templates.detect(wb.SheetNames) : null;
+        if (tk && !tplInfo[tk]) {
+          try { await registerTemplate(tk, u8, f.name, true); } catch (te) { console.warn('template', te); }
+        }
         changedClasses[classKey(meta.year, meta.level, meta.room)] = { year: meta.year, level: meta.level, room: meta.room };
         if (expected && (expected.level !== meta.level || expected.room !== meta.room || expected.slot !== slot)) {
           toast('ไฟล์นี้เป็นของ ' + where + ' (ตามชีตตั้งค่า) จึงจัดเก็บไว้ที่ช่องนั้นแทน', 'info');
@@ -255,7 +274,36 @@
     var c = ctxFor(cls);
     c.withClass(cls).then(function (cc) { PP5Publish.autoPublish(cc, cls); });
   }
-  function fileNameFor(kind, meta) { return kind === 'pp6' ? pp6FileName(meta, 'x.xlsx') : newFileName(meta, 'x.xlsx'); }
+  function fileNameFor(kind, meta, ext) { var x = 'x' + (ext || '.xlsx'); return kind === 'pp6' ? pp6FileName(meta, x) : newFileName(meta, x); }
+
+  // ---------- แม่แบบรูปแบบต้นฉบับ ----------
+  var tplInfo = {}, tplCache = {};
+  async function registerTemplate(kind, bytes, name, auto) {
+    var blank = await PP5Templates.build(kind, bytes, null);
+    await DB.putTemplate(kind, blank, name);
+    tplInfo[kind] = { name: name, savedAt: Date.now() };
+    tplCache[kind] = blank;
+    toast((auto ? 'บันทึกแม่แบบ ' : 'ตั้งแม่แบบ ') + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ' รูปแบบต้นฉบับแล้ว (ล้างข้อมูลนักเรียนออกจากแม่แบบแล้ว)', 'ok');
+  }
+  async function getTemplateBytes(kind) {
+    if (tplCache[kind]) return tplCache[kind];
+    var t = await DB.getTemplate(kind);
+    if (!t || !t.bytes) return null;
+    tplCache[kind] = t.bytes instanceof Uint8Array ? t.bytes : new Uint8Array(t.bytes);
+    return tplCache[kind];
+  }
+  // คืน { blob, ext, original }
+  async function buildFile(kind, data, format) {
+    if (format !== 'system' && tplInfo[kind]) {
+      var tpl = await getTemplateBytes(kind);
+      if (tpl) {
+        var out = await PP5Templates.build(kind, tpl, data);
+        var macro = kind === 'pp5';
+        return { blob: new Blob([out], { type: macro ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), ext: macro ? '.xlsm' : '.xlsx', original: true };
+      }
+    }
+    return { blob: PP5Model.toBlob(kind === 'pp6' ? PP5Model.exportPP6(data) : PP5Model.exportPP5(data)), ext: '.xlsx', original: false };
+  }
   function downloadBlob(blob, name) {
     var url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
@@ -267,10 +315,11 @@
     var existing = records.filter(function (r) { return r.key === key; })[0];
     var old = oldKey ? records.filter(function (r) { return r.key === oldKey; })[0] : null;
     if (existing && key !== oldKey && !confirm('มีข้อมูลวิชานี้อยู่แล้ว (' + existing.fileName + ') ต้องการแทนที่หรือไม่?')) throw new Error('ยกเลิกการบันทึก');
-    var blob = PP5Model.toBlob(kind === 'pp6' ? PP5Model.exportPP6(data) : PP5Model.exportPP5(data));
+    var built = await buildFile(kind, data);
+    var blob = built.blob;
     var rec = {
       key: key, year: meta.year, level: meta.level, room: meta.room, slot: slot,
-      fileName: fileNameFor(kind, meta), origName: '(กรอกในระบบ)', size: blob.size, uploadedAt: Date.now(), blob: blob,
+      fileName: fileNameFor(kind, meta, built.ext), origName: '(กรอกในระบบ)', size: blob.size, uploadedAt: Date.now(), blob: blob,
       data: data, settings: (existing && existing.settings) || (old && old.settings) || undefined
     };
     var saved = await DB.put(rec);
@@ -288,7 +337,8 @@
     pp6Record: function () { return pp6Record(); },
     findRecord: function (key) { return records.filter(function (r) { return r.key === key; })[0]; },
     coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
-    saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor
+    saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor,
+    buildFile: buildFile, hasTemplate: function (kind) { return !!tplInfo[kind]; }
   };
   var reportCtx = {
     esc: esc, toast: toast,
@@ -420,7 +470,7 @@
     var slots = CORE.map(function (c) { return c.slot; });
     recs.forEach(function (r) { if (slots.indexOf(r.slot) < 0) slots.push(r.slot); });
 
-    var html = '<h2 class="sec">รายวิชาชั้น ' + esc(cls) + ' ปีการศึกษา ' + esc(state.year) + '</h2>' +
+    var html = templateCard() + '<h2 class="sec">รายวิชาชั้น ' + esc(cls) + ' ปีการศึกษา ' + esc(state.year) + '</h2>' +
       '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา · แต่ละวิชาเลือกได้ว่าจะอัปโหลดไฟล์ ปพ.5 กรอกในระบบ หรือสร้างไฟล์ Excel ไปกรอกในคอม (ลากไฟล์มาวางบนช่องก็ได้)</p><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
@@ -457,6 +507,15 @@
     view.innerHTML = html;
   }
 
+  function templateCard() {
+    var t5 = tplInfo.pp5, t6 = tplInfo.pp6;
+    var item = function (k, t, label) {
+      return '<span class="tpl-it ' + (t ? 'ok' : '') + '">' + (t ? '✓ ' : '○ ') + label + (t ? ' <small title="' + esc(t.name) + '">จาก ' + esc(String(t.name).slice(0, 38)) + '</small>' : ' <small>ยังไม่มี</small>') + '</span>';
+    };
+    return '<div class="card tpl-card"><div><b>แม่แบบรูปแบบต้นฉบับ</b> ' + item('pp5', t5, 'ปพ.5 (ครูหนุ่ม)') + item('pp6', t6, 'ปพ.6 (โรงเรียน)') +
+      '<div class="sub" style="margin:4px 0 0">ไฟล์ที่ระบบสร้าง (ปุ่ม "สร้างไฟล์ Excel" / "กรอกในระบบ") จะออกมาหน้าตาเหมือนไฟล์ต้นฉบับ · อัปโหลดไฟล์ต้นฉบับครั้งแรก ระบบจะเก็บเป็นแม่แบบให้เอง (ล้างข้อมูลนักเรียนออก)</div></div>' +
+      '<button class="btn" data-act="tplUpload">ตั้งแม่แบบจากไฟล์…</button></div>';
+  }
   function startButtons(slot) {
     return '<div class="slot-acts"><button class="btn pri" data-act="upload" data-slot="' + esc(slot) + '">อัปโหลดไฟล์</button>' +
       '<button class="btn" data-act="online" data-slot="' + esc(slot) + '">กรอกในระบบ</button>' +
@@ -722,6 +781,19 @@
   }
 
   $('fileAll').addEventListener('change', function (e) { handleFiles(e.target.files); e.target.value = ''; });
+  $('fileTpl').addEventListener('change', async function (e) {
+    var f = e.target.files[0];
+    if (!f) return;
+    try {
+      setBusy('กำลังตั้งแม่แบบ...');
+      var u8 = new Uint8Array(await readFile(f));
+      var wb = XLSX.read(u8, { type: 'array', bookSheets: true });
+      var kind = PP5Templates.detect(wb.SheetNames);
+      if (!kind) throw new Error('ไฟล์นี้ไม่ใช่ ปพ.5 (โปรแกรมครูหนุ่ม) หรือ ปพ.6 ของโรงเรียน');
+      await registerTemplate(kind, u8, f.name, false);
+    } catch (err) { toast('ตั้งแม่แบบไม่สำเร็จ: ' + err.message, 'err'); }
+    finally { setBusy(''); render(); }
+  });
   $('fileOne').addEventListener('change', function (e) {
     var exp = pendingSlot && pendingSlot !== '__extra' ? { level: state.level, room: state.room, slot: pendingSlot } : null;
     handleFiles(e.target.files, exp);
@@ -779,6 +851,7 @@
       var rec = key && records.filter(function (r) { return r.key === key; })[0];
       if (act === 'open') openSubject(key);
       else if (act === 'upload') pickFor(a.dataset.slot);
+      else if (act === 'tplUpload') { $('fileTpl').value = ''; $('fileTpl').click(); }
       else if (act === 'online' || act === 'template') PP5Editor.open({ kind: a.dataset.slot === 'pp6' ? 'pp6' : 'pp5', slot: a.dataset.slot, intent: act === 'template' ? 'excel' : 'online' }, editorCtx);
       else if (act === 'edit' && rec) PP5Editor.open({ kind: rec.slot === 'pp6' ? 'pp6' : 'pp5', key: rec.key }, editorCtx);
       else if (act === 'replace') pickFor(a.dataset.slot);
@@ -836,6 +909,7 @@
     try {
       await DB.open();
       records = await DB.all();
+      if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
     } catch (e) {
       console.error(e);
       if (DB === LocalDB) {

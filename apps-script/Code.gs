@@ -18,6 +18,7 @@ var ADMIN_TITLE = 'หลังบ้าน ปพ.5 / ปพ.6';
 var DATA_FOLDER_NAME = '_ข้อมูลระบบ (ห้ามลบ)';
 var PUB_FOLDER_NAME = '_ประกาศผล (ห้ามลบ)';
 var PDF_FOLDER_NAME = 'PDF ใบรายงาน';
+var TPL_FOLDER_NAME = '_แม่แบบ (ห้ามลบ)';
 var PROP_PREFIX = 'rec:';
 
 function doGet(e) {
@@ -168,6 +169,35 @@ function api_saveOutput(pin, name, b64, mime) {
   checkPin_(pin);
   var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
   return folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime || 'application/pdf', safeName_(name))).getUrl();
+}
+
+// ===== แม่แบบรูปแบบต้นฉบับ (ปพ.5 ครูหนุ่ม / ปพ.6 ของโรงเรียน) =====
+function tplInfo_() { var v = props_().getProperty('TPL_INFO'); return v ? JSON.parse(v) : {}; }
+function api_templateInfo(pin) {
+  checkPin_(pin);
+  var info = tplInfo_(), out = {};
+  Object.keys(info).forEach(function (k) { out[k] = { name: info[k].name, savedAt: info[k].savedAt }; });
+  return out;
+}
+function api_getTemplate(pin, kind) {
+  checkPin_(pin);
+  var t = tplInfo_()[kind];
+  if (!t) return null;
+  try { return { name: t.name, b64: Utilities.base64Encode(DriveApp.getFileById(t.fileId).getBlob().getBytes()) }; } catch (e) { return null; }
+}
+function api_saveTemplate(pin, kind, b64, name) {
+  checkPin_(pin);
+  if (kind !== 'pp5' && kind !== 'pp6') throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
+  return withLock_(function () {
+    var info = tplInfo_(), old = info[kind];
+    var folder = subFolder_(rootFolder_(), TPL_FOLDER_NAME);
+    var ext = kind === 'pp5' ? '.xlsm' : '.xlsx';
+    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/octet-stream', 'แม่แบบ ' + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ext));
+    if (old) trashById_(old.fileId);
+    info[kind] = { fileId: file.getId(), name: name, savedAt: Date.now() };
+    props_().setProperty('TPL_INFO', JSON.stringify(info));
+    return true;
+  });
 }
 
 // ===== ประกาศผล =====

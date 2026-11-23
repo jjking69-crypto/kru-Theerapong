@@ -96,10 +96,18 @@
   }
 
   // แถวข้อมูลนักเรียน: คอลัมน์ "ที่" เป็นตัวเลข และมีชื่อ
+  // เลขที่ที่เป็นสูตร (=A6+1) ในไฟล์ที่ยังไม่เคยคำนวณจะว่าง: อนุมานต่อจากแถวก่อน
+  function seqNo(ws, r, c, last) {
+    var raw = cell(ws, r, c), no = num(raw);
+    if (no != null) return no;
+    if (raw == null && last != null && last < 60) return last + 1;
+    return null;
+  }
   function studentRows(ws, block) {
-    var b = bounds(ws), rows = [];
+    var b = bounds(ws), rows = [], last = null;
     for (var r = block.r + 1; r <= b.e.r; r++) {
-      var no = num(cell(ws, r, block.cNo));
+      var no = seqNo(ws, r, block.cNo, last);
+      if (no == null && cell(ws, r, block.cNo) != null) last = null; else if (no != null) last = no;
       var name = cell(ws, r, block.cName);
       // จับคู่ด้วยเลขที่ ชื่ออาจว่างได้ (ไฟล์ที่ระบบสร้างแต่ยังไม่เคยเปิดคำนวณใน Excel)
       if (no != null) rows.push({ r: r, no: no, name: typeof name === 'string' ? name : '' });
@@ -147,6 +155,7 @@
     m.room = num(m.room) || 1;
     m.credit = num(m.credit);
     m.hours = num(m.hours);
+    if (m.credit == null && m.hours) m.credit = m.hours / 40; // สูตรในไฟล์: หน่วยกิต = ชั่วโมง/40
     m.maxCollect = num(m.maxCollect);
     m.maxFinal = num(m.maxFinal);
     m.code = m.code ? String(m.code).replace(/\s+/g, '') : '';
@@ -185,9 +194,10 @@
       var key = map[norm(cell(ws, hr, c))];
       if (key) cols[key] = c;
     }
-    var out = {};
+    var out = {}, lastNo = null;
     for (var r = hr + 1; r <= b.e.r; r++) {
-      var no = num(cell(ws, r, blocks[0].cNo));
+      var no = seqNo(ws, r, blocks[0].cNo, lastNo);
+      if (no != null) lastNo = no;
       var first = cols.first != null ? cell(ws, r, cols.first) : null;
       if (no == null || !first) continue;
       var s = { no: no };
@@ -198,6 +208,24 @@
       // เก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครองในหน้าประกาศผล)
       if (s.nid != null) { var d = s.nid.replace(/\D/g, ''); s.nid4 = d.length >= 4 ? d.slice(-4) : ''; delete s.nid; }
       out[no] = s;
+    }
+    return out;
+  }
+
+  // ---------------- มาตรฐาน ----------------
+  function parseStandards(ws) {
+    var out = [];
+    if (!ws) return out;
+    var h = findLabel(ws, 'มาตรฐานที่', 0, 10, 0, 60);
+    if (!h) return out;
+    var b = bounds(ws);
+    for (var c = 0; c <= b.e.c; c++) {
+      if (norm(cell(ws, h.r, c)) !== 'มาตรฐานที่') continue;
+      for (var r = h.r + 1; r <= b.e.r; r++) {
+        var code = cell(ws, r, c), text = cell(ws, r, c + 1);
+        if (num(cell(ws, r, c - 1)) == null) continue;
+        if (code) out.push({ code: String(code).trim(), text: text ? String(text) : '' });
+      }
     }
     return out;
   }
@@ -225,8 +253,10 @@
         else if (t === 'ตัวชี้วัดที่') col.code = c;
         else if (t === 'ตัวชี้วัด') col.text = c;
       }
+      var lastIdx = null;
       for (var r = hr + 1; r <= b.e.r; r++) {
-        var idx = num(cell(ws, r, s));
+        var idx = seqNo(ws, r, s, lastIdx);
+        if (idx != null) lastIdx = idx;
         if (idx == null) continue;
         var text = col.text != null ? cell(ws, r, col.text) : null;
         var code = col.code != null ? cell(ws, r, col.code) : null;
@@ -264,6 +294,7 @@
       if (rows.idx == null) return;
       var end = i + 1 < blocks.length ? blocks[i + 1].cNo - 1 : tableEnd(ws);
       var students = studentRows(ws, bk);
+      if (!students.length && i > 0) students = studentRows(ws, blocks[0]); // เลขที่ของบล็อกถัดไปเป็นสูตร (=A9)
       for (var c = cLab + 1; c <= end; c++) {
         var idx = num(cell(ws, rows.idx, c));
         if (idx == null) continue;
@@ -291,6 +322,31 @@
         });
       }
     });
+    // ไฟล์ที่ยังไม่เคยคำนวณ: หัวบล็อกถัดไปเป็นสูตร (ว่าง) -> หาคอลัมน์ตัวชี้วัดจากแถวคะแนนเต็มแทน
+    if (!withPass && blocks.length && blocks[0].cNo === 0) {
+      var bk0 = blocks[0], rowsLab = {}, maxRow = null, scoreRow = null;
+      for (var rr = bk0.r; rr <= bk0.r + 8; rr++) {
+        var tl = norm(cell(ws, rr, bk0.cName + 1));
+        if (tl === 'คะแนนเต็ม') maxRow = rr;
+        if (tl === 'คะแนน') scoreRow = rr;
+      }
+      var have = {};
+      res.indicators.forEach(function (i) { have[i.idx] = 1; });
+      var stud0 = studentRows(ws, bk0), width = bounds(ws).e.c;
+      if (maxRow != null) for (var c2 = 27; c2 <= width; c2++) {
+        var mx = num(cell(ws, maxRow, c2));
+        var off = c2 % 27;
+        if (mx == null || off < 3 || (off - 3) % 3) continue;
+        var idx2 = Math.floor(c2 / 27) * 8 + (off - 3) / 3 + 1;
+        if (have[idx2]) continue;
+        res.indicators.push({ idx: idx2, term: null, std: '', code: '', max: mx });
+        stud0.forEach(function (s) {
+          var st = res.byNo[s.no] || (res.byNo[s.no] = { name: s.name, vals: {} });
+          st.vals[idx2] = num(cell(ws, s.r, c2));
+        });
+      }
+      void rowsLab; void scoreRow;
+    }
     res.indicators.sort(function (a, b) { return a.idx - b.idx; });
     return res;
   }
@@ -470,6 +526,7 @@
       var f = findLabel(ws, t, r0 + 1, r0 + 3, sum.c, sum.c + 8);
       if (f) sumCols.push({ c: f.c, t: t });
     });
+    var raw = parseRTWRaw(wbRef);
     studentRows(ws, bk).forEach(function (s) {
       var o = {};
       for (var k in terms) {
@@ -477,10 +534,50 @@
         for (var j in terms[k]) o[k][j] = round(num(cell(ws, s.r, terms[k][j])), 2);
       }
       o.avg = yearAvg != null ? round(num(cell(ws, s.r, yearAvg)), 2) : null;
+      // สรุปยังไม่ได้คำนวณ: ใช้ค่าเฉลี่ยจากชีตประเมินการอ่าน/การคิด/การเขียน
+      var rw = raw[s.no];
+      if (rw) ['t1', 't2'].forEach(function (t) {
+        o[t] = o[t] || {};
+        ['read', 'think', 'write'].forEach(function (k) { if (o[t][k] == null && rw[t] && rw[t][k] != null) o[t][k] = rw[t][k]; });
+      });
       o.level = lvl ? num(cell(ws, s.r, lvl.c)) : null;
       o.text = '';
       sumCols.forEach(function (x) { if (tick(cell(ws, s.r, x.c)) === true) o.text = x.t; });
       out.byNo[s.no] = o;
+    });
+    return out;
+  }
+
+  // ชีตประเมินการอ่าน / การคิด / การเขียน: ค่าเฉลี่ยของครั้งที่ประเมินในแต่ละภาค
+  var wbRef = null;
+  function parseRTWRaw(wb) {
+    var out = {};
+    if (!wb) return out;
+    [['ประเมินการอ่าน', 'read'], ['ประเมินการคิด', 'think'], ['ประเมินการเขียน', 'write']].forEach(function (p) {
+      var ws = sheet(wb, p[0]);
+      if (!ws) return;
+      var blocks = findBlocks(ws, 6);
+      if (!blocks.length) return;
+      var bk = blocks[0], terms = [];
+      ['ภาคเรียนที่1', 'ภาคเรียนที่2'].forEach(function (lab, ti) {
+        var f = findLabel(ws, lab, bk.r, bk.r + 2, 0, 40);
+        if (!f) return;
+        var cols = [];
+        for (var c = f.c; c <= f.c + 12; c++) {
+          var t = norm(cell(ws, f.r + 1, c));
+          if (t === 'เฉลี่ย') break;
+          if (cell(ws, f.r + 3, c) != null || norm(cell(ws, f.r + 3, c)) === 'ได้') cols.push(c);
+        }
+        terms.push({ t: 't' + (ti + 1), cols: cols.filter(function (c) { return norm(cell(ws, f.r + 3, c)) === 'ได้'; }) });
+      });
+      studentRows(ws, bk).forEach(function (s) {
+        terms.forEach(function (t) {
+          var vals = t.cols.map(function (c) { return num(cell(ws, s.r, c)); }).filter(function (v) { return v != null; });
+          if (!vals.length) return;
+          var o = out[s.no] = out[s.no] || {};
+          (o[t.t] = o[t.t] || {})[p[1]] = round(vals.reduce(function (a, b) { return a + b; }, 0) / vals.length, 2);
+        });
+      });
     });
     return out;
   }
@@ -502,9 +599,19 @@
         if (key) acts.push({ key: key, c: c });
       }
     }
+    // ชั่วโมงที่เข้าร่วม (ใช้เมื่อช่องสรุปผลยังไม่ได้คำนวณ): หัว "จำนวนชั่วโมง" แถว r0+2 / ชั่วโมงเต็ม แถว r0+3
+    var hourCols = [];
+    for (var hc = 0; hc <= b.e.c && hourCols.length < 4; hc++) if (norm(cell(ws, r0 + 2, hc)) === 'จำนวนชั่วโมง') hourCols.push({ c: hc, max: num(cell(ws, r0 + 3, hc)) });
+    var keys = ['guidance', 'scout', 'club', 'social'];
     studentRows(ws, bk).forEach(function (s) {
       var o = { clubName: club ? String(cell(ws, s.r, club.c) || '') : '' };
       acts.forEach(function (a) { o[a.key] = String(cell(ws, s.r, a.c) || ''); });
+      hourCols.forEach(function (h, i) {
+        var k = keys[i];
+        if (o[k] || !h.max) return;
+        var v = num(cell(ws, s.r, h.c));
+        if (v != null) o[k] = v / h.max * 100 >= 80 ? 'ผ.' : 'มผ.';
+      });
       out.byNo[s.no] = o;
     });
     return out;
@@ -512,6 +619,7 @@
 
   // ---------------- รวมทุกอย่าง ----------------
   function parseWorkbook(wb) {
+    wbRef = wb;
     var setWs = sheet(wb, 'ตั้งค่า');
     if (!setWs || !sheet(wb, 'คะแนนเก็บตามตัวชี้วัด')) {
       throw new Error('ไฟล์นี้ไม่ใช่ไฟล์ ปพ.5 แบบเก็บคะแนนตามตัวชี้วัด (ไม่พบชีต "ตั้งค่า" หรือ "คะแนนเก็บตามตัวชี้วัด")');
@@ -566,6 +674,7 @@
       format: 'pp5-indicator', version: 1,
       meta: meta,
       indicators: indicators,
+      standards: parseStandards(sheet(wb, 'มาตรฐาน')),
       characteristicItems: chars.items,
       maxima: results.max,
       hours: att.hours,
