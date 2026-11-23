@@ -527,36 +527,42 @@
     h += '</div>';
     h += checkPanel(rec);
 
-    h += '<div class="card rc-panel"><h3>รูปแบบใบรายงาน</h3><div class="rc-row">' +
+    // ---- พิมพ์ / ดาวน์โหลด: ทั้งห้อง กับ รายคน แยกกันชัดเจน ----
+    var cur = d.students.filter(function (s) { return String(s.no) === String(preview.no); })[0] || d.students[0];
+    h += '<div class="card rc-panel rc-print"><h3>🖨 พิมพ์ / ดาวน์โหลดใบรายงาน</h3><div class="rc-print-grid">' +
+      '<div class="rc-pbox"><div class="rc-pt">👥 ทั้งห้อง <span>' + d.students.length + ' คน</span></div>' +
+      '<button class="btn pri big" data-rc="pdf-all">⬇ PDF รวมทุกคน (ไฟล์เดียว)</button>' +
+      '<button class="btn big" data-rc="pdf-zip">⬇ PDF แยกไฟล์รายคน (ZIP)</button>' +
+      '<button class="btn big" data-rc="print-all">🖨 พิมพ์ทุกคน</button></div>' +
+      '<div class="rc-pbox"><div class="rc-pt">🧒 รายคน</div>' +
+      '<div class="rc-pick"><button class="btn" data-rc="prev" aria-label="คนก่อนหน้า">‹</button><select id="rcStu" aria-label="เลือกนักเรียน">' +
+      d.students.map(function (s) { return '<option value="' + s.no + '"' + (String(s.no) === String(preview.no) ? ' selected' : '') + '>เลขที่ ' + s.no + ' ' + esc(s.name) + '</option>'; }).join('') +
+      '</select><button class="btn" data-rc="next" aria-label="คนถัดไป">›</button></div>' +
+      '<button class="btn pri big" data-rc="pdf-one">⬇ PDF ของ ' + esc(cur ? cur.first || cur.name : '') + '</button>' +
+      '<button class="btn big" data-rc="print-one">🖨 พิมพ์คนนี้</button></div></div>' +
+      '<div class="rc-progress"><i></i></div><div class="rc-ptext"></div>' +
+      '<div class="rc-row rc-opts">' +
       '<div class="rc-opt"><span>ขนาดกระดาษ</span><div class="seg" data-set="paper">' +
-      '<button data-v="a4" class="' + (st.paper === 'a4' ? 'on' : '') + '">เต็ม A4 (1 หน้า/แผ่น)</button>' +
+      '<button data-v="a4" class="' + (st.paper === 'a4' ? 'on' : '') + '">เต็ม A4</button>' +
       '<button data-v="half" class="' + (st.paper === 'half' ? 'on' : '') + '">ครึ่ง A4 (2 หน้า/แผ่น)</button></div></div>' +
       '<div class="rc-opt"><span>ระดับผลการเรียน</span><div class="seg" data-set="gradeMode">' +
       '<button data-v="year" class="' + (st.gradeMode === 'year' ? 'on' : '') + '">คิดเมื่อครบ 2 ภาค</button>' +
       '<button data-v="term1" class="' + (st.gradeMode === 'term1' ? 'on' : '') + '">คิดจากภาค 1 ไปก่อน</button></div></div>' +
       '<label class="chk"><input type="checkbox" data-chk="showLogo"' + (st.showLogo ? ' checked' : '') + '> แสดงโลโก้</label>' +
-      '<label class="chk"><input type="checkbox" data-chk="showSign"' + (st.showSign ? ' checked' : '') + '> แสดงลายเซ็น</label></div>' +
-      '<div class="rc-signers">' +
-      (st.logoLocked
-        ? '<div class="card rc-locked"><b>โรงเรียน / โลโก้</b><div class="rc-lock-n">' + esc(st.school) + '</div><div class="rc-sig-pick"><img src="' + imgOf(rec, st.logo) + '" alt=""></div><small>🔒 ตั้งโดยผู้ดูแลระบบ</small></div>'
-        : '<div class="card"><b>ชื่อโรงเรียน (หัวกระดาษ)</b><input type="text" data-txt="school" value="' + esc(st.school) + '"><b>โลโก้</b>' + imgSelect(rec, 'logo', st.logo) + '</div>') +
+      '<label class="chk"><input type="checkbox" data-chk="showSign"' + (st.showSign ? ' checked' : '') + '> แสดงลายเซ็น</label></div></div>';
+
+    // ---- ผู้ลงนาม: ผอ. / รอง ผอ. / โลโก้ ฟิกไว้ · ครูประจำชั้นอัปโหลดลายเซ็นเอง ----
+    function fixed(lab, name, pos, src) {
+      return '<div class="card rc-locked"><b>' + lab + '</b><div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มีรูป</span>') + '</div>' +
+        '<div class="rc-lock-n">' + esc(name || '-') + '</div><small>' + esc(pos || '') + '</small><small class="rc-lock">🔒 ฟิกไว้</small></div>';
+    }
+    h += '<div class="card rc-panel"><h3>✍️ ผู้ลงนามในใบรายงาน</h3><div class="rc-signers">' +
       teacherSigCard(rec, st) +
-      ['deputy', 'director'].map(function (k) {
-        var lab = { deputy: 'รองผู้อำนวยการ', director: 'ผู้อำนวยการ' }[k], src = imgOf(rec, st[k].img);
-        if (st[k].locked) return '<div class="card rc-locked"><b>' + lab + '</b><div class="rc-lock-n">' + esc(st[k].name) + '</div><small>' + esc(st[k].position) + '</small>' +
-          '<div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มีลายเซ็น</span>') + '</div><small>🔒 ตั้งโดยผู้ดูแลระบบ</small></div>';
-        return '<div class="card"><b>' + lab + '</b><input type="text" data-txt="' + k + '.name" value="' + esc(st[k].name) + '" placeholder="ชื่อ-สกุล">' +
-          '<input type="text" data-txt="' + k + '.position" value="' + esc(st[k].position) + '" placeholder="ตำแหน่ง">' + imgSelect(rec, k, st[k].img) + '</div>';
-      }).join('') + '</div>';
-    h += '<div class="rc-actions"><button class="btn pri" data-rc="pdf-all">⬇ PDF รวมทุกคน</button>' +
-      '<button class="btn pri" data-rc="pdf-zip">⬇ PDF แยกรายคน (ZIP)</button>' +
-      '<button class="btn" data-rc="print-all">พิมพ์ทุกคน</button></div>' +
-      '<div class="rc-progress"><i></i></div><div class="rc-ptext"></div></div>';
+      fixed('รองผู้อำนวยการ', st.deputy.name, st.deputy.position, imgOf(rec, st.deputy.img)) +
+      fixed('ผู้อำนวยการ', st.director.name, st.director.position, imgOf(rec, st.director.img)) +
+      fixed('โรงเรียน / โลโก้', st.school, '', imgOf(rec, st.logo)) + '</div></div>';
 
     // ตัวอย่างรายคน
-    h += '<div class="rc-preview-bar"><button class="btn" data-rc="prev">‹</button><select id="rcStu" aria-label="เลือกนักเรียน">' +
-      d.students.map(function (s) { return '<option value="' + s.no + '"' + (String(s.no) === String(preview.no) ? ' selected' : '') + '>' + s.no + '. ' + esc(s.name) + '</option>'; }).join('') +
-      '</select><button class="btn" data-rc="next">›</button><button class="btn pri" data-rc="pdf-one">⬇ PDF คนนี้</button><button class="btn" data-rc="print-one">พิมพ์คนนี้</button></div>';
     var x = all.filter(function (y) { return String(y.s.no) === String(preview.no); })[0];
     var pages = pagesFor(rec, st, x, all.count);
     h += '<div class="rc-preview" id="rcPrev">' + pages.map(function (p) { return '<div class="rc-fit"><div class="rc-scale">' + p + '</div></div>'; }).join('') + '</div>';

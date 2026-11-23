@@ -327,3 +327,27 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .sup-sig img { display: block; height: 46px; max-width: 160px; margin: 0 auto 2px; }
 .rc-locked { background: #f8fafc; }
 .rc-lock-n { font-weight: 600; margin: 4px 0 0; }
+
+/* ปุ่มเลือกห้อง */
+.cls-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 14px; margin-top: 4px; }
+.cls-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cls-lv { font: 600 13px "Prompt", sans-serif; color: #64748b; width: 30px; }
+.cls-b { position: relative; border: 1.5px solid var(--line); background: #fff; border-radius: 10px; padding: 7px 12px; font: 600 15px "Sarabun", sans-serif; color: #334155; cursor: pointer; min-width: 68px; }
+.cls-b:hover { border-color: var(--brand); color: var(--brand); }
+.cls-b.has { border-color: #86efac; background: #f0fdf4; }
+.cls-b.on { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 4px 12px -6px var(--brand); }
+.cls-b i { position: absolute; top: -7px; right: -6px; background: #16a34a; color: #fff; font: 700 11px/18px sans-serif; min-width: 18px; height: 18px; border-radius: 9px; padding: 0 4px; font-style: normal; }
+.cls-b.on i { background: #fff; color: var(--brand); }
+@media (max-width: 640px) { .cls-chips { grid-template-columns: 1fr; } .cls-b { min-width: 0; padding: 7px 10px; font-size: 14px; } }
+/* ส่วนพิมพ์/ดาวน์โหลด */
+.rc-print-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 6px 0 10px; }
+.rc-pbox { border: 1.5px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: #fbfcfe; }
+.rc-pt { font: 600 17px "Prompt", sans-serif; }
+.rc-pt span { font: 500 14px "Sarabun", sans-serif; color: #64748b; margin-left: 6px; }
+.btn.big { padding: 11px 14px; font-size: 16px; text-align: center; justify-content: center; width: 100%; }
+.rc-pick { display: flex; gap: 6px; }
+.rc-pick select { flex: 1; min-width: 0; font-size: 15px; }
+.rc-opts { border-top: 1px dashed var(--line); padding-top: 10px; }
+.rc-lock { color: #64748b; display: block; margin-top: 4px; }
+.rc-signers .rc-sig-pick { min-height: 72px; display: flex; align-items: center; }
+.rc-signers .rc-sig-pick img { height: 64px; max-width: 100%; object-fit: contain; border: 0; background: transparent; }

@@ -29,8 +29,14 @@
   ['1/1', '1/2', '2/1', '3/1', '3/2', '4/1', '4/2', '5/1', '6/1'].forEach(function (c) { set(c, ['pe'], ['chan']); set(c, ['art'], ['kuli']); });
 
   function norm(s) { return String(s || '').replace(/\s+/g, '').replace(/^(นาย|นางสาว|นาง|ครู)/, ''); }
+  // ผู้บริหาร (ฟิกไว้ในใบรายงาน ปพ.6 ทุกห้อง) — ตามไฟล์ ปพ.6 ต้นฉบับของโรงเรียน · ผู้ดูแลเปลี่ยนได้ในระบบแอดมิน
+  var BRAND = {
+    school: 'โรงเรียนวัดทุ่งแฝก',
+    director: { name: 'นายบรรพต ฟักอินทร์', position: 'ผู้อำนวยการโรงเรียนวัดทุ่งแฝก' },
+    deputy: { name: 'นางสาวณัชชา คุ้มเงิน', position: 'รองผู้อำนวยการโรงเรียนวัดทุ่งแฝก' }
+  };
   var api = {
-    SCHOOL: SCHOOL,
+    SCHOOL: SCHOOL, BRAND: BRAND,
     list: Object.keys(T).map(function (k) { return T[k]; }),
     // ครูของวิชาในห้อง: ถ้าไม่มีในตารางสอน (เช่น ห้อง 2 ที่เรียนรวม) ใช้ห้องอื่นของชั้นเดียวกัน
     forClass: function (level, room, slot) {

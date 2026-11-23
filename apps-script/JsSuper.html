@@ -71,7 +71,9 @@
 
   // โลโก้ + ผู้บริหาร: ตั้งครั้งเดียว ยึดใช้ในใบรายงาน ปพ.6 ทุกห้อง (ครูแก้ไม่ได้)
   function brandCard() {
-    var b = S.brand || {}, d = b.director || {}, p = b.deputy || {};
+    var D = (window.PP5Teachers && PP5Teachers.BRAND) || {}, b = S.brand || {};
+    function fb(x, y) { x = x || {}; y = y || {}; return { name: x.name || y.name || '', position: x.position || y.position || '', img: x.img }; }
+    var d = fb(b.director, D.director), p = fb(b.deputy, D.deputy);
     function pic(src, key, label) {
       return '<div class="sup-pic"><div class="sup-pic-box">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มี</span>') + '</div>' +
         '<button class="btn" data-up="' + key + '">🖼 ' + (src ? 'เปลี่ยน' : 'อัปโหลด') + label + '</button>' + (src ? '<button class="btn" data-rm="' + key + '">ลบ</button>' : '') + '</div>';
@@ -82,8 +84,8 @@
     }
     var names = Object.keys(S.sigs || {});
     return '<section class="card sup-card"><h2>🖋 โลโก้โรงเรียน และลายเซ็นผู้บริหาร</h2>' +
-      '<p class="sub">ตั้งครั้งเดียว ระบบ<b>ยึดใช้ในใบรายงาน ปพ.6 ทุกห้อง</b> และหน้าประกาศผล — ครูแก้ไขไม่ได้ · ลายเซ็นครูประจำชั้น ครูอัปโหลดเองในแท็บ ใบรายงาน (ปพ.6)</p>' +
-      '<div class="sup-brand"><div class="sup-person"><h3 class="sup-h3">โรงเรียน</h3><input type="text" data-b="school" value="' + esc(b.school || 'โรงเรียนวัดทุ่งแฝก') + '" placeholder="ชื่อโรงเรียน">' + pic(b.logo, 'logo', 'โลโก้') + '</div>' +
+      '<p class="sub">ฟิกไว้ใช้ใน<b>ใบรายงาน ปพ.6 ทุกห้อง</b> และหน้าประกาศผล — ครูแก้ไม่ได้ · ถ้ายังไม่อัปโหลดลายเซ็น/โลโก้ ระบบใช้รูปจากไฟล์ ปพ.6 ต้นฉบับของโรงเรียน · ลายเซ็นครูประจำชั้น ครูอัปโหลดเองในแท็บ ใบรายงาน (ปพ.6)</p>' +
+      '<div class="sup-brand"><div class="sup-person"><h3 class="sup-h3">โรงเรียน</h3><input type="text" data-b="school" value="' + esc(b.school || D.school || 'โรงเรียนวัดทุ่งแฝก') + '" placeholder="ชื่อโรงเรียน">' + pic(b.logo, 'logo', 'โลโก้') + '</div>' +
       person('director', d, 'ผู้อำนวยการ') + person('deputy', p, 'รองผู้อำนวยการ') + '</div>' +
       '<div class="slot-acts"><button class="btn pri" id="supBrandSave">💾 บันทึกชื่อและตำแหน่ง</button></div>' +
       '<h3 class="sup-h3" style="margin-top:16px">ลายเซ็นครูที่อัปโหลดแล้ว (' + names.length + ')</h3>' +

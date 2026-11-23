@@ -334,7 +334,7 @@
     var data = PP5Model.pp6FromPP5({ year: cls.year, level: cls.level, room: cls.room, school: school, teacher: hr, students: rc ? rc.students : null, records: p5.map(function (r) { return r.data; }) });
     if (donor) {
       ['deputy', 'director'].forEach(function (k) { if (donor.data.meta.signers && donor.data.meta.signers[k]) data.meta.signers[k] = Object.assign({}, donor.data.meta.signers[k]); });
-      if (donor.data.images && donor.data.images.logo) data.images = { logo: donor.data.images.logo };
+      if (donor.data.images) data.images = { logo: donor.data.images.logo, director: donor.data.images.director, deputy: donor.data.images.deputy };
     }
     var st = null; try { st = JSON.parse(localStorage.getItem(vSettingsKey(key)) || 'null'); } catch (e) { st = null; }
     var rec = { key: key, year: cls.year, level: cls.level, room: cls.room, slot: 'pp6', virtual: true, fromRoster: !!rc, data: data, settings: st || undefined,
@@ -509,11 +509,33 @@
     buildFile: buildFile
   };
   // โลโก้ + ลายเซ็นผู้บริหาร (ผู้ดูแลตั้ง ใช้ทุกห้อง) และลายเซ็นครู
-  var brand = null, sigs = {};
+  var brand = null, sigs = {}, tplImgs = null, tplImgsLoading = false;
+  // ผู้บริหาร/โลโก้ที่ใช้จริง: ที่ผู้ดูแลตั้ง → ค่าเริ่มต้นของโรงเรียน · รูปลายเซ็น: ที่ผู้ดูแลอัปโหลด → จากไฟล์ ปพ.6 ต้นฉบับ
+  function effBrand() {
+    var D = (window.PP5Teachers && PP5Teachers.BRAND) || {}, b = brand || {};
+    var donor = records.filter(function (r) { return r.slot === 'pp6' && r.data && r.data.images && (r.data.images.director || r.data.images.deputy); })[0];
+    var im = (donor && donor.data.images) || tplImgs || {};
+    function pick(k) { var x = b[k] || {}, y = D[k] || {}; return { name: x.name || y.name || '', position: x.position || y.position || '', img: x.img || im[k] || null }; }
+    if (!tplImgs && !donor && !tplImgsLoading) loadTplImgs();
+    return { school: b.school || D.school || '', logo: b.logo || im.logo || null, director: pick('director'), deputy: pick('deputy') };
+  }
+  // ดึงโลโก้/ลายเซ็นผู้บริหารจากแม่แบบ ปพ.6 (ไฟล์ต้นฉบับของโรงเรียน)
+  async function loadTplImgs() {
+    tplImgsLoading = true;
+    try {
+      var bytes = await getTemplateBytes('pp6', { level: state.level, room: state.room });
+      if (!bytes) return;
+      var u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      var d = PP6Parser.parse(XLSX.read(u8, { type: 'array' }), u8);
+      tplImgs = d.images || {};
+      vcache = {};
+      if (state.tab === 'report') render();
+    } catch (e) { console.warn('tpl images', e); tplImgs = {}; }
+  }
   function normName(n) { return String(n || '').replace(/\s+/g, ' ').trim(); }
   var reportCtx = {
     esc: esc, toast: toast,
-    brand: function () { return brand; },
+    brand: function () { return effBrand(); },
     sig: function (name) { var x = sigs[normName(name)]; return x ? x.img : null; },
     canSign: function () { return DB === LocalDB || DB.role === 'admin' || !DB.flags || DB.flags.allowSignature !== false; },
     saveSig: async function (name, file) {
@@ -606,6 +628,17 @@
       });
     });
     $('classSel').innerHTML = opts;
+    // ปุ่มเลือกห้อง: แถวละชั้น กดได้ทันที (จุดเขียว = มีข้อมูลแล้ว)
+    $('classChips').innerHTML = LEVELS.map(function (l) {
+      var rooms = roomsOf(state.year, l).slice();
+      if (l === state.level && rooms.indexOf(state.room) < 0) rooms.push(state.room);
+      rooms.sort(function (a, b) { return a - b; });
+      return '<div class="cls-row"><span class="cls-lv">ป.' + l + '</span>' + rooms.map(function (r) {
+        var n = records.filter(function (x) { return x.year === state.year && x.level === l && x.room === r; }).length;
+        var on = l === state.level && r === state.room;
+        return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (n ? '<i>' + n + '</i>' : '') + '</button>';
+      }).join('') + '</div>';
+    }).join('');
 
     var withData = records.filter(function (r) { return r.data; });
     var any = classRecords().filter(function (r) { return r.data; })[0] || withData.filter(function (r) { return r.slot !== 'pp6'; })[0];
@@ -1096,6 +1129,13 @@
   $('classSel').addEventListener('change', function (e) {
     if (!leaveEditor()) { renderPicker(); return; }
     var p = e.target.value.split('/');
+    state.level = +p[0]; state.room = +p[1]; state.student = null;
+    render();
+  });
+  $('classChips').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cls]');
+    if (!b || !leaveEditor()) return;
+    var p = b.dataset.cls.split('/');
     state.level = +p[0]; state.room = +p[1]; state.student = null;
     render();
   });

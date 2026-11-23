@@ -34,8 +34,9 @@
         <select id="yearSel"></select>
       </div>
       <div class="field grow">
-        <label for="classSel">ชั้นเรียน</label>
-        <select id="classSel" class="big-sel"></select>
+        <span class="lbl">ชั้นเรียน · กดเลือกห้องได้เลย</span>
+        <select id="classSel" class="big-sel" hidden aria-hidden="true"></select>
+        <div class="cls-chips" id="classChips" role="tablist" aria-label="เลือกชั้นเรียน"></div>
       </div>
       <div class="field">
         <button class="btn pri up-btn" id="upBtn" type="button" title="เลือกไฟล์ ปพ.5 / ปพ.6 / รายชื่อ (.docx) ได้หลายไฟล์ หรือลากไฟล์มาวางที่ใดก็ได้บนหน้านี้">⇪ อัปโหลดไฟล์</button>
