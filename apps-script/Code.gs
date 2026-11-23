@@ -19,6 +19,7 @@ var DATA_FOLDER_NAME = '_ข้อมูลระบบ (ห้ามลบ)';
 var PUB_FOLDER_NAME = '_ประกาศผล (ห้ามลบ)';
 var PDF_FOLDER_NAME = 'PDF ใบรายงาน';
 var TPL_FOLDER_NAME = '_แม่แบบ (ห้ามลบ)';
+var ROSTER_FOLDER_NAME = 'รายชื่อนักเรียน';
 var PROP_PREFIX = 'rec:';
 
 function doGet(e) {
@@ -198,6 +199,29 @@ function api_saveTemplate(pin, kind, b64, name) {
     props_().setProperty('TPL_INFO', JSON.stringify(info));
     return true;
   });
+}
+
+// ===== ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) — เก็บทุกฉบับไว้เป็นประวัติ ใช้ฉบับล่าสุด =====
+function api_saveRoster(pin, b64, fileName, dataJson, dateText) {
+  checkPin_(pin);
+  return withLock_(function () {
+    var folder = subFolder_(rootFolder_(), ROSTER_FOLDER_NAME);
+    var name = (dateText ? 'ข้อมูล ' + safeName_(dateText) + ' - ' : '') + safeName_(fileName);
+    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', name));
+    var old = props_().getProperty('ROSTER') ? JSON.parse(props_().getProperty('ROSTER')) : {};
+    var dataId = writeText_(subFolder_(rootFolder_(), DATA_FOLDER_NAME), 'roster.json', old.dataId, dataJson);
+    var info = { fileId: file.getId(), url: file.getUrl(), fileName: fileName, dataId: dataId, uploadedAt: Date.now() };
+    props_().setProperty('ROSTER', JSON.stringify(info));
+    return info;
+  });
+}
+function api_getRoster(pin) {
+  checkPin_(pin);
+  var v = props_().getProperty('ROSTER');
+  if (!v) return null;
+  var info = JSON.parse(v);
+  var t = readText_(info.dataId);
+  return t ? { fileName: info.fileName, url: info.url, uploadedAt: info.uploadedAt, data: t } : null;
 }
 
 // ===== ประกาศผล =====

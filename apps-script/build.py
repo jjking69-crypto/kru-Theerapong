@@ -67,7 +67,7 @@ def build():
         'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย')
 
     parts = [('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
-             ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'),
+             ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'), ('JsRoster', WEB / 'roster.js'),
              ('JsGrid', WEB / 'grid.js'), ('JsEditor', WEB / 'editor.js'),
              ('JsPublic', WEB / 'public.js'), ('JsPublish', WEB / 'publish.js'),
              ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]

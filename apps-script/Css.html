@@ -251,6 +251,13 @@ dialog::backdrop { background: #0b1a3a77; }
 .tpl-it.ok { color: var(--ok); font-weight: 600; }
 .tpl-it small { font-weight: 400; color: var(--muted); }
 
+/* ---------- ทะเบียนรายชื่อนักเรียน ---------- */
+.roster-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; margin-top: 12px; border-left: 4px solid var(--ok); }
+.roster-bar.empty { border-left-color: var(--warn); color: var(--muted); }
+.rb-t b { display: block; font-size: 15px; }
+.rb-t span { font-size: 13.5px; color: var(--muted); }
+.rb-a { display: flex; flex-wrap: wrap; gap: 6px; }
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }

@@ -67,7 +67,7 @@
   }
   function subjectDefaults(letter, tail, level) {
     var hi = level >= 4;
-    var s = SUBJECTS.filter(function (x) { return x[0] === letter && (!tail || x[6] === tail); })[0];
+    var s = SUBJECTS.filter(function (x) { return x[0] === letter && (!tail || x[6].slice(-String(tail).length) === String(tail)); })[0];
     if (!s) return null;
     return { code: s[0] + '1' + level + s[6], name: s[1], hours: hi ? s[4] : s[2], credit: hi ? s[5] : s[3] };
   }

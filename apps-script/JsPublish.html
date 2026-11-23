@@ -24,6 +24,9 @@
     }
     var all = (p6 ? [p6] : []).concat(recs);
     all.forEach(function (r) { r.data.students.forEach(function (s) { if (!base(s)) skipped++; }); });
+    // เลขบัตร 4 ตัวท้ายจากทะเบียนรายชื่อ (ใช้ยืนยันตัวตนผู้ปกครอง)
+    var reg = c.rosterById ? c.rosterById() : {};
+    order.forEach(function (k) { if (!map[k].nid4 && reg[k] && reg[k].s.nid4) map[k].nid4 = reg[k].s.nid4; });
     var meta = p6 ? p6.data.meta : null;
     var className = meta ? meta.className : M().stageName((recs[0] && recs[0].data.meta.stage) || 'ป', cls.level) + '/' + cls.room;
     var school = schoolName((meta && meta.school) || (recs[0] && recs[0].data.meta.school) || '');

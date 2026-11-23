@@ -37,11 +37,13 @@
       </div>
     </section>
 
+    <section id="rosterBar"></section>
+
     <label class="drop" id="drop">
-      <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls" multiple hidden>
+      <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls,.docx" multiple hidden>
       <span class="drop-ic">⇪</span>
       <span class="drop-t"><b>ลากไฟล์ ปพ.5 / ปพ.6 มาวางที่นี่</b> หรือแตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)</span>
-      <span class="drop-s">ระบบแยกชนิดไฟล์ อ่านชั้น ห้อง และรหัสวิชาจากในไฟล์ แล้วจัดเข้าช่องให้เอง (ปพ.5 รายวิชา / ปพ.6 ใบรายงานทั้งห้อง)</span>
+      <span class="drop-s">ระบบแยกชนิดไฟล์ อ่านชั้น ห้อง และรหัสวิชาจากในไฟล์ แล้วจัดเข้าช่องให้เอง (ปพ.5 รายวิชา / ปพ.6 ใบรายงานทั้งห้อง / ไฟล์ Word รายชื่อนักเรียน)</span>
     </label>
 
     <nav class="tabs" role="tablist">
@@ -49,6 +51,7 @@
       <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
       <button data-tab="student" role="tab">รายบุคคล</button>
       <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
+      <button data-tab="roster" role="tab">รายชื่อนักเรียน</button>
       <button data-tab="publish" role="tab">ประกาศผล</button>
     </nav>
 
@@ -69,6 +72,7 @@
   <div id="toasts" aria-live="polite"></div>
   <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
   <input type="file" id="fileTpl" accept=".xlsm,.xlsx" hidden>
+  <input type="file" id="fileRoster" accept=".docx" hidden>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -78,6 +82,7 @@
   <?!= include('JsModel') ?>
   <?!= include('JsXlsxFill') ?>
   <?!= include('JsTemplates') ?>
+  <?!= include('JsRoster') ?>
   <?!= include('JsGrid') ?>
   <?!= include('JsEditor') ?>
   <?!= include('JsPublic') ?>

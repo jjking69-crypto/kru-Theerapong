@@ -25,6 +25,8 @@
 
   // ---------- เริ่มแก้ไข ----------
   function rosterFromClass(c) {
+    var mr = c.masterRoster && c.masterRoster();
+    if (mr && mr.students.length) return M().copyRoster(mr.students); // ทะเบียนรายชื่อล่าสุดของโรงเรียน
     var p6 = c.pp6Record();
     if (p6 && p6.data) return M().copyRoster(p6.data.students);
     var recs = c.classRecords().filter(function (r) { return r.data; });
@@ -37,7 +39,12 @@
     var r = c.classRecords().filter(function (x) { return x.data && x.data.meta.school; })[0];
     return r ? (/^โรงเรียน/.test(r.data.meta.school) ? r.data.meta.school : 'โรงเรียน' + r.data.meta.school) : '';
   }
-  function teacherOf(c) { var p6 = c.pp6Record(); return p6 && p6.data ? p6.data.meta.teacher || '' : ''; }
+  function teacherOf(c) {
+    var p6 = c.pp6Record();
+    if (p6 && p6.data && p6.data.meta.teacher) return p6.data.meta.teacher;
+    var mr = c.masterRoster && c.masterRoster();
+    return mr && mr.teachers.length ? 'ครู' + mr.teachers[0] : '';
+  }
 
   function open(opt, c) {
     ctx = c;
@@ -140,7 +147,7 @@
   function rosterSection(el) {
     var d = ed.data;
     el.innerHTML = tools('<button class="btn" data-ed="addStu" data-n="1">+ เพิ่ม 1 คน</button><button class="btn" data-ed="addStu" data-n="10">+ เพิ่ม 10 คน</button>' +
-      '<button class="btn danger" data-ed="delStu">ลบคนสุดท้าย</button><button class="btn" data-ed="pullRoster">ดึงรายชื่อจากไฟล์อื่นของห้องนี้</button>') +
+      '<button class="btn danger" data-ed="delStu">ลบคนสุดท้าย</button><button class="btn" data-ed="pullRoster">' + (ctx.masterRoster && ctx.masterRoster() ? 'ใช้รายชื่อจากทะเบียน (ข้อมูล ' + esc(ctx.masterRoster().date) + ')' : 'ดึงรายชื่อจากไฟล์อื่นของห้องนี้') + '</button>') +
       hint('เลขประจำตัวนักเรียนใช้ค้นหาผลในหน้าประกาศผล · เลขบัตรประชาชน 4 ตัวท้ายใช้ยืนยันตัวตนผู้ปกครอง (ถ้าเปิดใช้) · คัดลอกหลายแถวจาก Excel มาวางได้') + '<div class="ed-g"></div>';
     grid(el.querySelector('.ed-g'), {
       corner: 'เลขที่', rows: d.students,
@@ -176,8 +183,8 @@
     },
     pullRoster: function () {
       var src = rosterFromClass(ctx);
-      if (!src.length) { ctx.toast('ยังไม่มีไฟล์อื่นของห้องนี้ให้ดึงรายชื่อ', 'info'); return; }
-      if (!confirm('นำรายชื่อ ' + src.length + ' คนจากไฟล์อื่นของห้องนี้มาใช้? (คะแนนที่กรอกไว้จะจับคู่ตามเลขประจำตัว)')) return;
+      if (!src.length) { ctx.toast('ยังไม่มีทะเบียนรายชื่อหรือไฟล์อื่นของห้องนี้ให้ดึงรายชื่อ', 'info'); return; }
+      if (!confirm('นำรายชื่อ ' + src.length + ' คนมาใช้? (คะแนนที่กรอกไว้จะจับคู่ตามเลขประจำตัว)')) return;
       var old = {}; ed.data.students.forEach(function (s) { old[s.id || norm(s.name)] = s; });
       ed.data.students = src.map(function (r, i) {
         var o = old[r.id || norm(r.name)] || newStudentFor(i + 1);

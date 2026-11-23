@@ -81,6 +81,15 @@
       else alert('ไม่พบลิงก์ไฟล์ใน Drive');
     },
     templateInfo: function () { return call('api_templateInfo'); },
+    getRoster: async function () {
+      var r = await call('api_getRoster');
+      return r ? { fileName: r.fileName, url: r.url, uploadedAt: r.uploadedAt, data: JSON.parse(r.data) } : null;
+    },
+    putRoster: async function (r) {
+      var d = r.data, dt = d.date ? d.date.display : (d.dateText || '');
+      var info = await call('api_saveRoster', [await blobToB64(new Blob([r.bytes])), r.fileName, JSON.stringify(d), dt]);
+      return { fileName: info.fileName, url: info.url, uploadedAt: info.uploadedAt, data: d };
+    },
     getTemplate: async function (kind) {
       var t = await call('api_getTemplate', [kind]);
       return t ? { name: t.name, bytes: b64ToBytes(t.b64) } : null;

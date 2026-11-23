@@ -27,11 +27,12 @@
     open: function () {
       var self = this;
       return new Promise(function (res, rej) {
-        var rq = indexedDB.open('pp5-analyzer', 2);
+        var rq = indexedDB.open('pp5-analyzer', 3);
         rq.onupgradeneeded = function () {
           var db = rq.result;
           if (!db.objectStoreNames.contains('files')) db.createObjectStore('files', { keyPath: 'key' });
           if (!db.objectStoreNames.contains('templates')) db.createObjectStore('templates', { keyPath: 'kind' });
+          if (!db.objectStoreNames.contains('roster')) db.createObjectStore('roster', { keyPath: 'key' });
         };
         rq.onsuccess = function () { self.db = rq.result; res(); };
         rq.onerror = function () { rej(rq.error); };
@@ -55,6 +56,8 @@
     // แม่แบบไฟล์รูปแบบต้นฉบับ (ปพ.5 / ปพ.6)
     getTemplate: function (kind) { return this.tx('readonly', function (s) { return s.get(kind); }, 'templates'); },
     putTemplate: function (kind, bytes, name) { return this.tx('readwrite', function (s) { return s.put({ kind: kind, bytes: bytes, name: name, savedAt: Date.now() }); }, 'templates'); },
+    getRoster: function () { return this.tx('readonly', function (s) { return s.get('current'); }, 'roster'); },
+    putRoster: function (r) { var o = Object.assign({ key: 'current' }, r); return this.tx('readwrite', function (s) { return s.put(o); }, 'roster').then(function () { return o; }); },
     templateInfo: function () {
       return this.tx('readonly', function (s) { return s.getAll(); }, 'templates').then(function (all) {
         var o = {}; (all || []).forEach(function (t) { o[t.kind] = { name: t.name, savedAt: t.savedAt }; }); return o;
@@ -151,6 +154,8 @@
 
   // expected = { level, room, slot } เมื่ออัปโหลดผ่านช่องวิชาโดยตรง
   async function handleFiles(files, expected) {
+    var docs = Array.prototype.filter.call(files, function (f) { return /\.docx$/i.test(f.name); });
+    if (docs.length) { await handleRoster(docs[0]); if (docs.length === files.length) return; }
     files = Array.prototype.filter.call(files, function (f) { return /\.(xlsm|xlsx|xls)$/i.test(f.name); });
     if (!files.length) { toast('กรุณาเลือกไฟล์ Excel (.xlsm / .xlsx)', 'err'); return; }
     if (typeof XLSX === 'undefined') { toast('ยังโหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) กรุณารีเฟรชหน้าแล้วลองใหม่', 'err'); return; }
@@ -209,10 +214,55 @@
     render();
   }
 
+  // ---------- ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) ----------
+  var roster = null; // { fileName, bytes?, url?, data, uploadedAt }
+  async function handleRoster(file) {
+    try {
+      setBusy('กำลังอ่านไฟล์รายชื่อ...');
+      var bytes = new Uint8Array(await readFile(file));
+      var data = await PP5Roster.parseDocx(bytes);
+      setBusy('');
+      var newDate = data.date ? data.date.display : (data.dateText || 'ไม่ระบุวันที่');
+      if (roster && roster.data) {
+        var oldDate = roster.data.date ? roster.data.date.display : (roster.data.dateText || '-');
+        if (!confirm('อัปเดตทะเบียนรายชื่อ\nเดิม: ข้อมูลวันที่ ' + oldDate + ' (' + roster.data.total + ' คน)\nใหม่: ข้อมูลวันที่ ' + newDate + ' (' + data.total + ' คน)\n\nต้องการใช้ไฟล์ใหม่หรือไม่?')) return;
+      }
+      setBusy('กำลังบันทึกทะเบียนรายชื่อ...');
+      var saved = await DB.putRoster({ fileName: file.name, bytes: bytes, data: data, uploadedAt: Date.now() });
+      roster = Object.assign({ fileName: file.name, data: data, uploadedAt: Date.now() }, saved || {});
+      if (DB !== LocalDB) roster.bytes = bytes;
+      toast('อัปเดตรายชื่อนักเรียนตามข้อมูลวันที่ ' + newDate + ' แล้ว (' + data.classes.length + ' ห้อง ' + data.total + ' คน)' + (data.warnings.length ? ' · มีข้อควรตรวจ ' + data.warnings.length + ' รายการ' : ''), data.warnings.length ? 'info' : 'ok');
+      if (data.year && years().indexOf(data.year) < 0) state.year = data.year;
+      state.tab = 'roster';
+    } catch (e) {
+      console.error(e);
+      toast('อ่านไฟล์รายชื่อไม่ได้: ' + (e && e.message ? e.message : e), 'err');
+    } finally { setBusy(''); render(); }
+  }
+  function rosterClass(cls) { return roster && roster.data ? PP5Roster.findClass(roster.data, cls.year, 'ป', cls.level, cls.room) : null; }
+  function downloadRoster() {
+    if (!roster) return;
+    if (roster.bytes) downloadBlob(new Blob([roster.bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), roster.fileName || 'รายชื่อนักเรียน.docx');
+    else if (roster.url) window.open(roster.url, '_blank', 'noopener');
+  }
+  function renderRosterBar() {
+    var el = $('rosterBar');
+    if (!el) return;
+    if (!roster || !roster.data) {
+      el.innerHTML = '<div class="card roster-bar empty"><span>📋 ยังไม่มีทะเบียนรายชื่อนักเรียน</span><button class="btn pri" data-rb="up">อัปโหลดไฟล์รายชื่อ (.docx)</button></div>';
+      return;
+    }
+    var d = roster.data, dt = d.date ? d.date.display : (d.dateText || 'ไม่ระบุวันที่');
+    el.innerHTML = '<div class="card roster-bar"><div class="rb-t">📋 <b>รายชื่อนักเรียนปีการศึกษา ' + esc(d.year || '') + ' อัปเดตตามข้อมูลวันที่ ' + esc(dt) + '</b>' +
+      '<span>' + d.classes.length + ' ห้อง · ' + d.total + ' คน · ไฟล์ ' + esc(roster.fileName || '') + (d.warnings.length ? ' · <span class="badge warn">ข้อควรตรวจ ' + d.warnings.length + '</span>' : '') + '</span></div>' +
+      '<div class="rb-a"><button class="btn" data-rb="view">ดูรายชื่อ</button><button class="btn" data-rb="dl">⬇ ดาวน์โหลดไฟล์</button><button class="btn pri" data-rb="up">อัปโหลดรายชื่อใหม่</button></div></div>';
+  }
+
   // ---------- เลือกข้อมูลของห้องปัจจุบัน ----------
   function years() {
     var ys = {};
     records.forEach(function (r) { ys[r.year] = 1; });
+    if (roster && roster.data && roster.data.year) ys[roster.data.year] = 1;
     var list = Object.keys(ys).map(Number).sort(function (a, b) { return b - a; });
     if (!list.length) list = [thaiYear()];
     return list;
@@ -254,6 +304,7 @@
       pp6Record: function () { return rs.filter(function (r) { return r.slot === 'pp6'; })[0] || null; },
       className: function () { return 'ป.' + cls.level + '/' + cls.room; },
       reportCtx: Object.assign({}, reportCtx, { classRecords: subj }),
+      rosterById: function () { return roster && roster.data ? PP5Roster.byId(roster.data) : {}; },
       allYears: function () { return years(); },
       allClasses: function () {
         var seen = {}, out = [];
@@ -337,6 +388,7 @@
     pp6Record: function () { return pp6Record(); },
     findRecord: function (key) { return records.filter(function (r) { return r.key === key; })[0]; },
     coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
+    masterRoster: function () { var c = rosterClass(curClass()); return c ? { students: c.students, teachers: c.teachers, date: roster.data.date ? roster.data.date.display : roster.data.dateText } : null; },
     saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor,
     buildFile: buildFile, hasTemplate: function (kind) { return !!tplInfo[kind]; }
   };
@@ -437,6 +489,7 @@
 
   function render() {
     renderPicker();
+    renderRosterBar();
     // รุ่นที่เก็บข้อมูลบนเซิร์ฟเวอร์: โหลดข้อมูลของห้องที่เลือกเมื่อจำเป็น
     if (DB.ensureData) {
       var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
@@ -455,6 +508,7 @@
     view.onclick = view.onchange = null;
     if (window.PP5Editor && PP5Editor.active()) { PP5Editor.render(view, editorCtx); saveUI(); return; }
     if (state.tab === 'publish') { PP5Publish.render(view, publishCtx()); saveUI(); return; }
+    if (state.tab === 'roster') { renderRosterTab(); saveUI(); return; }
     if (state.tab === 'subjects') renderSubjects(cls);
     else if (state.tab === 'summary') renderSummary(cls);
     else if (state.tab === 'report') PP6Report.render(view, reportCtx);
@@ -516,6 +570,53 @@
       '<div class="sub" style="margin:4px 0 0">ไฟล์ที่ระบบสร้าง (ปุ่ม "สร้างไฟล์ Excel" / "กรอกในระบบ") จะออกมาหน้าตาเหมือนไฟล์ต้นฉบับ · อัปโหลดไฟล์ต้นฉบับครั้งแรก ระบบจะเก็บเป็นแม่แบบให้เอง (ล้างข้อมูลนักเรียนออก)</div></div>' +
       '<button class="btn" data-act="tplUpload">ตั้งแม่แบบจากไฟล์…</button></div>';
   }
+  var rosterSel = null;
+  function renderRosterTab() {
+    if (!roster || !roster.data) {
+      view.innerHTML = '<div class="card empty-state"><b>ยังไม่มีทะเบียนรายชื่อนักเรียน</b>อัปโหลดไฟล์ Word รายชื่อนักเรียน (.docx) ด้วยปุ่มด้านบน หรือลากไฟล์มาวาง<br><br><button class="btn pri" data-rb="up">อัปโหลดไฟล์รายชื่อ</button></div>';
+      return;
+    }
+    var d = roster.data, cur = rosterClass(curClass());
+    if (!rosterSel || !d.classes.some(function (c) { return c.label === rosterSel; })) rosterSel = cur ? cur.label : d.classes[0].label;
+    var c = d.classes.filter(function (x) { return x.label === rosterSel; })[0];
+    var h = '<h2 class="sec">ทะเบียนรายชื่อนักเรียน ปีการศึกษา ' + esc(d.year || '') + '</h2>' +
+      '<p class="sub">อัปเดตตามข้อมูลวันที่ ' + esc(d.date ? d.date.display : d.dateText) + ' · ' + d.total + ' คน · ใช้เป็นรายชื่อเริ่มต้นเมื่อสร้าง ปพ.5 / ปพ.6 ใหม่ และใช้เลขบัตร 4 ตัวท้ายยืนยันตัวตนผู้ปกครองในหน้าประกาศผล</p>';
+    if (d.warnings.length) h += '<div class="note"><b>ข้อควรตรวจในไฟล์:</b><ul style="margin:4px 0 0;padding-left:18px">' + d.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul></div>';
+    h += '<div class="chips" style="margin:10px 0 14px">' + d.classes.map(function (x) {
+      return '<button class="chip' + (x.label === rosterSel ? ' on' : '') + '" data-rc2="' + esc(x.label) + '">' + esc(x.label) + ' <small>(' + x.students.length + ')</small></button>';
+    }).join('') + '</div>';
+    h += '<div class="tiles">' + tileR('ชั้น', c.label, c.teachers.length ? 'ครู' + c.teachers.join(', ครู') : '') + tileR('นักเรียน', c.counts.total + ' คน', 'ชาย ' + c.counts.male + ' · หญิง ' + c.counts.female) + '</div>';
+    // เทียบกับไฟล์ ปพ. ของห้องเดียวกันในระบบ
+    if (c.stage === 'ป') {
+      var cls = { year: c.year || d.year, level: c.level, room: c.room };
+      var rs = records.filter(function (r) { return r.year === cls.year && r.level === cls.level && r.room === cls.room && r.data; });
+      if (rs.length) {
+        var inFiles = {}, inRoster = {};
+        rs.forEach(function (r) { r.data.students.forEach(function (s) { if (s.id) inFiles[s.id] = s.name; }); });
+        c.students.forEach(function (s) { if (s.id) inRoster[s.id] = s.name; });
+        var notInRoster = Object.keys(inFiles).filter(function (id) { return !inRoster[id]; });
+        var notInFiles = Object.keys(inRoster).filter(function (id) { return !inFiles[id]; });
+        h += '<div class="card rc-panel"><b>เทียบกับไฟล์ ปพ. ของห้องนี้ในระบบ (' + rs.length + ' ไฟล์)</b>' +
+          (!notInRoster.length && !notInFiles.length ? '<p class="sub" style="margin:6px 0 0">✓ รายชื่อตรงกันทั้งหมด</p>' :
+            (notInFiles.length ? '<p style="margin:6px 0 2px">มีในทะเบียน แต่ยังไม่มีในไฟล์ ปพ.: ' + notInFiles.map(function (id) { return esc(inRoster[id]) + ' (' + id + ')'; }).join(', ') + '</p>' : '') +
+            (notInRoster.length ? '<p style="margin:6px 0 2px">มีในไฟล์ ปพ. แต่ไม่มีในทะเบียน (อาจย้ายออก): ' + notInRoster.map(function (id) { return esc(inFiles[id]) + ' (' + id + ')'; }).join(', ') + '</p>' : '')) + '</div>';
+      }
+    }
+    h += '<div class="tbl-wrap"><table><thead><tr><th>เลขที่</th><th>เลขประจำตัว</th><th class="l">ชื่อ-สกุล</th><th>เพศ</th><th>บัตร ปชช.</th></tr></thead><tbody>' +
+      c.students.map(function (s) { return '<tr><td>' + s.no + '</td><td>' + esc(s.id) + '</td><td class="l">' + esc(s.name) + '</td><td>' + esc(s.sex) + '</td><td class="num">' + (s.nid4 ? '•••• ' + esc(s.nid4) : '–') + '</td></tr>'; }).join('') +
+      '</tbody></table></div>';
+    view.innerHTML = h;
+    view.onclick = function (e) {
+      var b = e.target.closest('[data-rc2]');
+      if (!b) return;
+      rosterSel = b.dataset.rc2;
+      var x = d.classes.filter(function (y) { return y.label === rosterSel; })[0];
+      if (x && x.stage === 'ป') { state.year = x.year || d.year; state.level = x.level; state.room = x.room; }
+      render();
+    };
+  }
+  function tileR(k, v, s) { return '<div class="card tile"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s || '') + '</div></div>'; }
+
   function startButtons(slot) {
     return '<div class="slot-acts"><button class="btn pri" data-act="upload" data-slot="' + esc(slot) + '">อัปโหลดไฟล์</button>' +
       '<button class="btn" data-act="online" data-slot="' + esc(slot) + '">กรอกในระบบ</button>' +
@@ -781,6 +882,14 @@
   }
 
   $('fileAll').addEventListener('change', function (e) { handleFiles(e.target.files); e.target.value = ''; });
+  $('fileRoster').addEventListener('change', function (e) { if (e.target.files[0]) handleRoster(e.target.files[0]); e.target.value = ''; });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-rb]');
+    if (!b) return;
+    if (b.dataset.rb === 'up') $('fileRoster').click();
+    else if (b.dataset.rb === 'dl') downloadRoster();
+    else if (b.dataset.rb === 'view' && leaveEditor()) { state.tab = 'roster'; render(); }
+  });
   $('fileTpl').addEventListener('change', async function (e) {
     var f = e.target.files[0];
     if (!f) return;
@@ -910,6 +1019,7 @@
       await DB.open();
       records = await DB.all();
       if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
+      if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
     } catch (e) {
       console.error(e);
       if (DB === LocalDB) {
