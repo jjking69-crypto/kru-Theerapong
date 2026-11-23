@@ -25,7 +25,7 @@
 
   function midView(mid) {
     if (!mid) return '<div class="pub-empty"><div class="ic">🕒</div><b>ยังไม่ประกาศผลกลางปี</b>กรุณาติดตามประกาศจากโรงเรียน</div>';
-    var h = '<p class="pub-note">ผลการเรียนกลางปี (ภาคเรียนที่ 1) แสดงเฉพาะคะแนน ยังไม่มีระดับผลการเรียน (เกรด)</p>';
+    var h = '<p class="pub-note">ผลการเรียนกลางปี (ภาคเรียนที่ 1) แสดงเฉพาะคะแนน ยังไม่มีระดับผลการเรียน (เกรด)' + (mid.partial ? ' · บางวิชาครูยังกรอกคะแนนไม่ครบ (แสดงเป็น –)' : '') + '</p>';
     var tot = 0, max = 0;
     if (mid.source === 'pp6') {
       mid.subjects.forEach(function (s) { if (s.total != null) { tot += s.total; max += mid.max; } });
@@ -56,15 +56,18 @@
       tile('คะแนนเฉลี่ยร้อยละ', d(f.pct, 2), pctBar(f.pct)) +
       tile('เวลาเรียน', f.attPct != null ? d(f.attPct, 1) + '<small>%</small>' : d(null), f.attPct == null ? '' : f.attPct >= 80 ? 'ผ่านเกณฑ์ 80%' : 'ไม่ถึงเกณฑ์ 80%') +
       tile('ผลการตัดสิน', pr, f.promote === true ? '✓ ' + 'ผ่านเกณฑ์ทุกด้าน' : '', f.promote === true ? 'pub-ok' : f.promote === false ? 'pub-bad' : '') + '</div>';
+    if (f.partial) h += '<p class="pub-note">ผลบางวิชายังไม่ครบ (แสดงเป็น –) ระดับผลการเรียนเฉลี่ยและผลการตัดสินจะแสดงเมื่อครบทุกวิชา</p>';
     var showTerms = f.subjects.some(function (s) { return s.t1 != null || s.t2 != null; });
-    h += '<div class="pub-tbl-wrap"><table class="pub-tbl"><thead><tr><th class="l">รายวิชา</th><th>หน่วยกิต</th>' + (showTerms ? '<th class="pub-term">ภาค 1</th><th class="pub-term">ภาค 2</th>' : '') + '<th>รวม<small>เต็ม 100</small></th><th>เกรด</th></tr></thead><tbody>';
+    var showCE = !showTerms && f.subjects.some(function (s) { return s.collect != null || s.exam != null; });
+    var ncol = 4 + (showTerms || showCE ? 2 : 0);
+    h += '<div class="pub-tbl-wrap"><table class="pub-tbl"><thead><tr><th class="l">รายวิชา</th><th>หน่วยกิต</th>' + (showTerms ? '<th class="pub-term">ภาค 1</th><th class="pub-term">ภาค 2</th>' : '') + (showCE ? '<th class="pub-term">คะแนนเก็บ</th><th class="pub-term">คะแนนสอบ</th>' : '') + '<th>รวม<small>เต็ม 100</small></th><th>เกรด</th></tr></thead><tbody>';
     [['รายวิชาพื้นฐาน', true], ['รายวิชาเพิ่มเติม', false]].forEach(function (g) {
       var rows = f.subjects.filter(function (s) { return (s.basic !== false) === g[1]; });
       if (!rows.length) return;
-      h += '<tr class="pub-grp"><td colspan="' + (showTerms ? 6 : 4) + '">' + g[0] + '</td></tr>';
+      h += '<tr class="pub-grp"><td colspan="' + ncol + '">' + g[0] + '</td></tr>';
       rows.forEach(function (s) {
         h += '<tr><td class="l"><b>' + esc(s.name) + '</b><small>' + esc(s.code) + '</small></td><td>' + d(s.credit, 1) + '</td>' +
-          (showTerms ? '<td class="pub-term">' + d(s.t1) + '</td><td class="pub-term">' + d(s.t2) + '</td>' : '') + '<td class="pub-strong">' + d(s.total) + '</td><td>' + gradeChip(s.grade) + '</td></tr>';
+          (showTerms ? '<td class="pub-term">' + d(s.t1) + '</td><td class="pub-term">' + d(s.t2) + '</td>' : '') + (showCE ? '<td class="pub-term">' + d(s.collect) + '</td><td class="pub-term">' + d(s.exam) + '</td>' : '') + '<td class="pub-strong">' + d(s.total) + '</td><td>' + gradeChip(s.grade) + '</td></tr>';
       });
     });
     h += '</tbody></table></div>';
@@ -95,6 +98,7 @@
         (years.length > 1 ? '<select class="pub-year" aria-label="ปีการศึกษา">' + years.map(function (x, i) { return '<option value="' + i + '"' + (i === st.y ? ' selected' : '') + '>ปีการศึกษา ' + esc(x.year) + '</option>'; }).join('') + '</select>' : '<div class="pub-yr">ปีการศึกษา ' + esc(y.year) + '</div>') + '</div>';
       h += '<div class="pub-seg" role="tablist"><button data-t="mid" class="' + (st.tab === 'mid' ? 'on' : '') + '">ผลกลางปี<small>ภาคเรียนที่ 1 · คะแนน</small></button>' +
         '<button data-t="final" class="' + (st.tab === 'final' ? 'on' : '') + '">ผลปลายปี<small>ทั้งปี · เกรด</small></button></div>';
+      if (y.pending) h += '<div class="pub-card pub-body"><p class="pub-note" style="margin:0">พบชื่อนักเรียนในทะเบียนแล้ว แต่ครูยังไม่ได้บันทึกคะแนนเข้าระบบ กรุณาตรวจสอบอีกครั้งภายหลัง</p></div>';
       h += '<div class="pub-card pub-body">' + (st.tab === 'mid' ? midView(y.mid) : finalView(y.final)) + '</div>';
       if (opt.actions !== false) h += '<div class="pub-actions"><button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
       el.innerHTML = h;
@@ -126,7 +130,25 @@
     if (info.logo) { $('pubLogo').src = info.logo; $('pubLogo').hidden = false; }
     if (info.announcement) { $('pubAnn').textContent = info.announcement; $('pubAnn').hidden = false; }
     if (info.verify === 'id+nid4') $('pubNidRow').hidden = false;
-    if (info.adminUrl) $('pubAdmin').href = info.adminUrl;
+    var tb = $('pubTeacher');
+    if (tb) tb.addEventListener('click', function () {
+      if (!window.PP5PinPad) { if (info.adminUrl) window.open(info.adminUrl, '_top'); return; }
+      PP5PinPad.ask({
+        title: 'สำหรับครู', sub: 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
+        check: function (p) {
+          return call('api_checkPin', [p]).then(function (r) { return r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'); });
+        }
+      }).then(function (p) {
+        if (p == null) return;
+        try { localStorage.setItem('pp5-pin', p); } catch (e) {}
+        var u = info.adminUrl || '';
+        if (u) window.open(u, '_top');
+      });
+    });
+    if (info.closed) {
+      $('pubSearch').innerHTML = '<div class="pub-card pub-closed"><span class="ic">🔒</span><h2>ปิดระบบประกาศผลชั่วคราว</h2><p>ขณะนี้โรงเรียนยังไม่เปิดให้ดูผลการเรียน กรุณากลับมาใหม่ภายหลัง</p></div>';
+      return;
+    }
     var yrs = (info.years || []).filter(function (y) { return y.mid || y.final; });
     if (yrs.length) $('pubStatus').innerHTML = yrs.map(function (y) {
       return '<span class="pub-chip">ปี ' + esc(y.year) + ': ' + [y.mid ? 'ผลกลางปี' : '', y.final ? 'ผลปลายปี' : ''].filter(Boolean).join(' · ') + '</span>';
@@ -148,7 +170,7 @@
         renderStudent(out, r, { onBack: back });
         out.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e2) {
-        err.textContent = /TRY_LATER/.test(e2.message) ? 'ค้นหาผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่' : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+        err.textContent = /TRY_LATER/.test(e2.message) ? 'ค้นหาผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่' : /CLOSED/.test(e2.message) ? 'ขณะนี้ปิดระบบประกาศผลชั่วคราว' : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
         err.hidden = false;
       } finally { btn.disabled = false; btn.classList.remove('busy'); }
     });

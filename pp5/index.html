@@ -20,9 +20,10 @@
     <div class="top-in">
       <a class="home" href="../" title="กลับหน้าแอปห้องเรียน">‹</a>
       <div class="brand">
-        <h1>วิเคราะห์ผลการเรียน ปพ.5 / ปพ.6</h1>
+        <h1>ระบบ ปพ.5 / ปพ.6 โรงเรียนวัดทุ่งแฝก</h1>
         <p id="schoolLine">อัปโหลดไฟล์ ปพ.5 ของแต่ละวิชา แล้วดูผลรายบุคคล</p>
       </div>
+      <div class="top-acts" id="topActs"></div>
     </div>
   </header>
 
@@ -33,30 +34,22 @@
         <select id="yearSel"></select>
       </div>
       <div class="field grow">
-        <span class="lbl">ชั้น</span>
-        <div class="chips" id="levelChips" role="tablist"></div>
+        <label for="classSel">ชั้นเรียน</label>
+        <select id="classSel" class="big-sel"></select>
       </div>
       <div class="field">
-        <label for="roomSel">ห้อง</label>
-        <select id="roomSel"></select>
+        <button class="btn pri up-btn" id="upBtn" type="button" title="เลือกไฟล์ ปพ.5 / ปพ.6 / รายชื่อ (.docx) ได้หลายไฟล์ หรือลากไฟล์มาวางที่ใดก็ได้บนหน้านี้">⇪ อัปโหลดไฟล์</button>
+        <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls,.docx" multiple hidden>
       </div>
     </section>
 
     <section id="rosterBar"></section>
-
-    <label class="drop" id="drop">
-      <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls,.docx" multiple hidden>
-      <span class="drop-ic">⇪</span>
-      <span class="drop-t"><b>ลากไฟล์ ปพ.5 / ปพ.6 มาวางที่นี่</b> หรือแตะเพื่อเลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)</span>
-      <span class="drop-s">ระบบแยกชนิดไฟล์ อ่านชั้น ห้อง และรหัสวิชาจากในไฟล์ แล้วจัดเข้าช่องให้เอง (ปพ.5 รายวิชา / ปพ.6 ใบรายงานทั้งห้อง / ไฟล์ Word รายชื่อนักเรียน)</span>
-    </label>
 
     <nav class="tabs" role="tablist">
       <button data-tab="subjects" role="tab">รายวิชา</button>
       <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
       <button data-tab="student" role="tab">รายบุคคล</button>
       <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
-      <button data-tab="roster" role="tab">รายชื่อนักเรียน</button>
       <button data-tab="publish" role="tab">ประกาศผล</button>
     </nav>
 
@@ -76,7 +69,6 @@
 
   <div id="toasts" aria-live="polite"></div>
   <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
-  <input type="file" id="fileTpl" accept=".xlsm,.xlsx" hidden>
   <input type="file" id="fileRoster" accept=".docx" hidden>
 
   <script src="vendor/xlsx.full.min.js"></script>
@@ -87,6 +79,9 @@
   <script src="xlsxfill.js"></script>
   <script src="templates.js"></script>
   <script src="roster.js"></script>
+  <script src="pinpad.js"></script>
+  <script src="teachers.js"></script>
+  <script src="library.js"></script>
   <script src="grid.js"></script>
   <script src="editor.js"></script>
   <script src="public.js"></script>

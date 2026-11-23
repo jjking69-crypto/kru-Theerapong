@@ -11,6 +11,7 @@
 </head>
 <body class="pub-page">
   <header class="pub-hero">
+    <button type="button" class="pub-teacher" id="pubTeacher" aria-label="เข้าสู่ระบบสำหรับครู">🔒 สำหรับครู</button>
     <img id="pubLogo" class="pub-logo" alt="" hidden>
     <div><span class="pub-kicker">ระบบประกาศผลการเรียนออนไลน์</span></div>
     <h1 class="pub-hero-t" id="pubTitle">ประกาศผลการเรียน</h1>
@@ -46,8 +47,9 @@
       </div>
     </section>
     <section id="pubResult" hidden></section>
-    <p class="pub-foot">ข้อมูลผลการเรียนเป็นข้อมูลส่วนบุคคล กรุณาไม่เผยแพร่ต่อ · <a id="pubAdmin" href="#">สำหรับครู</a></p>
+    <p class="pub-foot">ข้อมูลผลการเรียนเป็นข้อมูลส่วนบุคคล กรุณาไม่เผยแพร่ต่อ</p>
   </main>
+  <?!= include('JsPinPad') ?>
   <?!= include('JsPublic') ?>
   <script>
     (function () {

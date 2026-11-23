@@ -23,17 +23,32 @@
       runner[fn].apply(runner, [getPin()].concat(args || []));
     });
   }
+  // ขอรหัสด้วยแป้นตัวเลขบนจอ (ครู 8 หลัก / ผู้ดูแลระบบหลัก)
+  var asking = null;
+  function askPin(msg) {
+    if (asking) return asking;
+    asking = window.PP5PinPad.ask({
+      title: 'เข้าสู่ระบบสำหรับครู', sub: msg || 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
+      check: function (p) {
+        return new Promise(function (res) {
+          google.script.run.withSuccessHandler(function (r) { res(r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง')); })
+            .withFailureHandler(function () { res('เชื่อมต่อไม่สำเร็จ ลองใหม่'); }).api_checkPin(p);
+        });
+      }
+    }).then(function (p) { asking = null; if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน'); setPin(p); return p; });
+    return asking;
+  }
   function call(fn, args, tries) {
     return raw(fn, args).catch(function (err) {
-      if (/PIN_REQUIRED/.test(err && err.message) && (tries || 0) < 3) {
-        var p = window.prompt((tries ? 'รหัสผ่านไม่ถูกต้อง ' : '') + 'กรุณาใส่รหัสผ่านของระบบ');
-        if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน');
-        setPin(p.trim());
-        return call(fn, args, (tries || 0) + 1);
+      var m = err && err.message || '';
+      if (/PIN_LOCKED/.test(m)) throw new Error('ใส่รหัสผิดหลายครั้ง ระบบพักการเข้าใช้ 10 นาที');
+      if (/PIN_REQUIRED/.test(m) && (tries || 0) < 3) {
+        return askPin(tries ? 'รหัสเดิมใช้ไม่ได้แล้ว กรุณากรอกใหม่' : '').then(function () { return call(fn, args, (tries || 0) + 1); });
       }
       throw err;
     });
   }
+  window.PP5_LOGOUT = function () { setPin(''); try { localStorage.removeItem(PIN_KEY); } catch (e) {} location.reload(); };
 
   function blobToB64(blob) {
     return new Promise(function (res, rej) {
@@ -52,6 +67,8 @@
       var self = this;
       return call('api_ping').then(function (r) {
         self.rootUrl = r && r.rootUrl;
+        self.role = r && r.role; self.flags = (r && r.flags) || {}; self.flagDefs = (r && r.flagDefs) || {};
+        self.publicUrl = r && r.publicUrl;
         var link = document.getElementById('driveLink');
         if (link && self.rootUrl) { link.href = self.rootUrl; link.hidden = false; }
       });
@@ -82,6 +99,9 @@
       else alert('ไม่พบลิงก์ไฟล์ใน Drive');
     },
     templateInfo: function () { return call('api_templateInfo'); },
+    setFlags: function (f) { var self = this; return call('api_setFlags', [JSON.stringify(f)]).then(function (r) { self.flags = r; return r; }); },
+    sourceList: function () { return call('api_sourceList'); },
+    sourceFile: async function (id) { var t = await call('api_sourceFile', [id]); return { name: t.name, bytes: b64ToBytes(t.b64) }; },
     getRoster: async function () {
       var r = await call('api_getRoster');
       return r ? { fileName: r.fileName, url: r.url, uploadedAt: r.uploadedAt, data: JSON.parse(r.data) } : null;

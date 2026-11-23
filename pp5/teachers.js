@@ -1,0 +1,50 @@
+/*
+ * ครูผู้สอนแต่ละวิชา ตาม "ตารางสอนครู ภาคเรียนที่ 1 ปีการศึกษา 2569" โรงเรียนวัดทุ่งแฝก
+ * ใช้เป็นค่าเริ่มต้นเท่านั้น ครูเลือก/พิมพ์ชื่ออื่นได้เสมอ
+ * ช่องวิชา: th ไทย, ma คณิต, sci วิทย์, soc สังคม, his ประวัติ, pe สุขศึกษา, art ศิลปะ, work การงาน, eng อังกฤษ, cor การป้องกันการทุจริต
+ */
+(function (root) {
+  'use strict';
+  var SCHOOL = 'วัดทุ่งแฝก';
+  var T = {
+    siri: 'นางสาวสิริวิมล นาคพิทักษ์', jira: 'นางสาวจิราวรรณ เสือไพร', tri: 'นางสาวตรีนุช จันทร์เสวก', sut: 'นางสาวสุทธิญา ปาลวัฒน์',
+    pree: 'นางสาวปรียาภรณ์ เกิดวัน', wan: 'นางสาววรรณภา ทองประสม', amorn: 'นางสาวอมรรัตน์ เอี่ยมแสง', napol: 'นายณพลพัทธ์ วงศ์ธนเวทย์',
+    chan: 'นายชาญวิทย์ รุ่งเรือง', mal: 'นางสาวมัลลิกา ศรีมุกดา', teera: 'นายธีรพงศ์ อินทรศักดิ์', kuli: 'นางสาวกุลิสรา เสวกานันท์',
+    rat: 'นายรัฐวิศว์ สอนโยธา', wora: 'นายวรวรรธน์ นวนศรีอ่อน'
+  };
+  // ห้อง -> วิชา -> ครู (คนแรก = สอนคาบมากที่สุด)
+  var HOME = ['th', 'ma', 'sci', 'soc', 'his', 'work', 'cor'];
+  var MAP = {};
+  function set(cls, slots, who) { MAP[cls] = MAP[cls] || {}; slots.forEach(function (s) { MAP[cls][s] = who; }); }
+  set('1/1', HOME, ['siri']); set('1/1', ['eng'], ['tri', 'siri']);
+  set('1/2', HOME, ['jira']); set('1/2', ['eng'], ['tri', 'jira']);
+  set('2/1', ['th', 'ma', 'sci', 'soc', 'his', 'cor'], ['sut']); set('2/1', ['eng', 'work'], ['tri']);
+  set('3/1', HOME, ['pree']); set('3/1', ['eng'], ['tri', 'pree']);
+  set('3/2', HOME, ['wan']); set('3/2', ['eng'], ['tri', 'wan']);
+  [['4/1', 'amorn'], ['4/2', 'napol'], ['5/1', 'mal'], ['6/1', 'rat']].forEach(function (x) {
+    set(x[0], ['th', 'ma', 'sci', 'eng'], [x[1]]);
+    set(x[0], ['soc', 'his', 'cor'], ['teera']);
+    set(x[0], ['work'], ['wora']);
+  });
+  ['1/1', '1/2', '2/1', '3/1', '3/2', '4/1', '4/2', '5/1', '6/1'].forEach(function (c) { set(c, ['pe'], ['chan']); set(c, ['art'], ['kuli']); });
+
+  function norm(s) { return String(s || '').replace(/\s+/g, '').replace(/^(นาย|นางสาว|นาง|ครู)/, ''); }
+  var api = {
+    SCHOOL: SCHOOL,
+    list: Object.keys(T).map(function (k) { return T[k]; }),
+    // ครูของวิชาในห้อง: ถ้าไม่มีในตารางสอน (เช่น ห้อง 2 ที่เรียนรวม) ใช้ห้องอื่นของชั้นเดียวกัน
+    forClass: function (level, room, slot) {
+      var m = MAP[level + '/' + room];
+      if (!m || !m[slot]) { var k = Object.keys(MAP).filter(function (c) { return c.split('/')[0] === String(level) && MAP[c][slot]; })[0]; m = k ? MAP[k] : null; }
+      return m && m[slot] ? m[slot].map(function (k) { return T[k]; }) : [];
+    },
+    // แปลงชื่อสั้น (เช่น "ชาญวิทย์ รุ่งเรือง" จากรายชื่อนักเรียน) เป็นชื่อเต็มพร้อมคำนำหน้า
+    fullName: function (name) {
+      var n = norm(name);
+      if (!n) return '';
+      var hit = api.list.filter(function (t) { return norm(t) === n || norm(t).indexOf(n) === 0 || n.indexOf(norm(t)) === 0; })[0];
+      return hit || String(name).replace(/^ครู\s*/, '');
+    }
+  };
+  if (typeof module === 'object' && module.exports) module.exports = api; else root.PP5Teachers = api;
+})(typeof self !== 'undefined' ? self : this);

@@ -8,10 +8,13 @@
  */
 
 // ===== ตั้งค่า =====
-// รหัสผ่านเข้าหลังบ้านของครู (แนะนำให้ตั้ง เพราะมีข้อมูลนักเรียน)
-var ACCESS_PIN = '';
+// รหัสผ่านเข้าหลังบ้าน: ครู / ผู้ดูแลระบบหลัก (เปิด-ปิดทุกระบบได้)
+var TEACHER_PIN = '72030101';
+var ADMIN_PIN = '555666';
 // โฟลเดอร์หลักใน Google Drive: ระบบจะสร้างไฟล์และโฟลเดอร์ทั้งหมด "ภายในโฟลเดอร์นี้เท่านั้น"
 var ROOT_FOLDER_ID = '1HcYvW2C0e-sDZZ-fX7OpRIApfz6YiHSY';
+// โฟลเดอร์ไฟล์ต้นฉบับ ปพ.5 / ปพ.6 ปีที่แล้ว: ระบบ "อ่านอย่างเดียว" เพื่อใช้เป็นแม่แบบของแต่ละห้อง/วิชา
+var SOURCE_FOLDER_ID = '16yXoxARn6S6KbfJalxv8i5Lk04arN8ZG';
 // ชื่อบนแท็บเบราว์เซอร์ของหน้าหลังบ้าน
 var ADMIN_TITLE = 'หลังบ้าน ปพ.5 / ปพ.6';
 
@@ -37,8 +40,46 @@ function include(name) {
 }
 
 // ===== ตัวช่วย =====
+// ระบบที่ผู้ดูแลหลักเปิด/ปิดได้ (ค่าเริ่มต้น = เปิดทั้งหมด)
+var FLAG_DEFS = {
+  publicOpen: 'หน้าประกาศผล (ผู้ปกครองดูผลการเรียน)',
+  showMid: 'แสดงผลกลางปี (ภาคเรียนที่ 1)',
+  showFinal: 'แสดงผลปลายปี (เกรด)',
+  allowUpload: 'อัปโหลดไฟล์ ปพ.5 / ปพ.6',
+  allowEdit: 'กรอกคะแนนในระบบ',
+  allowDelete: 'ลบไฟล์ / ล้างข้อมูล',
+  allowRoster: 'อัปโหลดรายชื่อนักเรียน',
+  allowPublish: 'เผยแพร่ / ตั้งค่าหน้าประกาศผล',
+  allowReport: 'สร้างใบรายงาน PDF'
+};
+function flags_() {
+  var v = {}; try { v = JSON.parse(props_().getProperty('FLAGS') || '{}'); } catch (e) {}
+  var out = {}; Object.keys(FLAG_DEFS).forEach(function (k) { out[k] = v[k] !== false; });
+  return out;
+}
+function roleOf_(pin) {
+  pin = String(pin || '');
+  if (ADMIN_PIN && pin === String(ADMIN_PIN)) return 'admin';
+  if (TEACHER_PIN && pin === String(TEACHER_PIN)) return 'teacher';
+  if (!TEACHER_PIN && !ADMIN_PIN) return 'admin';
+  return null;
+}
 function checkPin_(pin) {
-  if (ACCESS_PIN && String(pin || '') !== String(ACCESS_PIN)) throw new Error('PIN_REQUIRED');
+  var role = roleOf_(pin);
+  if (!role) {
+    // กันการเดารหัส: ผิดเกิน 20 ครั้งใน 10 นาที พักทั้งระบบชั่วคราว
+    var c = cache_(), k = 'pinfail', n = +(c.get(k) || 0);
+    if (n >= 20) throw new Error('PIN_LOCKED');
+    if (pin) c.put(k, String(n + 1), 600);
+    throw new Error('PIN_REQUIRED');
+  }
+  return role;
+}
+/** ตรวจรหัส + ระบบนั้นต้องเปิดอยู่ (ผู้ดูแลหลักทำได้เสมอ) */
+function need_(pin, flag) {
+  var role = checkPin_(pin);
+  if (role !== 'admin' && flag && !flags_()[flag]) throw new Error('ปิดใช้งาน: ' + FLAG_DEFS[flag] + ' (ผู้ดูแลระบบปิดไว้)');
+  return role;
 }
 function props_() { return PropertiesService.getScriptProperties(); }
 function cache_() { return CacheService.getScriptCache(); }
@@ -99,15 +140,27 @@ function writeText_(folder, name, id, text) {
 
 // ===== API หลังบ้าน =====
 function api_ping(pin) {
-  checkPin_(pin);
+  var role = checkPin_(pin);
   var root = rootFolder_();
-  return { ok: true, rootUrl: root.getUrl(), pin: !!ACCESS_PIN, publicUrl: webUrl_() };
+  return { ok: true, rootUrl: root.getUrl(), role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_() };
+}
+/** ตรวจรหัสจากแป้นตัวเลข (หน้าแรก/หลังบ้าน) */
+function api_checkPin(pin) {
+  try { return { role: checkPin_(pin) }; } catch (e) { return { role: null, locked: /LOCKED/.test(e.message) }; }
+}
+function api_getFlags(pin) { checkPin_(pin); return { flags: flags_(), defs: FLAG_DEFS }; }
+function api_setFlags(pin, json) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  var v = JSON.parse(json || '{}'), out = {};
+  Object.keys(FLAG_DEFS).forEach(function (k) { out[k] = v[k] !== false; });
+  props_().setProperty('FLAGS', JSON.stringify(out));
+  return out;
 }
 function api_list(pin) { checkPin_(pin); return allEntries_(); }
 
 /** บันทึกไฟล์ (อัปโหลด หรือที่ระบบสร้างจากการกรอกในระบบ) */
 function api_save(pin, entry, fileB64, dataJson) {
-  checkPin_(pin);
+  need_(pin, entry && entry.origName === '(กรอกในระบบ)' ? 'allowEdit' : 'allowUpload');
   if (!entry || !entry.key) throw new Error('ข้อมูลไม่ครบ');
   return withLock_(function () {
     var old = getEntry_(entry.key);
@@ -151,7 +204,7 @@ function api_saveSettings(pin, key, settingsJson) {
   });
 }
 function api_delete(pin, key) {
-  checkPin_(pin);
+  need_(pin, 'allowDelete');
   return withLock_(function () {
     var e = getEntry_(key);
     if (e) { trashById_(e.fileId); trashById_(e.dataId); }
@@ -160,20 +213,27 @@ function api_delete(pin, key) {
   });
 }
 function api_clear(pin) {
-  checkPin_(pin);
+  need_(pin, 'allowDelete');
   return withLock_(function () {
     allEntries_().forEach(function (e) { trashById_(e.fileId); trashById_(e.dataId); props_().deleteProperty(PROP_PREFIX + e.key); });
     return true;
   });
 }
 function api_saveOutput(pin, name, b64, mime) {
-  checkPin_(pin);
+  need_(pin, 'allowReport');
   var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
   return folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime || 'application/pdf', safeName_(name))).getUrl();
 }
 
 // ===== แม่แบบรูปแบบต้นฉบับ (ปพ.5 ครูหนุ่ม / ปพ.6 ของโรงเรียน) =====
-function tplInfo_() { var v = props_().getProperty('TPL_INFO'); return v ? JSON.parse(v) : {}; }
+// คีย์แม่แบบ: "pp5|ชั้น|วิชา" / "pp6|ชั้น" (แม่แบบของห้อง/วิชานั้นจากโฟลเดอร์ต้นฉบับ) หรือ "pp5" / "pp6" (ใช้ได้ทุกชั้น)
+var TPL_KEY_RE = /^pp[56](\|\d{1,2}(\|[A-Za-z0-9_\-]{1,40})?)?$/;
+function tplInfo_() {
+  var all = props_().getProperties(), out = {};
+  if (all.TPL_INFO) { try { var old = JSON.parse(all.TPL_INFO); Object.keys(old).forEach(function (k) { out[k] = old[k]; }); } catch (e) {} }
+  Object.keys(all).forEach(function (k) { if (k.indexOf('tpl:') === 0) { try { out[k.slice(4)] = JSON.parse(all[k]); } catch (e) {} } });
+  return out;
+}
 function api_templateInfo(pin) {
   checkPin_(pin);
   var info = tplInfo_(), out = {};
@@ -188,22 +248,49 @@ function api_getTemplate(pin, kind) {
 }
 function api_saveTemplate(pin, kind, b64, name) {
   checkPin_(pin);
-  if (kind !== 'pp5' && kind !== 'pp6') throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
+  if (!TPL_KEY_RE.test(String(kind))) throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
   return withLock_(function () {
-    var info = tplInfo_(), old = info[kind];
+    var old = tplInfo_()[kind];
     var folder = subFolder_(rootFolder_(), TPL_FOLDER_NAME);
-    var ext = kind === 'pp5' ? '.xlsm' : '.xlsx';
-    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/octet-stream', 'แม่แบบ ' + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ext));
-    if (old) trashById_(old.fileId);
-    info[kind] = { fileId: file.getId(), name: name, savedAt: Date.now() };
-    props_().setProperty('TPL_INFO', JSON.stringify(info));
+    var ext = kind.indexOf('pp5') === 0 ? '.xlsm' : '.xlsx';
+    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/octet-stream', 'แม่แบบ ' + kind.replace('pp5', 'ปพ.5').replace('pp6', 'ปพ.6').replace(/\|/g, ' ') + ext));
+    if (old && old.fileId) trashById_(old.fileId);
+    props_().setProperty('tpl:' + kind, JSON.stringify({ fileId: file.getId(), name: String(name || '').slice(0, 200), savedAt: Date.now() }));
     return true;
   });
 }
 
+// ===== ไฟล์ต้นฉบับของโรงเรียน (อ่านอย่างเดียว ไม่สร้าง/แก้ไขอะไรในโฟลเดอร์นี้) =====
+// ใช้เป็นแม่แบบรูปแบบต้นฉบับของแต่ละห้อง/วิชาโดยอัตโนมัติ
+function api_sourceList(pin) {
+  checkPin_(pin);
+  var c = cache_().get('srcList');
+  if (c) return JSON.parse(c);
+  var out = [];
+  function walk(folder, path, depth) {
+    var files = folder.getFiles();
+    while (files.hasNext() && out.length < 400) {
+      var f = files.next(), n = f.getName();
+      if (/\.xls[xm]$/i.test(n)) out.push({ id: f.getId(), name: n, path: path, size: f.getSize() });
+    }
+    if (depth > 4) return;
+    var subs = folder.getFolders();
+    while (subs.hasNext()) { var s = subs.next(); walk(s, path ? path + '/' + s.getName() : s.getName(), depth + 1); }
+  }
+  try { walk(DriveApp.getFolderById(SOURCE_FOLDER_ID), '', 0); } catch (e) { throw new Error('เปิดโฟลเดอร์ไฟล์ต้นฉบับไม่ได้ (SOURCE_FOLDER_ID) กรุณาตรวจสิทธิ์การเข้าถึง'); }
+  try { cache_().put('srcList', JSON.stringify(out), 21600); } catch (e) {}
+  return out;
+}
+function api_sourceFile(pin, id) {
+  checkPin_(pin);
+  var list = api_sourceList(pin), hit = list.filter(function (x) { return x.id === id; })[0];
+  if (!hit) throw new Error('ไม่พบไฟล์นี้ในโฟลเดอร์ต้นฉบับ');
+  return { name: hit.name, b64: Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) };
+}
+
 // ===== ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) — เก็บทุกฉบับไว้เป็นประวัติ ใช้ฉบับล่าสุด =====
 function api_saveRoster(pin, b64, fileName, dataJson, dateText) {
-  checkPin_(pin);
+  need_(pin, 'allowRoster');
   return withLock_(function () {
     var folder = subFolder_(rootFolder_(), ROSTER_FOLDER_NAME);
     var name = (dateText ? 'ข้อมูล ' + safeName_(dateText) + ' - ' : '') + safeName_(fileName);
@@ -212,6 +299,7 @@ function api_saveRoster(pin, b64, fileName, dataJson, dateText) {
     var dataId = writeText_(subFolder_(rootFolder_(), DATA_FOLDER_NAME), 'roster.json', old.dataId, dataJson);
     var info = { fileId: file.getId(), url: file.getUrl(), fileName: fileName, dataId: dataId, uploadedAt: Date.now() };
     props_().setProperty('ROSTER', JSON.stringify(info));
+    try { cache_().remove('rosterIdx'); } catch (e) {}
     return info;
   });
 }
@@ -247,7 +335,7 @@ function saveIndex_(idx) {
 
 /** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
 function api_publish(pin, key, pubJson) {
-  checkPin_(pin);
+  need_(pin, 'allowPublish');
   return withLock_(function () {
     var pub = JSON.parse(pubJson);
     if (pub.logo) {
@@ -270,7 +358,7 @@ function api_publish(pin, key, pubJson) {
   });
 }
 function api_unpublish(pin, key) {
-  checkPin_(pin);
+  need_(pin, 'allowPublish');
   return withLock_(function () {
     var idx = readIndex_(), old = idx.classes[key];
     if (!old) return true;
@@ -293,7 +381,7 @@ function api_getPublicCfg(pin) {
   return cfg;
 }
 function api_savePublicCfg(pin, cfgJson) {
-  checkPin_(pin);
+  need_(pin, 'allowPublish');
   var cfg = JSON.parse(cfgJson);
   delete cfg.url;
   props_().setProperty('PUBLIC_CFG', JSON.stringify(cfg));
@@ -302,16 +390,19 @@ function api_savePublicCfg(pin, cfgJson) {
 
 // ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
 function api_publicInfo() {
+  var fl = flags_();
+  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_() };
   var cfg = getCfg_(), idx = readIndex_(), years = {};
   Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
   var u = webUrl_();
   return {
     title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
-    years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid, final: !!v.final }; }),
+    years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
     logo: readText_(props_().getProperty('PUB_LOGO_ID')),
-    adminUrl: u ? u.replace(/\?.*$/, '') + '?page=admin' : ''
+    adminUrl: adminUrl_()
   };
 }
+function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }
 
 /** ค้นหาผลของนักเรียน 1 คน (คืนเฉพาะข้อมูลของคนนั้น ไม่คืนทั้งห้อง) */
 function api_lookup(id, code) {
@@ -324,11 +415,13 @@ function api_lookup(id, code) {
   if (g > 600) throw new Error('TRY_LATER');
   c.put(gk, String(g + 1), 120);
 
+  var fl = flags_();
+  if (!fl.publicOpen) throw new Error('CLOSED');
   var cfg = getCfg_(), idx = readIndex_(), years = [], who = null;
   (idx.ids[id] || []).forEach(function (key) {
     var meta = idx.classes[key];
     if (!meta) return;
-    var yc = cfg.years[meta.year] || { mid: true, final: true };
+    var yc0 = cfg.years[meta.year] || { mid: true, final: true }, yc = { mid: yc0.mid && fl.showMid, final: yc0.final && fl.showFinal };
     if (!yc.mid && !yc.final) return;
     var t = readText_(meta.fileId);
     if (!t) return;
@@ -339,8 +432,33 @@ function api_lookup(id, code) {
     who = who || s;
     years.push({ year: pub.year, className: pub.className, no: s.no, school: pub.school, mid: yc.mid ? s.mid : null, final: yc.final ? s.final : null });
   });
+  if (!years.length) {
+    // ยังไม่มีผลที่ประกาศ แต่มีชื่อในทะเบียนนักเรียน: แสดงข้อมูลนักเรียนพร้อมสถานะ "รอประกาศผล" (ไม่ขึ้นว่าไม่พบ)
+    var rs = rosterStudent_(id);
+    if (rs && !(cfg.verify === 'id+nid4' && (!rs.s.nid4 || code !== String(rs.s.nid4)))) {
+      who = { name: ((rs.s.prefix || '') + (rs.s.first || '') + ' ' + (rs.s.last || '')).trim(), first: rs.s.first || '' };
+      years.push({ year: rs.c.year, className: 'ประถมศึกษาปีที่ ' + rs.c.level + '/' + rs.c.room, no: rs.s.no, school: cfg.school || '', mid: null, final: null, pending: true });
+    }
+  }
   if (!years.length) { c.put(fk, String(fails + 1), 600); return { notFound: true }; }
   return { id: id, name: who.name, first: who.first, years: years };
+}
+
+function rosterStudent_(id) {
+  var c = cache_(), t = c.get('rosterIdx');
+  if (!t) {
+    var v = props_().getProperty('ROSTER');
+    if (!v) return null;
+    var d = JSON.parse(readText_(JSON.parse(v).dataId) || '{}'), m = {};
+    (d.classes || []).forEach(function (cl) {
+      (cl.students || []).forEach(function (s) {
+        if (s.id) m[s.id] = { s: { no: s.no, prefix: s.prefix, first: s.first, last: s.last, nid4: s.nid4 }, c: { year: cl.year || d.year, level: cl.level, room: cl.room } };
+      });
+    });
+    t = JSON.stringify(m);
+    try { c.put('rosterIdx', t, 600); } catch (e) {}
+  }
+  return JSON.parse(t)[id] || null;
 }
 
 /** เรียกครั้งแรกจากหน้าแก้ไขสคริปต์ เพื่ออนุญาตสิทธิ์ และตรวจโฟลเดอร์หลัก */

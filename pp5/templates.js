@@ -312,12 +312,59 @@
     book.zip.file(dp, out.join(''));
   }
 
+  // ---------- ชีต "สารบัญ": ลิงก์ไปทุกชีต ใช้สไตล์จากไฟล์ต้นฉบับ ----------
+  var DESC = {
+    'ตั้งค่า': 'ข้อมูลโรงเรียน ชั้น รายวิชา ครูผู้สอน และสัดส่วนคะแนน', 'รายชื่อนักเรียน': 'เลขประจำตัว ชื่อ-สกุล เพศ สถานะ',
+    'บันทึกมาเรียน_T1': 'บันทึกการมาเรียนรายวัน ภาคเรียนที่ 1', 'บันทึกมาเรียน_T2': 'บันทึกการมาเรียนรายวัน ภาคเรียนที่ 2',
+    'สรุปเวลาเรียน': 'สรุปป่วย ลา ขาด มาเรียน และร้อยละ', 'มาตรฐาน': 'มาตรฐานการเรียนรู้ของรายวิชา', 'ตัวชี้วัด': 'ตัวชี้วัดแต่ละภาคเรียน',
+    'คะแนนเก็บตามตัวชี้วัด': 'กรอกคะแนนเก็บของแต่ละตัวชี้วัด', 'ประเมินตัวชี้วัด': 'ระดับผลการประเมินรายตัวชี้วัด',
+    'สรุปประเมินตัวชี้วัด': 'จำนวนตัวชี้วัดที่ผ่าน / ไม่ผ่าน', 'ประเมินผลการเรียน': 'คะแนนเก็บ ปลายภาค รวม และระดับผลการเรียน',
+    'ประเมินกิจกรรมพัฒนาผู้เรียน': 'แนะแนว ลูกเสือ-เนตรนารี ชุมนุม กิจกรรมเพื่อสังคม', 'คุณลักษณะอันพึงประสงค์': 'รายการคุณลักษณะ 8 ประการ',
+    'ประเมินคุณลักษณะ': 'คะแนนคุณลักษณะอันพึงประสงค์', 'ประเมินการอ่าน': 'การอ่าน', 'ประเมินการคิด': 'การคิดวิเคราะห์', 'ประเมินการเขียน': 'การเขียนสื่อความ',
+    'สรุปประเมินอ่านคิดเขียน': 'สรุปการอ่าน คิดวิเคราะห์ และเขียน', 'สรุปผลการพัฒนาคุณภาพผู้เรียน': 'สรุปผลทุกด้านรายบุคคล',
+    'ปกหน้า': 'ปกหน้า ปพ.5 สำหรับพิมพ์', 'ปกหลัง': 'ปกหลัง ปพ.5 สำหรับพิมพ์ (ลงนาม)',
+    'อ่านก่อนทำ': 'คำแนะนำการกรอก', 'ข้อมูลทั้งหมด': 'ครูประจำชั้น รหัสวิชา และตารางหน่วยกิต', 'บันทึกสุขภาพและพฤติกรรมนักเรียน': 'น้ำหนัก ส่วนสูง และความคิดเห็นของครู',
+    'บันทึกเวลาเรียน': 'เวลาเรียนภาคเรียนที่ 1 และ 2', 'ผลสัมฤทธิ์ฯ เทอม 1': 'คะแนนเก็บ/สอบ ภาคเรียนที่ 1 และคะแนนทั้งปี (ตารางล่าง)',
+    'ผลสัมฤทธิ์ฯ เทอม 2': 'คะแนนภาคเรียนที่ 2 (คำนวณจากคะแนนทั้งปี)', 'ผลสัมฤทธิ์ฯ รายปีการศึกษา': 'คะแนนรวม เกรด เกรดเฉลี่ย และอันดับ',
+    'จำนวนนร.แยกระดับผลการเรียน': 'จำนวนนักเรียนแต่ละระดับผลการเรียน', 'การคิดวิเคราะห์และเขียน': 'คะแนนอ่าน คิดวิเคราะห์ และเขียน',
+    'สมรรถนะของผู้เรียน': 'สมรรถนะสำคัญ 5 ด้าน', 'ใบรายงานผลการเรียน รายบุคคล': 'ใบรายงาน ปพ.6 (เปลี่ยนเลขที่ที่ช่อง H3 เพื่อพิมพ์รายคน)'
+  };
+  async function addTOC(book, kind, data) {
+    var m = data.meta, x = XF.xmlEsc;
+    var st = kind === 'pp5'
+      ? { title: await book.styleOf('ตั้งค่า', 'A8'), head: await book.styleOf('รายชื่อนักเรียน', 'A5'), body: await book.styleOf('รายชื่อนักเรียน', 'E6'), num: await book.styleOf('รายชื่อนักเรียน', 'A6') }
+      : { title: await book.styleOf('ผลสัมฤทธิ์ฯ เทอม 1', 'A1'), head: await book.styleOf('บันทึกเวลาเรียน', 'A2'), body: await book.styleOf('บันทึกเวลาเรียน', 'B4'), num: await book.styleOf('บันทึกเวลาเรียน', 'A4') };
+    var sAttr = function (k) { return st[k] ? ' s="' + st[k] + '"' : ''; };
+    var cell = function (ref, v, k) { return '<c r="' + ref + '"' + sAttr(k) + (typeof v === 'number' ? '><v>' + v + '</v></c>' : ' t="inlineStr"><is><t xml:space="preserve">' + x(v) + '</t></is></c>'); };
+    var title = kind === 'pp5' ? 'สารบัญ ปพ.5 วิชา ' + m.code + ' ' + m.subject + ' ชั้น' + (m.gradeName || '') + '/' + m.room + ' ปีการศึกษา ' + m.year
+      : 'สารบัญ ปพ.6 ชั้น' + (m.className || '') + ' ปีการศึกษา ' + m.year;
+    var rows = ['<row r="1" ht="30" customHeight="1">' + cell('A1', title, 'title') + '</row>',
+      '<row r="2">' + cell('A2', 'คลิกชื่อชีตเพื่อไปยังหน้านั้น (สร้างจากระบบวิเคราะห์ผลการเรียน โรงเรียนวัดทุ่งแฝก)') + '</row>',
+      '<row r="3" ht="24" customHeight="1">' + cell('A3', 'ที่', 'head') + cell('B3', 'ชีต', 'head') + cell('C3', 'รายละเอียด', 'head') + '</row>'];
+    var links = [];
+    book.order.filter(function (n) { return n !== 'สารบัญ' && n !== 'Sheet1'; }).forEach(function (n, i) {
+      var r = 4 + i;
+      rows.push('<row r="' + r + '" ht="22" customHeight="1">' + cell('A' + r, i + 1, 'num') + cell('B' + r, n, 'body') + cell('C' + r, DESC[n] || '', 'body') + '</row>');
+      links.push('<hyperlink ref="B' + r + '" location="' + x("'" + n.replace(/'/g, "''") + "'!A1") + '" display="' + x(n) + '"/>');
+    });
+    var last = 3 + links.length;
+    var xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheetPr><tabColor rgb="FF1767EE"/></sheetPr><dimension ref="A1:C' + last + '"/>' +
+      '<sheetViews><sheetView showGridLines="0" tabSelected="1" workbookViewId="0"/></sheetViews><sheetFormatPr defaultRowHeight="18"/>' +
+      '<cols><col min="1" max="1" width="7" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/><col min="3" max="3" width="70" customWidth="1"/></cols>' +
+      '<sheetData>' + rows.join('') + '</sheetData><hyperlinks>' + links.join('') + '</hyperlinks>' +
+      '<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/></worksheet>';
+    await book.addSheet('สารบัญ', xml, true);
+  }
+
   /** สร้างไฟล์: kind = 'pp5' | 'pp6', template = ไบต์ของแม่แบบ, data = ข้อมูล (null = แม่แบบเปล่า) */
   async function build(kind, template, data) {
     var book = await XF.open(template);
     var k = detect(book.order);
     if (k !== kind) throw new Error('แม่แบบไม่ใช่ไฟล์ ' + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ' รูปแบบต้นฉบับ');
     if (kind === 'pp5') await fillPP5(book, data); else await fillPP6(book, data);
+    if (data && !book.has('สารบัญ')) await addTOC(book, kind, data);
     return book.output();
   }
 

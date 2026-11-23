@@ -170,6 +170,47 @@
     for (var k in r) if (/drawings\//.test(r[k])) return resolve(p, r[k]);
     return null;
   };
+  // สไตล์ (s) ของเซลล์ในชีตอื่น เพื่อให้ชีตใหม่ใช้ฟอนต์/กรอบเดียวกับไฟล์ต้นฉบับ
+  Book.prototype.styleOf = async function (sheetName, addr) {
+    var ws = await this.sheet(sheetName);
+    var c = ws && ws.cell(addr);
+    return c ? attr(c.attrs, 's') : null;
+  };
+  // เพิ่มชีตใหม่ไว้ท้ายสุด (ไม่กระทบลำดับชีตเดิม มาโคร และพื้นที่พิมพ์) และให้เปิดไฟล์มาที่ชีตนี้
+  Book.prototype.addSheet = async function (name, sheetXml, makeActive) {
+    if (this.paths[name]) return false;
+    var n = 1;
+    while (this.zip.file('xl/worksheets/sheet' + n + '.xml')) n++;
+    var path = 'xl/worksheets/sheet' + n + '.xml';
+    this.zip.file(path, sheetXml);
+    var ct = await this.zip.file('[Content_Types].xml').async('string');
+    ct = ct.replace('</Types>', '<Override PartName="/' + path + '" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    this.zip.file('[Content_Types].xml', ct);
+    var relsPath = 'xl/_rels/workbook.xml.rels', rx = await this.zip.file(relsPath).async('string');
+    var id = 1;
+    while (rx.indexOf('Id="rId' + id + '"') >= 0) id++;
+    rx = rx.replace('</Relationships>', '<Relationship Id="rId' + id + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + n + '.xml"/></Relationships>');
+    this.zip.file(relsPath, rx);
+    var maxId = 0, re = /<sheet\b[^>]*sheetId="(\d+)"/g, m;
+    while ((m = re.exec(this.wbXml))) maxId = Math.max(maxId, +m[1]);
+    this.wbXml = this.wbXml.replace('</sheets>', '<sheet name="' + xmlEsc(name) + '" sheetId="' + (maxId + 1) + '" r:id="rId' + id + '"/></sheets>');
+    var index = this.order.length;
+    this.order.push(name); this.paths[name] = path;
+    if (makeActive) {
+      if (/<workbookView\b[^>]*activeTab="/.test(this.wbXml)) this.wbXml = this.wbXml.replace(/(<workbookView\b[^>]*activeTab=")\d+"/, '$1' + index + '"');
+      else this.wbXml = this.wbXml.replace(/<workbookView\b/, '<workbookView activeTab="' + index + '"');
+      this.wbXml = this.wbXml.replace(/(<workbookView\b[^>]*?)\sfirstSheet="\d+"/, '$1');
+      await this.loadAll();
+      var self = this;
+      this.order.forEach(function (nm) {
+        var sh = self.sheets[nm];
+        if (sh && sh.path !== path && /tabSelected="1"/.test(sh.head)) { sh.head = sh.head.replace(/\s*tabSelected="1"/g, ''); sh.dirty = true; }
+      });
+    }
+    this.sheets[name] = new Sheet(this, path, sheetXml);
+    return true;
+  };
+
   // ส่งออก: ลบค่าแคชของสูตร ให้ Excel คำนวณใหม่ตอนเปิด และลดตาราง sharedStrings ให้เหลือเฉพาะที่ใช้
   Book.prototype.output = async function () {
     await this.loadAll();
@@ -221,7 +262,7 @@
     return new Book(zip).init();
   }
 
-  return { open: open, colName: colName, colNum: colNum, split: split };
+  return { open: open, colName: colName, colNum: colNum, split: split, xmlEsc: xmlEsc };
 });
 
 </script>

@@ -24,6 +24,9 @@
     }
     var all = (p6 ? [p6] : []).concat(recs);
     all.forEach(function (r) { r.data.students.forEach(function (s) { if (!base(s)) skipped++; }); });
+    // นักเรียนทุกคนในทะเบียนของห้องนี้ (แม้ยังไม่มีคะแนนในไฟล์ใด) เพื่อให้ผู้ปกครองค้นเจอเสมอ
+    var cr0 = c.classRoster ? c.classRoster() : null;
+    if (cr0) cr0.forEach(function (s) { base({ id: s.id, no: s.no, name: M().fullName(s), first: s.first, nid4: s.nid4 }); });
     // เลขบัตร 4 ตัวท้ายจากทะเบียนรายชื่อ (ใช้ยืนยันตัวตนผู้ปกครอง)
     var reg = c.rosterById ? c.rosterById() : {};
     order.forEach(function (k) { if (!map[k].nid4 && reg[k] && reg[k].s.nid4) map[k].nid4 = reg[k].s.nid4; });
@@ -38,7 +41,7 @@
         var b = s.id && map[String(s.id).trim()];
         if (!b) return;
         var subs = p6.data.subjects.map(function (sub) { var x = s.t1[sub.code] || {}; return { code: sub.code, name: sub.name, collect: num(x.collect), exam: num(x.exam), total: num(x.total) }; });
-        if (!subs.some(function (x) { return x.total != null; })) return;
+        if (!subs.some(function (x) { return x.total != null || x.collect != null || x.exam != null; })) return;
         var a = (s.attendance && s.attendance.t1) || {};
         b.mid = { source: 'pp6', max: max, subjects: subs, attendance: { total: num(a.total), present: num(a.present), pct: a.total ? r2(a.present / a.total * 100) : null } };
       });
@@ -54,7 +57,7 @@
           subs.push({ code: r.data.meta.code, name: r.data.meta.subject, collect: any ? sc : null, collectMax: mx || null });
           if (!att && s.attendance && s.attendance.t1 && s.attendance.t1.pct != null) att = { pct: s.attendance.t1.pct };
         });
-        if (subs.some(function (x) { return x.collect != null; })) b.mid = { source: 'pp5', subjects: subs, attendance: att };
+        if (subs.length) b.mid = { source: 'pp5', subjects: subs, attendance: att, partial: subs.some(function (x) { return x.collect == null; }) };
       });
     }
 
@@ -64,31 +67,35 @@
       var list = window.PP6Report.computeWith(p6, c.reportCtx, { gradeMode: 'year' });
       list.forEach(function (x) {
         var b = x.s.id && map[String(x.s.id).trim()];
-        if (!b || !x.rows.every(function (r) { return r.grade != null && r.basis !== 'term1'; })) return;
+        if (!b) return;
+        var complete = x.rows.every(function (r) { return r.grade != null && r.basis !== 'term1'; });
+        if (!complete && !x.rows.some(function (r) { return r.t2 != null || r.total != null; })) return;
         var cr = x.rows.reduce(function (a, r) { return a + (typeof r.grade === 'number' && r.sub.credit ? r.sub.credit : 0); }, 0);
         b.final = {
           subjects: x.rows.map(function (r) { return { code: r.sub.code, name: r.sub.name, credit: r.sub.credit, basic: r.sub.basic, t1: r.t1, t2: r.t2, total: r.total, grade: r.grade }; }),
           gpa: r2(x.gpa), pct: r2(x.pct), credits: cr, attPct: x.attPct, ind: { total: x.indTot, passed: x.indPassed },
           chars: x.s.characteristics && x.s.characteristics.summary || '', rtw: x.s.rtw && x.s.rtw.result || '',
-          acts: x.acts, promote: x.promote, grad: meta.level === 6
+          acts: x.acts, promote: complete ? x.promote : null, grad: meta.level === 6, partial: !complete
         };
+        if (!complete) b.final.subjects.forEach(function (r, i) { if (x.rows[i].basis === 'term1') r.grade = null; });
       });
     } else if (!p6 && recs.length) {
       order.forEach(function (k) {
         var b = map[k], rows = [], ok = true, attS = [];
         recs.forEach(function (r) {
           var s = r.data.students.filter(function (x) { return String(x.id).trim() === k; })[0];
-          if (!s || !s.result) { ok = false; return; }
-          var g = s.result.rms || (s.result.grade === '' || s.result.grade == null ? null : parseFloat(s.result.grade));
-          if (g == null || s.result.final == null && r.data.maxima.final) ok = false;
-          rows.push({ code: r.data.meta.code, name: r.data.meta.subject, credit: r.data.meta.credit, basic: r.data.meta.type !== 'เพิ่มเติม', total: s.result.total, grade: g });
-          if (s.attendance && s.attendance.year && s.attendance.year.pct != null) attS.push(s.attendance.year.pct);
+          var res = s && s.result || {};
+          var g = res.rms || (res.grade === '' || res.grade == null ? null : parseFloat(res.grade));
+          if (g == null || res.final == null && r.data.maxima.final) { ok = false; if (res.final == null) g = null; }
+          rows.push({ code: r.data.meta.code, name: r.data.meta.subject, credit: r.data.meta.credit, basic: r.data.meta.type !== 'เพิ่มเติม',
+            collect: num(res.collect), exam: num(res.final), total: res.final == null ? null : num(res.total), grade: g });
+          if (s && s.attendance && s.attendance.year && s.attendance.year.pct != null) attS.push(s.attendance.year.pct);
         });
-        if (!ok || !rows.length) return;
+        if (!rows.length || !rows.some(function (r) { return r.exam != null || r.grade != null; })) return;
         var cr = 0, gp = 0, pp = 0;
         rows.forEach(function (r) { if (typeof r.grade === 'number' && r.credit) { cr += r.credit; gp += r.grade * r.credit; pp += (r.total || 0) * r.credit; } });
         var allPass = rows.every(function (r) { return typeof r.grade === 'number' && r.grade >= 1; });
-        b.final = { subjects: rows, gpa: cr ? r2(gp / cr) : null, pct: cr ? r2(pp / cr) : null, credits: cr, attPct: attS.length ? r2(attS.reduce(function (a, v) { return a + v; }, 0) / attS.length) : null, promote: allPass ? true : false, grad: cls.level === 6 };
+        b.final = { subjects: rows, gpa: ok && cr ? r2(gp / cr) : null, pct: ok && cr ? r2(pp / cr) : null, credits: cr, attPct: attS.length ? r2(attS.reduce(function (a, v) { return a + v; }, 0) / attS.length) : null, promote: ok ? (allPass ? true : false) : null, grad: cls.level === 6, partial: !ok };
       });
     }
 
@@ -109,6 +116,7 @@
   function autoPublish(c, cls) {
     var store = c.store();
     if (!store || !store.publish) return;
+    if (store.role !== 'admin' && store.flags && store.flags.allowPublish === false) return; // ผู้ดูแลปิดการเผยแพร่ไว้
     var key = cls.year + '|' + cls.level + '|' + cls.room;
     clearTimeout(timers[key]);
     timers[key] = setTimeout(function () { publishClass(c).then(function (n) { if (n != null) c.toast('อัปเดตหน้าประกาศผลแล้ว (' + n + ' คน)', 'ok'); }, function (e) { c.toast('อัปเดตหน้าประกาศผลไม่สำเร็จ: ' + e.message, 'err'); }); }, 600);

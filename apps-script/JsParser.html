@@ -223,7 +223,8 @@
       if (norm(cell(ws, h.r, c)) !== 'มาตรฐานที่') continue;
       for (var r = h.r + 1; r <= b.e.r; r++) {
         var code = cell(ws, r, c), text = cell(ws, r, c + 1);
-        if (num(cell(ws, r, c - 1)) == null) continue;
+        var no = cell(ws, r, c - 1);   // เลขข้อเป็นสูตร: ไฟล์ที่ยังไม่ได้เปิดใน Excel จะว่าง
+        if (no != null && no !== '' && num(no) == null) continue;
         if (code) out.push({ code: String(code).trim(), text: text ? String(text) : '' });
       }
     }
