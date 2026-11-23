@@ -40,6 +40,7 @@
 | ไฟล์ในโฟลเดอร์นี้ | ชื่อใน Apps Script |
 |---|---|
 | `Code.gs` | `Code.gs` (มีอยู่แล้ว วางทับ) |
+| `Code2.gs` | สคริปต์ `Code2` (กด + → สคริปต์) — โค้ดเซิร์ฟเวอร์ส่วนที่ 2 |
 | `Public.html` | `Public` |
 | `CssPublic.html` | `CssPublic` |
 | `JsPublic.html` | `JsPublic` |

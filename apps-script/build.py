@@ -44,6 +44,23 @@ def replace_once(text, old, new):
     return text.replace(old, new)
 
 
+def split_gs(code, limit):
+    lines = code.rstrip('\n').split('\n')
+    parts, start = [], 0
+    while len(lines) - start > limit:
+        cut = None
+        for k in range(start + limit, start + 40, -1):   # หาจุดตัด: บรรทัดว่างก่อนฟังก์ชัน/หัวข้อ/คอมเมนต์ระดับบนสุด
+            if lines[k - 1].strip() == '' and re.match(r'(function |// =====|/\*\*|var )', lines[k]):
+                cut = k
+                break
+        if cut is None:
+            raise SystemExit('หาจุดตัด Code.gs ไม่ได้')
+        parts.append('\n'.join(lines[start:cut]).rstrip('\n') + '\n')
+        start = cut
+    parts.append('\n'.join(lines[start:]) + '\n')
+    return parts
+
+
 def build():
     html = read(WEB / 'index.html')
     css = read(WEB / 'style.css') + '\n' + read(WEB / 'report.css') + '\n' + read(WEB / 'public.css') + '\n[hidden]{display:none!important}\n'
@@ -83,7 +100,12 @@ def build():
     for n, p in parts:
         (HERE / (n + '.html')).write_text('<script>\n' + inline_js(read(p)) + '\n</script>\n', encoding='utf-8')
     (HERE / 'Index.html').write_text(html, encoding='utf-8')
-    (HERE / 'Code.gs').write_text(read(SRC / 'Code.gs'), encoding='utf-8')
+    # โค้ดเซิร์ฟเวอร์: แบ่งเป็นหลายไฟล์ .gs ไฟล์ละไม่เกิน 350 บรรทัด ตัดตรงรอยต่อฟังก์ชัน
+    # (Apps Script รวมทุกไฟล์ .gs เป็นโปรแกรมเดียว · ผู้ใช้คัดลอกบนแท็บเล็ตได้ทีละไฟล์ ไม่ต้องวางต่อท้าย)
+    for old in HERE.glob('Code*.gs'):
+        old.unlink()
+    for i, part in enumerate(split_gs(read(SRC / 'Code.gs'), 350)):
+        (HERE / ('Code.gs' if i == 0 else 'Code%d.gs' % (i + 1))).write_text(part, encoding='utf-8')
     manifest = {
         'timeZone': 'Asia/Bangkok',
         'exceptionLogging': 'STACKDRIVER',
