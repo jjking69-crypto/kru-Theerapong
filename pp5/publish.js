@@ -45,18 +45,16 @@
         b.mid = { source: 'pp6', max: max, subjects: subs, attendance: { total: num(a.total), present: num(a.present), pct: a.total ? r2(a.present / a.total * 100) : null } };
       });
     } else if (recs.length) {
+      // ไม่มี ปพ.6: คิดคะแนนภาคเรียนที่ 1 (เต็ม 50) จาก ปพ.5 แบบเดียวกับใบ ปพ.6
       order.forEach(function (k) {
         var b = map[k], subs = [], att = null;
         recs.forEach(function (r) {
           var s = r.data.students.filter(function (x) { return String(x.id).trim() === k; })[0];
-          if (!s) return;
-          var inds = r.data.indicators.filter(function (i) { return (i.term || 1) === 1; });
-          var mx = 0, sc = 0, any = false;
-          inds.forEach(function (i) { mx += i.max || 0; var v = num(s.scores[i.idx]); if (v != null) { sc += v; any = true; } });
-          subs.push({ code: r.data.meta.code, name: r.data.meta.subject, collect: any ? sc : null, collectMax: mx || null });
-          if (!att && s.attendance && s.attendance.t1 && s.attendance.t1.pct != null) att = { pct: s.attendance.t1.pct };
+          var t1 = s ? M().pp5TermScores(r.data, s).t1 : null;
+          subs.push({ code: r.data.meta.code, name: r.data.meta.subject, collect: t1 ? t1.collect : null, exam: t1 ? t1.exam : null, total: t1 ? t1.total : null });
+          if (!att && s && s.attendance && s.attendance.t1 && s.attendance.t1.pct != null) att = { pct: s.attendance.t1.pct };
         });
-        if (subs.length) b.mid = { source: 'pp5', subjects: subs, attendance: att, partial: subs.some(function (x) { return x.collect == null; }) };
+        if (subs.length) b.mid = { source: 'pp6', max: 50, subjects: subs, attendance: att, partial: subs.some(function (x) { return x.total == null; }) };
       });
     }
 

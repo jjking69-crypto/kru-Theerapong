@@ -28,6 +28,7 @@
   function askPin(msg) {
     if (asking) return asking;
     asking = window.PP5PinPad.ask({
+      home: window.PP5_HOME || '',
       title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบสำหรับครู', sub: msg || 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {

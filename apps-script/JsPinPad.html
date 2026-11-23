@@ -24,6 +24,7 @@
     '.pp-k.fn{background:transparent;font-size:16px;color:#475569}' +
     '.pp-k.ok{background:#1b3fae;color:#fff;font-size:17px}' +
     '.pp-k.ok:disabled{background:#cbd5e1}' +
+    '.pp-home{display:block;margin-top:4px;color:#1b3fae;font:600 15px Sarabun,sans-serif;text-decoration:none}' +
     '.pp-cancel{margin-top:14px;background:none;border:0;color:#64748b;font:15px Sarabun,sans-serif;cursor:pointer;padding:6px 14px}' +
     '@media (max-width:360px){.pp-k{width:62px;height:62px;font-size:24px}}';
 
@@ -47,7 +48,8 @@
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return '<button type="button" class="pp-k" data-k="' + n + '">' + n + '</button>'; }).join('') +
         '<button type="button" class="pp-k fn" data-k="del" aria-label="ลบ">⌫</button><button type="button" class="pp-k" data-k="0">0</button>' +
         '<button type="button" class="pp-k ok" data-k="ok" disabled>ตกลง</button></div>' +
-        '<button type="button" class="pp-cancel">ยกเลิก</button></div>';
+        '<button type="button" class="pp-cancel">ยกเลิก</button>' +
+        (o.home ? '<a class="pp-home" href="' + String(o.home).replace(/"/g, '&quot;') + '" target="_top">← กลับหน้าแรก</a>' : '') + '</div>';
       document.body.appendChild(bg);
       var dots = bg.querySelector('.pp-dots'), sub = bg.querySelector('.pp-sub'), okBtn = bg.querySelector('[data-k=ok]');
       function draw() {

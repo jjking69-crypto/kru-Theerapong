@@ -79,7 +79,7 @@ def build():
     html = re.sub(r'  <script src="[a-z0-9]+\.js"></script>\n', '', html)
     if re.search(r'(src|href)="(?!https://|#)', html):
         raise SystemExit('ยังมีไฟล์ที่อ้างแบบ relative เหลืออยู่')
-    html = replace_once(html, '</body>', ''.join("  <?!= include('%s') ?>\n" % n for n, _ in parts) + '</body>')
+    html = replace_once(html, '</body>', "  <script>window.PP5_HOME = <?!= JSON.stringify(homeUrl || '') ?>;</script>\n" + ''.join("  <?!= include('%s') ?>\n" % n for n, _ in parts) + '</body>')
     for n, p in parts:
         (HERE / (n + '.html')).write_text('<script>\n' + inline_js(read(p)) + '\n</script>\n', encoding='utf-8')
     (HERE / 'Index.html').write_text(html, encoding='utf-8')

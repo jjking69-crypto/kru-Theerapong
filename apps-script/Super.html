@@ -22,7 +22,7 @@
   <main class="wrap" id="sup"><div class="card empty-state"><b>กำลังโหลด...</b></div></main>
   <div id="toasts" aria-live="polite"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script>window.PP5_PIN_KEY = 'pp5-admin-pin'; window.PP5_NEED_ADMIN = true;</script>
+  <script>window.PP5_PIN_KEY = 'pp5-admin-pin'; window.PP5_NEED_ADMIN = true; window.PP5_HOME = <?!= JSON.stringify(homeUrl || '') ?>;</script>
   <?!= include('JsPinPad') ?>
   <?!= include('JsStore') ?>
   <?!= include('JsRoster') ?>

@@ -29,7 +29,9 @@ function doGet(e) {
   var page = e && e.parameter && e.parameter.page;
   var admin = page === 'admin', sup = page === 'super';
   var cfg = admin || sup ? null : getCfg_();
-  return HtmlService.createTemplateFromFile(sup ? 'Super' : admin ? 'Index' : 'Public').evaluate()
+  var t = HtmlService.createTemplateFromFile(sup ? 'Super' : admin ? 'Index' : 'Public');
+  t.homeUrl = webUrl_().replace(/\?.*$/, '');   // ปุ่ม "กลับหน้าแรก" ในหน้าครู/แอดมิน
+  return t.evaluate()
     .setTitle(sup ? 'ระบบผู้ดูแล (แอดมิน)' : admin ? ADMIN_TITLE : (cfg.title || 'ประกาศผลการเรียน') + (cfg.school ? ' ' + cfg.school : ''))
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);

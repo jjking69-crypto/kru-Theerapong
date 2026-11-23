@@ -313,6 +313,11 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .sup-list li { margin: 3px 0; }
 .muted { color: #94a3b8; }
 
+.top-acts a.tb { text-decoration: none; }
+.top-acts .home-tb { background: #fff; color: #1d4ed8; border-color: #fff; font-weight: 700; }
+.sup-top .top-acts .home-tb { color: #7f1d1d; }
+.top-acts .home-tb:hover { background: #e0e7ff; }
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }
@@ -536,10 +541,37 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 }
 
 /* ปุ่มสำหรับครู มุมขวาบน */
-.pub-teacher { position: absolute !important; top: 12px; right: 12px; z-index: 3 !important; background: #ffffff26; color: #fff; border: 1px solid #ffffff55; border-radius: 999px; padding: 7px 14px; font: 500 14px "Sarabun", sans-serif; cursor: pointer; backdrop-filter: blur(4px); }
+.pub-teacher-old { position: absolute !important; top: 12px; right: 12px; z-index: 3 !important; background: #ffffff26; color: #fff; border: 1px solid #ffffff55; border-radius: 999px; padding: 7px 14px; font: 500 14px "Sarabun", sans-serif; cursor: pointer; backdrop-filter: blur(4px); }
 .pub-teacher:hover { background: #ffffff40; }
 .pub-closed { text-align: center; padding: 34px 18px; }
 .pub-closed .ic { font-size: 44px; display: block; margin-bottom: 8px; }
+
+/* แท็บเข้าสู่ระบบ ครู / แอดมิน มุมขวาบน */
+.pub-login { position: absolute !important; top: 12px; right: 12px; z-index: 3 !important; display: flex; background: #0b1f5c55; border: 1px solid #ffffff44; border-radius: 999px; padding: 3px; gap: 3px; backdrop-filter: blur(4px); }
+.pub-login button { background: transparent; color: #fff; border: 0; border-radius: 999px; padding: 7px 14px; font: 600 14px "Sarabun", sans-serif; cursor: pointer; }
+.pub-login button:hover { background: #ffffff2e; }
+.pub-login button[data-login=admin] { background: #7f1d1dcc; }
+.pub-login button[data-login=admin]:hover { background: #991b1b; }
+@media (max-width: 420px) { .pub-login button { padding: 6px 10px; font-size: 13px; } }
+
+/* ระดับผลภาคเรียนที่ 1 */
+.pub-lv { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+.pub-lv-a { background: #dcfce7; color: #166534; }
+.pub-lv-b { background: #dbeafe; color: #1e40af; }
+.pub-lv-c { background: #ffedd5; color: #9a3412; }
+/* มุมมองแบบแคบ: คอลัมน์เดียวกลางจอ ตารางเป็นการ์ด */
+body.pub-narrow-page .pub-main { max-width: 480px; }
+.pub-narrow .pub-tiles { grid-template-columns: 1fr 1fr; }
+.pub-narrow .pub-tbl-wrap { overflow: visible; border: 0; background: transparent; }
+.pub-narrow .pub-tbl, .pub-narrow .pub-tbl tbody { display: block; width: 100%; }
+.pub-narrow .pub-tbl thead { display: none; }
+.pub-narrow .pub-tbl tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 10px 12px; margin: 0 0 8px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.pub-narrow .pub-tbl tr.pub-grp { display: block; border: 0; background: transparent; padding: 6px 2px 0; margin: 4px 0; }
+.pub-narrow .pub-tbl td { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 2px 0; border: 0; text-align: right; }
+.pub-narrow .pub-tbl td.l { grid-column: 1 / -1; display: block; text-align: left; border-bottom: 1px dashed #e2e8f0; padding-bottom: 6px; margin-bottom: 2px; }
+.pub-narrow .pub-tbl td[data-l]::before { content: attr(data-l); color: #64748b; font-size: 13px; font-weight: 500; text-align: left; }
+.pub-narrow .pub-tbl td .pub-bar { display: none; }
+.pub-narrow .pub-evals { grid-template-columns: 1fr; }
 
 [hidden]{display:none!important}
 </style>

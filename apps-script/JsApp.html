@@ -1145,9 +1145,10 @@
     var el = $('topActs');
     if (!el || DB === LocalDB) return;
     var adm = DB.role === 'admin';
-    el.innerHTML = '<span class="role">' + (adm ? '👑 ผู้ดูแลระบบหลัก' : '👩‍🏫 ครู') + '</span>' +
+    var home = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
+    el.innerHTML = (home ? '<a class="tb home-tb" href="' + esc(home) + '" target="_top">⬅ กลับหน้าแรก</a>' : '') +
+      '<span class="role">' + (adm ? '👑 ผู้ดูแลระบบหลัก' : '👩‍🏫 ระบบครู') + '</span>' +
       (adm && DB.publicUrl ? '<a class="tb" href="' + esc(DB.publicUrl.replace(/\?.*$/, '')) + '?page=super" target="_top" style="text-decoration:none">🛡 ระบบแอดมิน</a>' : '') +
-      (DB.publicUrl ? '<a class="tb" href="' + esc(DB.publicUrl) + '" target="_top" style="text-decoration:none">🏠 หน้าประกาศผล</a>' : '') +
       '<button class="tb" data-top="logout">ออกจากระบบ</button>';
     $('upBtn').hidden = !adm && DB.flags && DB.flags.allowUpload === false;
   }

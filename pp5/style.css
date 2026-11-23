@@ -311,3 +311,8 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .sup-list { margin: 8px 0 12px; padding-left: 18px; }
 .sup-list li { margin: 3px 0; }
 .muted { color: #94a3b8; }
+
+.top-acts a.tb { text-decoration: none; }
+.top-acts .home-tb { background: #fff; color: #1d4ed8; border-color: #fff; font-weight: 700; }
+.sup-top .top-acts .home-tb { color: #7f1d1d; }
+.top-acts .home-tb:hover { background: #e0e7ff; }

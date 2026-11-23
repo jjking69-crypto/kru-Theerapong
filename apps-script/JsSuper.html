@@ -13,9 +13,10 @@
   var SLOT_NAME = { th: 'ไทย', ma: 'คณิต', sci: 'วิทย์', soc: 'สังคม', his: 'ประวัติ', pe: 'สุขศึกษา', art: 'ศิลปะ', work: 'การงาน', eng: 'อังกฤษ', cor: 'ทุจริต' };
 
   function acts() {
-    var base = (DB.publicUrl || '').replace(/\?.*$/, '');
-    $('supActs').innerHTML = '<span class="role">👑 ผู้ดูแลระบบหลัก</span>' +
-      (base ? '<a class="tb" href="' + esc(base) + '?page=admin" target="_top">👩‍🏫 ไปที่ระบบครู</a><a class="tb" href="' + esc(base) + '" target="_top">🏠 หน้าประกาศผล</a>' : '') +
+    var base = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
+    $('supActs').innerHTML = (base ? '<a class="tb home-tb" href="' + esc(base) + '" target="_top">⬅ กลับหน้าแรก</a>' : '') +
+      '<span class="role">🛡 ระบบแอดมิน</span>' +
+      (base ? '<a class="tb" href="' + esc(base) + '?page=admin" target="_top">👩‍🏫 ไปที่ระบบครู</a>' : '') +
       '<button class="tb" id="supOut">ออกจากระบบ</button>';
     $('supOut').onclick = function () { if (confirm('ออกจากระบบผู้ดูแล?')) window.PP5_LOGOUT(); };
   }
