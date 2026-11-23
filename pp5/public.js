@@ -181,7 +181,7 @@
           return call('api_checkPin', [p]).then(function (r) {
             var role = r && r.role;
             if (!role) return r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง';
-            if (want === 'admin' && role !== 'admin') return 'รหัสนี้เป็นรหัสครู กรุณาใช้แท็บ "ครู"';
+            if (want === 'admin' && role !== 'admin') return 'รหัสนี้เป็นรหัสครู กรุณาเลือกเข้าสู่ระบบแบบ "ครู"';
             return true;
           });
         }
@@ -191,8 +191,13 @@
         if (url) window.open(url, '_top');
       });
     }
+    var lb = $('pubLoginBtn'), lm = $('pubLoginMenu');
+    function menu(open) { if (!lm) return; lm.hidden = !open; if (lb) lb.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    if (lb) lb.addEventListener('click', function (e) { e.stopPropagation(); menu(lm.hidden); });
+    document.addEventListener('click', function (e) { if (lm && !lm.hidden && !e.target.closest('.pub-login')) menu(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu(false); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-login]'), function (b) {
-      b.addEventListener('click', function () { login(b.dataset.login); });
+      b.addEventListener('click', function () { menu(false); login(b.dataset.login); });
     });
     if (info.closed) {
       $('pubSearch').innerHTML = '<div class="pub-card pub-closed"><span class="ic">🔒</span><h2>ปิดระบบประกาศผลชั่วคราว</h2><p>ขณะนี้โรงเรียนยังไม่เปิดให้ดูผลการเรียน กรุณากลับมาใหม่ภายหลัง</p></div>';

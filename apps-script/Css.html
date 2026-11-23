@@ -355,6 +355,85 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 
 .ed-empty-ind { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 10px 14px; margin: 0 0 10px; color: #9a3412; }
 
+/* ===== หน้ากรอก ปพ.: ขั้นตอน + โหมดกรอกทีละช่อง ===== */
+.ed-steps { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; margin-bottom: 6px; scrollbar-width: thin; }
+.ed-steps button { flex: none; display: flex; align-items: center; gap: 7px; border: 1.5px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px 7px 7px; font: 600 14.5px "Sarabun", sans-serif; color: #334155; cursor: pointer; }
+.ed-steps button i { font-style: normal; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: #eef2f7; font: 700 12.5px "Prompt", sans-serif; }
+.ed-steps button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.ed-steps button.on i { background: #fff; color: var(--brand); }
+.ed-mode { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 12px; }
+.ed-mode span { font-size: 13px; color: var(--muted); margin-right: 2px; }
+.ed-mode button { border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 7px 12px; font: 600 14px "Sarabun", sans-serif; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.ed-mode button small { font-weight: 400; font-size: 11.5px; color: var(--muted); }
+.ed-mode button.on { border-color: var(--brand); background: #eef4ff; color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+
+.qk { display: flex; flex-direction: column; gap: 10px; }
+.qk-cols { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; align-items: stretch; scrollbar-width: thin; }
+.qk-g { flex: none; align-self: center; font: 600 12px "Prompt", sans-serif; color: #64748b; padding: 0 4px 0 8px; border-left: 2px solid var(--line); white-space: nowrap; }
+.qk-g:first-child { border-left: 0; padding-left: 0; }
+.qk-c { flex: none; min-width: 74px; border: 1.5px solid var(--line); background: #fff; border-radius: 12px; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: pointer; font-family: "Sarabun", sans-serif; }
+.qk-c b { font-size: 14px; white-space: nowrap; }
+.qk-c small { font-size: 11px; color: #64748b; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qk-c i { font-style: normal; font-size: 11px; color: #b45309; background: #fff7ed; border-radius: 999px; padding: 0 6px; margin-top: 2px; }
+.qk-c.done i { color: #15803d; background: #dcfce7; }
+.qk-c.on { border-color: var(--brand); background: var(--brand); color: #fff; }
+.qk-c.on small { color: #dbeafe; }
+.qk-head { display: flex; align-items: center; gap: 10px; background: linear-gradient(120deg, #1d5bd8, #1e40af); color: #fff; border-radius: 16px; padding: 10px 12px; position: sticky; top: 74px; z-index: 5; box-shadow: 0 8px 18px -12px #1e40af; }
+.qk-t { flex: 1; min-width: 0; text-align: center; display: flex; flex-direction: column; }
+.qk-t b { font: 700 19px "Prompt", sans-serif; }
+.qk-t b span { font: 500 15px "Sarabun", sans-serif; opacity: .85; }
+.qk-t small { font-size: 12.5px; opacity: .85; }
+.qk-nav { width: 44px; height: 44px; border-radius: 12px; border: 0; background: #ffffff26; color: #fff; font-size: 24px; cursor: pointer; flex: none; }
+.qk-nav:disabled { opacity: .3; cursor: default; }
+.qk-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.qk-tools .btn { font-size: 13.5px; padding: 6px 10px; }
+.qk-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff; }
+.qk-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid #eef2f7; }
+.qk-row:first-child { border-top: 0; }
+.qk-row:nth-child(even) { background: #fafbfd; }
+.qk-who { flex: 1; min-width: 0; }
+.qk-who .g-name { font-weight: 600; font-size: 15px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qk-sum { display: flex; gap: 10px; font-size: 12px; color: #64748b; flex-wrap: wrap; }
+.qk-sum b { color: #0f172a; }
+.qk-btns { display: flex; gap: 5px; flex: none; }
+.qk-b { min-width: 42px; height: 42px; border-radius: 11px; border: 1.5px solid var(--line); background: #fff; font: 700 16px "Prompt", sans-serif; color: #334155; cursor: pointer; padding: 0 8px; }
+.qk-b.on { background: #16a34a; border-color: #16a34a; color: #fff; }
+.qk-b.clr { min-width: 34px; color: #94a3b8; font-weight: 400; }
+.qk-inp { display: flex; gap: 5px; flex: none; }
+.qk-i { width: 84px; height: 44px; font: 700 20px "Prompt", sans-serif; text-align: center; border: 1.5px solid var(--line); border-radius: 11px; }
+.qk-i:focus { border-color: var(--brand); outline: 3px solid #bfdbfe; }
+.qk-i.over { border-color: #dc2626; background: #fef2f2; color: #b91c1c; }
+.qk-full { height: 44px; border-radius: 11px; border: 1.5px solid #bbf7d0; background: #f0fdf4; color: #15803d; font: 600 13px "Sarabun", sans-serif; padding: 0 10px; cursor: pointer; }
+.qk-next { align-self: center; padding: 12px 22px; font-size: 16px; }
+@media (max-width: 640px) {
+  .qk-row { flex-wrap: wrap; gap: 6px; padding: 9px 10px; }
+  .qk-who { flex-basis: 100%; }
+  .qk-btns, .qk-inp { width: 100%; }
+  .qk-b { flex: 1; height: 46px; }
+  .qk-b.clr { flex: 0 0 40px; }
+  .qk-i { flex: 1; width: auto; }
+  .qk-head { top: 6px; }
+  .ed-bar { position: static; padding: 10px 12px; }
+  .ed-bar .ed-t b { font-size: 15.5px; }
+  .ed-bar .ed-acts { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ed-bar .ed-acts .btn { font-size: 13.5px; padding: 8px; }
+  /* ปุ่มบันทึกลอยด้านล่างจอ กดได้ตลอด */
+  .ed-bar .ed-acts .btn.pri { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; padding: 14px; font-size: 17px; border-radius: 14px; box-shadow: 0 10px 24px -8px #1d4ed8; }
+  .ed-steps + .ed-mode, #edBody { padding-bottom: 0; }
+  #edBody { margin-bottom: 76px; }
+}
+
+@media (max-width: 640px) {
+  .cls-chips { grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+  .cls-lv { width: 26px; }
+  /* ระหว่างกรอก ปพ. บนมือถือ: ซ่อนส่วนเลือกห้อง/แท็บ ให้เห็นช่องกรอกเต็มจอ */
+  body.editing .picker, body.editing #rosterBar, body.editing .tabs:not(.ed-tabs), body.editing .privacy { display: none; }
+  .bnr { margin: 4px 0 10px; }
+  .bnr .bs { display: none; }
+  .bnr .bt { font-size: 16px; }
+  .bnr .bi { width: 38px; height: 38px; font-size: 22px; border-radius: 10px; }
+}
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }
@@ -583,13 +662,6 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .pub-closed { text-align: center; padding: 34px 18px; }
 .pub-closed .ic { font-size: 44px; display: block; margin-bottom: 8px; }
 
-/* แท็บเข้าสู่ระบบ ครู / แอดมิน มุมขวาบน */
-.pub-login { position: absolute !important; top: 12px; right: 12px; z-index: 3 !important; display: flex; background: #0b1f5c55; border: 1px solid #ffffff44; border-radius: 999px; padding: 3px; gap: 3px; backdrop-filter: blur(4px); }
-.pub-login button { background: transparent; color: #fff; border: 0; border-radius: 999px; padding: 7px 14px; font: 600 14px "Sarabun", sans-serif; cursor: pointer; }
-.pub-login button:hover { background: #ffffff2e; }
-.pub-login button[data-login=admin] { background: #7f1d1dcc; }
-.pub-login button[data-login=admin]:hover { background: #991b1b; }
-@media (max-width: 420px) { .pub-login button { padding: 6px 10px; font-size: 13px; } }
 
 /* ระดับผลภาคเรียนที่ 1 */
 .pub-lv { display: inline-block; padding: 3px 10px; border-radius: 999px; font-weight: 700; font-size: 14px; white-space: nowrap; }
@@ -629,12 +701,31 @@ body.pub-has-result .pub-hero-t { font-size: 24px; }
 body.pub-has-result .pub-school { display: none; }
 body.pub-has-result .pub-hero { padding-bottom: 62px; }
 @media (max-width: 520px) {
-  .pub-login { position: static !important; margin: 0 auto 10px; width: max-content; }
   body.pub-has-result .pub-hero { padding-top: 10px; }
   body.pub-has-result .pub-tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   body.pub-has-result .pub-tile { padding: 8px; }
   body.pub-has-result .pub-tile .v { font-size: 19px; }
   body.pub-has-result .pub-tile .k, body.pub-has-result .pub-tile .s { font-size: 11.5px; }
+}
+
+/* ปุ่มเข้าสู่ระบบ + เมนูเลือก ครู / แอดมิน */
+.pub-login { position: absolute !important; top: 12px; right: 12px; z-index: 30 !important; display: block; background: none; border: 0; padding: 0; backdrop-filter: none; }
+.pub-login-btn { background: #fff; color: #1b3fae; border: 0; border-radius: 999px; padding: 9px 16px; font: 700 15px "Sarabun", sans-serif; cursor: pointer; box-shadow: 0 6px 18px -6px #0b1f5c88; }
+.pub-login-btn:hover { background: #eef4ff; }
+.pub-login-menu { position: absolute; right: 0; top: calc(100% + 8px); width: 300px; background: #fff; color: #0f172a; border-radius: 18px; padding: 10px; box-shadow: 0 20px 50px -12px #0b1f5c99; animation: plm .14s ease-out; text-align: left; }
+@keyframes plm { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.plm-h { font: 600 13px "Sarabun", sans-serif; color: #64748b; padding: 4px 8px 8px; }
+.pub-login-menu button { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; background: none; border-radius: 14px; padding: 10px; cursor: pointer; text-align: left; font-family: "Sarabun", sans-serif; color: inherit; }
+.pub-login-menu button:hover, .pub-login-menu button:focus-visible { background: #f1f5f9; }
+.pub-login-menu button b { display: block; font: 700 17px "Prompt", sans-serif; }
+.pub-login-menu button small { display: block; font-size: 13px; color: #64748b; line-height: 1.35; }
+.pub-login-menu button i { margin-left: auto; font-style: normal; font-size: 22px; color: #94a3b8; }
+.plm-ic { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; flex: none; }
+.plm-ic.t { background: #dbeafe; }
+.plm-ic.a { background: #fee2e2; }
+@media (max-width: 520px) {
+  .pub-login { position: static !important; margin: 0 0 10px; display: flex; justify-content: flex-end; }
+  .pub-login-menu { position: fixed; left: 12px; right: 12px; top: 60px; width: auto; }
 }
 
 [hidden]{display:none!important}

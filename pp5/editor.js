@@ -80,14 +80,14 @@
     c.rerender();
     window.scrollTo({ top: 0 });
     // ปพ.5 ใหม่ที่ยังไม่มีตัวชี้วัด: ลองหาจากไฟล์ ปพ.5 ปีที่แล้วในโฟลเดอร์ต้นฉบับให้อัตโนมัติ
-    if (opt.kind === 'pp5' && !opt.key && !data.indicators.length && c.libFor) {
-      var mine = ed;
-      c.libFor(cls.level, opt.slot, cls.room).then(function (lib) {
+    if (opt.kind === 'pp5' && !data.indicators.length && c.libFor) {
+      var mine = ed, lv = data.meta.level || cls.level, sl = opt.slot || (c.slotOf ? c.slotOf(data.meta) : null);
+      c.libFor(lv, sl, data.meta.room || cls.room).then(function (lib) {
         if (!lib || ed !== mine || ed.data.indicators.length) return;
         ['code', 'subject', 'hours', 'credit', 'maxCollect', 'maxFinal'].forEach(function (k) { if (lib[k] != null && lib[k] !== '') ed.data.meta[k] = lib[k]; });
         ed.data.indicators = lib.indicators;
         if (lib.standards && lib.standards.length) ed.data.standards = lib.standards;
-        recompute(); c.rerender();
+        recompute(); ed.dirty = true; c.rerender();
         c.toast('ใส่ตัวชี้วัด ' + lib.indicators.length + ' ตัว จาก' + lib.via, 'ok');
       }, function () {});
     }
@@ -113,7 +113,15 @@
       '<button class="btn" data-ed="excel">⬇ ดาวน์โหลด Excel (รูปแบบต้นฉบับ)</button>' +
       '<button class="btn" data-ed="close">ปิด</button></div></div>';
     if (ed.intent === 'excel') h += '<p class="note">ตรวจข้อมูล' + (isP5 ? 'วิชา รายชื่อ และตัวชี้วัด' : 'ห้อง รายชื่อ และรายวิชา') + ' แล้วกด <b>ดาวน์โหลด Excel</b> เพื่อนำไปกรอกในคอมพิวเตอร์ กรอกเสร็จแล้วอัปโหลดไฟล์กลับเข้าระบบได้เลย</p>';
-    h += '<nav class="tabs ed-tabs">' + SECTIONS[ed.kind].map(function (s) { return '<button data-sec="' + s[0] + '" class="' + (ed.section === s[0] ? 'on' : '') + '">' + s[1] + '</button>'; }).join('') + '</nav>';
+    h += '<nav class="ed-steps" aria-label="ขั้นตอนการกรอก">' + SECTIONS[ed.kind].map(function (s, i) {
+      return '<button data-sec="' + s[0] + '" class="' + (ed.section === s[0] ? 'on' : '') + '"><i>' + (i + 1) + '</i>' + s[1] + '</button>';
+    }).join('') + '</nav>';
+    if (isDataSection()) {
+      var md = edMode();
+      h += '<div class="ed-mode" role="group" aria-label="รูปแบบการกรอก"><span>รูปแบบการกรอก</span>' +
+        '<button data-ed="mode" data-m="quick" class="' + (md === 'quick' ? 'on' : '') + '">✍️ กรอกทีละช่อง <small>เหมาะกับมือถือ</small></button>' +
+        '<button data-ed="mode" data-m="table" class="' + (md === 'table' ? 'on' : '') + '">📊 ตาราง <small>เหมาะกับคอม</small></button></div>';
+    }
     h += '<div id="edBody"></div>';
     view.innerHTML = h;
     var body = document.getElementById('edBody');
@@ -165,8 +173,15 @@
   function selectField(label, path, value, options) {
     return '<label class="ed-f"><span>' + esc(label) + '</span><select data-f="' + path + '">' + options.map(function (o) { return '<option' + (String(o) === String(value) ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></label>';
   }
+  // โหมดกรอก: "quick" = กรอกทีละช่อง (มือถือ) / "table" = ตาราง (คอมพิวเตอร์)
+  function edMode() {
+    var m = null; try { m = localStorage.getItem('pp5-edmode'); } catch (e) {}
+    return m || (window.innerWidth < 800 ? 'quick' : 'table');
+  }
+  function isDataSection() { return ['info', 'roster', 'ind', 'subj'].indexOf(ed.section) < 0; }
   function grid(el, opt) {
     opt.onChange = opt.onChange || function () { recompute(); touch(); };
+    if (opt.rowLabel === studentLabel && window.PP5Quick && edMode() === 'quick') return new window.PP5Quick(el, opt);
     opt.onPaste = function (n) { ctx.toast('วางข้อมูลแล้ว ' + n + ' ช่อง', 'ok'); recompute(); touch(); grid(el, opt); };
     return new window.PP5Grid(el, opt);
   }
@@ -222,6 +237,7 @@
       });
       recompute(); touch(); ctx.rerender();
     },
+    mode: function (b) { try { localStorage.setItem('pp5-edmode', b.dataset.m); } catch (e) {} ctx.rerender(); },
     pullInd: async function () {
       var m = ed.data.meta;
       if (!ctx.libFor) return;

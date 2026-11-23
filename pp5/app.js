@@ -722,6 +722,7 @@
       }
     }
     var cls = 'ป.' + state.level + '/' + state.room;
+    document.body.classList.toggle('editing', !!(window.PP5Editor && PP5Editor.active()));
     renderBanner(cls);
     view.onclick = view.onchange = null;
     if (window.PP5Editor && PP5Editor.active()) { PP5Editor.render(view, editorCtx); saveUI(); return; }

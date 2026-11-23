@@ -11,10 +11,14 @@
 </head>
 <body class="pub-page">
   <header class="pub-hero">
-    <nav class="pub-login" aria-label="เข้าสู่ระบบ">
-      <button type="button" data-login="teacher">👩‍🏫 ครู</button>
-      <button type="button" data-login="admin">🛡 แอดมิน</button>
-    </nav>
+    <div class="pub-login">
+      <button type="button" class="pub-login-btn" id="pubLoginBtn" aria-haspopup="true" aria-expanded="false">🔐 เข้าสู่ระบบ <span aria-hidden="true">▾</span></button>
+      <div class="pub-login-menu" id="pubLoginMenu" role="menu" hidden>
+        <div class="plm-h">เข้าสู่ระบบในฐานะ</div>
+        <button type="button" role="menuitem" data-login="teacher"><span class="plm-ic t">👩‍🏫</span><span><b>ครู</b><small>กรอกคะแนน ปพ.5 / ปพ.6 · พิมพ์ใบรายงาน</small></span><i>›</i></button>
+        <button type="button" role="menuitem" data-login="admin"><span class="plm-ic a">🛡</span><span><b>แอดมิน</b><small>ผู้ดูแลระบบ · เปิด-ปิดระบบ · ทะเบียนนักเรียน</small></span><i>›</i></button>
+      </div>
+    </div>
     <img id="pubLogo" class="pub-logo" alt="" hidden>
     <div><span class="pub-kicker">ระบบประกาศผลการเรียนออนไลน์</span></div>
     <h1 class="pub-hero-t" id="pubTitle">ประกาศผลการเรียน</h1>
