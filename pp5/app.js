@@ -58,6 +58,16 @@
     putTemplate: function (kind, bytes, name) { return this.tx('readwrite', function (s) { return s.put({ kind: kind, bytes: bytes, name: name, savedAt: Date.now() }); }, 'templates'); },
     getRoster: function () { return this.tx('readonly', function (s) { return s.get('current'); }, 'roster'); },
     putRoster: function (r) { var o = Object.assign({ key: 'current' }, r); return this.tx('readwrite', function (s) { return s.put(o); }, 'roster').then(function () { return o; }); },
+    // โลโก้/ลายเซ็น (รุ่นในเครื่อง เก็บในเบราว์เซอร์)
+    getBrand: function () { try { return Promise.resolve(JSON.parse(localStorage.getItem('pp5-brand') || 'null')); } catch (e) { return Promise.resolve(null); } },
+    saveBrand: function (b) { try { localStorage.setItem('pp5-brand', JSON.stringify(b)); } catch (e) { return Promise.reject(new Error('พื้นที่เก็บในเบราว์เซอร์เต็ม')); } return Promise.resolve(true); },
+    getSigs: function () { try { return Promise.resolve(JSON.parse(localStorage.getItem('pp5-sigs') || '{}')); } catch (e) { return Promise.resolve({}); } },
+    saveSig: function (name, img) {
+      var m = {}; try { m = JSON.parse(localStorage.getItem('pp5-sigs') || '{}'); } catch (e) {}
+      if (img) m[name] = { img: img, at: Date.now() }; else delete m[name];
+      try { localStorage.setItem('pp5-sigs', JSON.stringify(m)); } catch (e) { return Promise.reject(new Error('พื้นที่เก็บในเบราว์เซอร์เต็ม')); }
+      return Promise.resolve(true);
+    },
     templateInfo: function () {
       return this.tx('readonly', function (s) { return s.getAll(); }, 'templates').then(function (all) {
         var o = {}; (all || []).forEach(function (t) { o[t.kind] = { name: t.name, savedAt: t.savedAt }; }); return o;
@@ -497,8 +507,22 @@
     saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor,
     buildFile: buildFile
   };
+  // โลโก้ + ลายเซ็นผู้บริหาร (ผู้ดูแลตั้ง ใช้ทุกห้อง) และลายเซ็นครู
+  var brand = null, sigs = {};
+  function normName(n) { return String(n || '').replace(/\s+/g, ' ').trim(); }
   var reportCtx = {
     esc: esc, toast: toast,
+    brand: function () { return brand; },
+    sig: function (name) { var x = sigs[normName(name)]; return x ? x.img : null; },
+    canSign: function () { return DB === LocalDB || DB.role === 'admin' || !DB.flags || DB.flags.allowSignature !== false; },
+    saveSig: async function (name, file) {
+      name = normName(name);
+      if (!name) throw new Error('กรุณาใส่ชื่อครูประจำชั้นก่อน');
+      var img = file ? await PP5Img.prepare(file, { maxW: 600, maxH: 260, clearWhite: true }) : null;
+      await DB.saveSig(name, img);
+      if (img) sigs[name] = { img: img, at: Date.now() }; else delete sigs[name];
+      vcache = {};
+    },
     classRecords: function () { return classRecords(); },
     pp6Record: function () { return pp6Record(); },
     className: function () { return 'ป.' + state.level + '/' + state.room; },
@@ -1189,6 +1213,7 @@
       records = await DB.all();
       if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
       if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
+      if (DB.getBrand) { try { brand = await DB.getBrand(); sigs = (await DB.getSigs()) || {}; } catch (be) { console.warn('brand', be); } }
       rosterVer++;
     } catch (e) {
       console.error(e);

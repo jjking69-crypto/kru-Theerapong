@@ -23,6 +23,7 @@ var PUB_FOLDER_NAME = '_ประกาศผล (ห้ามลบ)';
 var PDF_FOLDER_NAME = 'PDF ใบรายงาน';
 var TPL_FOLDER_NAME = '_แม่แบบ (ห้ามลบ)';
 var ROSTER_FOLDER_NAME = 'รายชื่อนักเรียน';
+var SIG_FOLDER_NAME = '_โลโก้และลายเซ็น (ห้ามลบ)';
 var PROP_PREFIX = 'rec:';
 
 function doGet(e) {
@@ -53,7 +54,8 @@ var FLAG_DEFS = {
   allowDelete: 'ลบไฟล์ / ล้างข้อมูล',
   allowRoster: 'อัปโหลดรายชื่อนักเรียน',
   allowPublish: 'เผยแพร่ / ตั้งค่าหน้าประกาศผล',
-  allowReport: 'สร้างใบรายงาน PDF'
+  allowReport: 'สร้างใบรายงาน PDF',
+  allowSignature: 'อัปโหลดลายเซ็นครู'
 };
 function flags_() {
   var v = {}; try { v = JSON.parse(props_().getProperty('FLAGS') || '{}'); } catch (e) {}
@@ -294,6 +296,61 @@ function api_sourceFile(pin, id) {
   var list = api_sourceList(pin), hit = list.filter(function (x) { return x.id === id; })[0];
   if (!hit) throw new Error('ไม่พบไฟล์นี้ในโฟลเดอร์ต้นฉบับ');
   return { name: hit.name, b64: Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) };
+}
+
+// ===== โลโก้โรงเรียน + ลายเซ็น ผอ./รอง ผอ. (ผู้ดูแลตั้งครั้งเดียว ใช้ทุกห้อง) และลายเซ็นครู =====
+var IMG_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/;
+function sigFolder_() { return subFolder_(rootFolder_(), SIG_FOLDER_NAME); }
+function brand_() { try { return JSON.parse(props_().getProperty('BRAND') || '{}'); } catch (e) { return {}; } }
+function saveImg_(name, oldId, dataUrl) {
+  if (dataUrl === null) { trashById_(oldId); return null; }        // ลบรูป
+  if (dataUrl === undefined) return oldId || null;                  // ไม่เปลี่ยน
+  if (!IMG_RE.test(dataUrl) || dataUrl.length > 1500000) throw new Error('ไฟล์รูปไม่ถูกต้องหรือใหญ่เกินไป');
+  return writeText_(sigFolder_(), name, oldId, dataUrl);
+}
+function api_getBrand(pin) {
+  checkPin_(pin);
+  var b = brand_(), out = { school: b.school || '' };
+  out.logo = readText_(b.logoId);
+  ['director', 'deputy'].forEach(function (k) { var x = b[k] || {}; out[k] = { name: x.name || '', position: x.position || '', img: readText_(x.imgId) }; });
+  return out;
+}
+function api_saveBrand(pin, json) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  var v = JSON.parse(json || '{}');
+  return withLock_(function () {
+    var b = brand_();
+    if (v.school != null) b.school = String(v.school).slice(0, 120);
+    b.logoId = saveImg_('logo.txt', b.logoId, v.logo);
+    ['director', 'deputy'].forEach(function (k) {
+      var x = b[k] = b[k] || {}, y = v[k] || {};
+      if (y.name != null) x.name = String(y.name).slice(0, 120);
+      if (y.position != null) x.position = String(y.position).slice(0, 160);
+      x.imgId = saveImg_(k + '.txt', x.imgId, y.img);
+    });
+    props_().setProperty('BRAND', JSON.stringify(b));
+    if (b.logoId) props_().setProperty('PUB_LOGO_ID', b.logoId);   // โลโก้หน้าประกาศผลใช้โลโก้เดียวกัน
+    return true;
+  });
+}
+function sigs_() { try { return JSON.parse(props_().getProperty('SIGS') || '{}'); } catch (e) { return {}; } }
+function api_getSigs(pin) {
+  checkPin_(pin);
+  var m = sigs_(), out = {};
+  Object.keys(m).forEach(function (k) { var t = readText_(m[k].id); if (t) out[k] = { img: t, at: m[k].at }; });
+  return out;
+}
+function api_saveSig(pin, name, dataUrl) {
+  need_(pin, 'allowSignature');
+  name = String(name || '').replace(/\s+/g, ' ').trim();
+  if (!name || name.length > 120) throw new Error('กรุณาใส่ชื่อครู');
+  return withLock_(function () {
+    var m = sigs_(), old = m[name];
+    var id = saveImg_('ลายเซ็น ' + safeName_(name) + '.txt', old && old.id, dataUrl === null ? null : dataUrl);
+    if (id) m[name] = { id: id, at: Date.now() }; else delete m[name];
+    props_().setProperty('SIGS', JSON.stringify(m));
+    return true;
+  });
 }
 
 // ===== ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) — เก็บทุกฉบับไว้เป็นประวัติ ใช้ฉบับล่าสุด =====

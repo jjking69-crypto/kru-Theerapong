@@ -45,11 +45,33 @@
     var def = defaults(rec.data), s = rec.settings || {};
     var out = Object.assign({}, def, s);
     ['teacher', 'deputy', 'director'].forEach(function (k) { out[k] = Object.assign({}, def[k], s[k] || {}); });
+    // ยึดตามที่ผู้ดูแลตั้ง: โลโก้ ชื่อโรงเรียน ชื่อ/ตำแหน่ง/ลายเซ็น ผอ. และรอง ผอ.
+    var b = ctx && ctx.brand ? ctx.brand() : null;
+    if (b) {
+      if (b.school) out.school = b.school;
+      if (b.logo) out.logo = '@logo';
+      ['director', 'deputy'].forEach(function (k) {
+        var x = b[k] || {};
+        if (x.name) out[k].name = x.name;
+        if (x.position) out[k].position = x.position;
+        if (x.img) out[k].img = '@' + k;
+        out[k].locked = !!(x.name || x.img);
+      });
+      out.logoLocked = !!b.logo;
+    }
+    // ลายเซ็นครูประจำชั้นที่อัปโหลดไว้ (ตามชื่อครู)
+    if (ctx && ctx.sig && ctx.sig(out.teacher.name)) out.teacher.img = '@teacher:' + out.teacher.name;
     return out;
   }
   function imgOf(rec, key) {
     if (!key) return null;
     var d = rec.data;
+    if (key.charAt(0) === '@') {
+      if (key.indexOf('@teacher:') === 0) return ctx.sig ? ctx.sig(key.slice(9)) : null;
+      var b = ctx.brand ? ctx.brand() : null;
+      if (!b) return null;
+      return key === '@logo' ? b.logo : (b[key.slice(1)] || {}).img || null;
+    }
     if (/^#\d+$/.test(key)) return d.allImages[+key.slice(1)] || null;
     return d.images[key] || null;
   }
@@ -425,6 +447,18 @@
     return '<div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '') + '<select data-img="' + role + '">' + opts + '</select></div>';
   }
 
+  // ลายเซ็นครูประจำชั้น: อัปโหลดรูปลายเซ็นของตัวเอง (เก็บตามชื่อครู ใช้ได้ทุกห้องที่ครูคนนั้นเป็นครูประจำชั้น)
+  function teacherSigCard(rec, st) {
+    var src = imgOf(rec, st.teacher.img), mine = st.teacher.img && st.teacher.img.indexOf('@teacher:') === 0;
+    return '<div class="card"><b>ครูประจำชั้น</b><input type="text" data-txt="teacher.name" value="' + esc(st.teacher.name) + '" placeholder="ชื่อ-สกุล">' +
+      '<input type="text" data-txt="teacher.position" value="' + esc(st.teacher.position) + '" placeholder="ตำแหน่ง">' +
+      '<div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มีลายเซ็น</span>') + '</div>' +
+      (ctx.canSign && ctx.canSign()
+        ? '<div class="slot-acts" style="margin-top:6px"><button class="btn pri" data-rc="sig-up">🖋 อัปโหลดลายเซ็น</button>' + (mine ? '<button class="btn" data-rc="sig-del">ลบลายเซ็น</button>' : '') + '</div>' +
+          '<small class="muted">ถ่ายรูปลายเซ็นบนกระดาษขาว ระบบทำพื้นหลังให้โปร่งใสเอง</small><input type="file" id="rcSigFile" accept="image/*" hidden>'
+        : '<small class="muted">ผู้ดูแลระบบปิดการอัปโหลดลายเซ็นไว้</small>') + '</div>';
+  }
+
   // ---------- ตรวจความถูกต้อง: รายชื่อเทียบทะเบียน / คะแนนเทียบ ปพ.5 ----------
   function checkPanel(rec) {
     var h = '<div class="card rc-panel chk-panel"><h3>🔎 ตรวจสอบความถูกต้อง</h3><div class="chk-grid">';
@@ -503,9 +537,14 @@
       '<label class="chk"><input type="checkbox" data-chk="showLogo"' + (st.showLogo ? ' checked' : '') + '> แสดงโลโก้</label>' +
       '<label class="chk"><input type="checkbox" data-chk="showSign"' + (st.showSign ? ' checked' : '') + '> แสดงลายเซ็น</label></div>' +
       '<div class="rc-signers">' +
-      '<div class="card"><b>ชื่อโรงเรียน (หัวกระดาษ)</b><input type="text" data-txt="school" value="' + esc(st.school) + '"><b>โลโก้</b>' + imgSelect(rec, 'logo', st.logo) + '</div>' +
-      ['teacher', 'deputy', 'director'].map(function (k) {
-        var lab = { teacher: 'ครูประจำชั้น', deputy: 'รองผู้อำนวยการ', director: 'ผู้อำนวยการ' }[k];
+      (st.logoLocked
+        ? '<div class="card rc-locked"><b>โรงเรียน / โลโก้</b><div class="rc-lock-n">' + esc(st.school) + '</div><div class="rc-sig-pick"><img src="' + imgOf(rec, st.logo) + '" alt=""></div><small>🔒 ตั้งโดยผู้ดูแลระบบ</small></div>'
+        : '<div class="card"><b>ชื่อโรงเรียน (หัวกระดาษ)</b><input type="text" data-txt="school" value="' + esc(st.school) + '"><b>โลโก้</b>' + imgSelect(rec, 'logo', st.logo) + '</div>') +
+      teacherSigCard(rec, st) +
+      ['deputy', 'director'].map(function (k) {
+        var lab = { deputy: 'รองผู้อำนวยการ', director: 'ผู้อำนวยการ' }[k], src = imgOf(rec, st[k].img);
+        if (st[k].locked) return '<div class="card rc-locked"><b>' + lab + '</b><div class="rc-lock-n">' + esc(st[k].name) + '</div><small>' + esc(st[k].position) + '</small>' +
+          '<div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มีลายเซ็น</span>') + '</div><small>🔒 ตั้งโดยผู้ดูแลระบบ</small></div>';
         return '<div class="card"><b>' + lab + '</b><input type="text" data-txt="' + k + '.name" value="' + esc(st[k].name) + '" placeholder="ชื่อ-สกุล">' +
           '<input type="text" data-txt="' + k + '.position" value="' + esc(st[k].position) + '" placeholder="ตำแหน่ง">' + imgSelect(rec, k, st[k].img) + '</div>';
       }).join('') + '</div>';
@@ -565,6 +604,11 @@
         var n = d.students[idx + (a === 'next' ? 1 : -1)];
         if (n) { preview.no = n.no; ctx.rerender(); }
       }
+      else if (a === 'sig-up') { var fi = document.getElementById('rcSigFile'); fi.value = ''; fi.click(); }
+      else if (a === 'sig-del') {
+        if (!confirm('ลบลายเซ็นของ ' + settingsOf(rec).teacher.name + '?')) return;
+        try { await ctx.saveSig(settingsOf(rec).teacher.name, null); ctx.toast('ลบลายเซ็นแล้ว', 'info'); ctx.rerender(); } catch (er) { ctx.toast(er.message, 'err'); }
+      }
       else if (a === 'pdf-all') makePdf(rec, 'all');
       else if (a === 'pdf-zip') makePdf(rec, 'zip');
       else if (a === 'pdf-one') makePdf(rec, 'all', preview.no);
@@ -574,6 +618,11 @@
     view.onchange = async function (e) {
       var t = e.target;
       if (t.id === 'rcStu') { preview.no = t.value; ctx.rerender(); return; }
+      if (t.id === 'rcSigFile' && t.files[0]) {
+        try { await ctx.saveSig(settingsOf(rec).teacher.name, t.files[0]); ctx.toast('บันทึกลายเซ็นแล้ว ใช้ในใบรายงานทุกห้องที่เป็นครูประจำชั้น', 'ok'); ctx.rerender(); }
+        catch (er) { ctx.toast('อัปโหลดลายเซ็นไม่สำเร็จ: ' + er.message, 'err'); }
+        return;
+      }
       if (t.dataset.chk) { await saveSetting(rec, t.dataset.chk, t.checked); ctx.rerender(); return; }
       if (t.dataset.img) {
         var key = t.dataset.img === 'logo' ? 'logo' : t.dataset.img + '.img';

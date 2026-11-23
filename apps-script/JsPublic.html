@@ -28,11 +28,28 @@
     var p = total / max * 100, t = p >= 80 ? ['ดีมาก', 'a'] : p >= 60 ? ['ดี', 'b'] : ['พัฒนา', 'c'];
     return '<span class="pub-lv pub-lv-' + t[1] + '">' + t[0] + '</span>';
   }
+  var VIEW = 'grid';   // grid = การ์ดวิชาเรียงแนวนอน (สั้น อ่านง่าย) · table = ตาราง
+  function short(n) { return String(n || '').replace('สังคมศึกษา ศาสนา และวัฒนธรรม', 'สังคมศึกษาฯ').replace('วิทยาศาสตร์และเทคโนโลยี', 'วิทยาศาสตร์ฯ').replace('ภาษาอังกฤษพื้นฐาน', 'ภาษาอังกฤษ').replace('สุขศึกษาและพลศึกษา', 'สุขศึกษาฯ'); }
+  function midGrid(mid) {
+    return '<div class="pub-sgrid">' + mid.subjects.map(function (s) {
+      var tot = s.total != null ? s.total : (s.collect != null || s.exam != null ? (s.collect || 0) + (s.exam || 0) : null);
+      return '<div class="pub-sc"><div class="pub-sc-n" title="' + esc(s.name) + '">' + esc(short(s.name)) + '</div>' +
+        '<div class="pub-sc-v">' + d(tot) + '<small>/' + mid.max + '</small></div>' + (lv50(tot, mid.max) || '<span class="pub-lv">–</span>') +
+        '<div class="pub-sc-s">เก็บ ' + d(s.collect) + ' · สอบ ' + d(s.exam) + '</div></div>';
+    }).join('') + '</div>';
+  }
+  function finalGrid(f) {
+    return '<div class="pub-sgrid">' + f.subjects.map(function (s) {
+      return '<div class="pub-sc' + (s.basic === false ? ' extra' : '') + '"><div class="pub-sc-n" title="' + esc(s.name) + '">' + esc(short(s.name)) + '</div>' +
+        '<div class="pub-sc-g">' + gradeChip(s.grade) + '</div>' +
+        '<div class="pub-sc-s">' + (s.total != null ? 'รวม ' + d(s.total) + '/100' : 'รวม –') + (s.credit ? ' · ' + d(s.credit, 1) + ' นก.' : '') + '</div></div>';
+    }).join('') + '</div>';
+  }
   function tile(k, v, s, cls) { return '<div class="pub-tile ' + (cls || '') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="s">' + (s || '') + '</div></div>'; }
 
   function midView(mid) {
     if (!mid) return '<div class="pub-empty"><div class="ic">🕒</div><b>ยังไม่ประกาศผลกลางปี</b>กรุณาติดตามประกาศจากโรงเรียน</div>';
-    var h = '<p class="pub-note">ผลการเรียนกลางปี (ภาคเรียนที่ 1) แสดงเฉพาะคะแนน ยังไม่มีระดับผลการเรียน (เกรด)' + (mid.partial ? ' · บางวิชาครูยังกรอกคะแนนไม่ครบ (แสดงเป็น –)' : '') + '</p>';
+    var h = mid.partial ? '<p class="pub-note">บางวิชาครูยังกรอกคะแนนไม่ครบ (แสดงเป็น –)</p>' : '';
     var tot = 0, max = 0;
     if (mid.source === 'pp6') {
       mid.subjects.forEach(function (s) { if (s.total != null) { tot += s.total; max += mid.max; } });
@@ -40,13 +57,14 @@
       h += '<div class="pub-tiles">' + tile('คะแนนรวม', d(tot) + '<small>/' + max + '</small>', 'จาก ' + mid.subjects.filter(function (s) { return s.total != null; }).length + ' วิชา') +
         tile('คิดเป็นร้อยละ', d(avg, 1), pctBar(avg)) +
         tile('เวลาเรียน', mid.attendance && mid.attendance.pct != null ? d(mid.attendance.pct, 1) + '<small>%</small>' : d(null), mid.attendance && mid.attendance.total ? 'มาเรียน ' + d(mid.attendance.present) + ' จาก ' + d(mid.attendance.total) + ' ชม.' : '') + '</div>';
-      h += '<div class="pub-tbl-wrap"><table class="pub-tbl"><thead><tr><th class="l">รายวิชา</th><th>คะแนนเก็บ</th><th>คะแนนสอบ</th><th>รวม<small>เต็ม ' + mid.max + '</small></th><th>ผลการเรียน</th></tr></thead><tbody>' +
+      if (VIEW === 'grid') h += midGrid(mid);
+      else h += '<div class="pub-tbl-wrap"><table class="pub-tbl"><thead><tr><th class="l">รายวิชา</th><th>คะแนนเก็บ</th><th>คะแนนสอบ</th><th>รวม<small>เต็ม ' + mid.max + '</small></th><th>ผลการเรียน</th></tr></thead><tbody>' +
         mid.subjects.map(function (s) {
           var tot = s.total != null ? s.total : (s.collect != null || s.exam != null ? (s.collect || 0) + (s.exam || 0) : null);
           return '<tr><td class="l"><b>' + esc(s.name) + '</b><small>' + esc(s.code) + '</small></td><td data-l="คะแนนเก็บ">' + d(s.collect) + '</td><td data-l="คะแนนสอบ">' + d(s.exam) + '</td>' +
             '<td class="pub-strong" data-l="รวม (เต็ม ' + mid.max + ')">' + d(tot) + pctBar(tot == null ? null : tot / mid.max * 100) + '</td><td data-l="ผลการเรียน">' + (lv50(tot, mid.max) || d(null)) + '</td></tr>';
-        }).join('') + '</tbody></table></div>' +
-        '<p class="pub-note">ผลการเรียน: ร้อยละ 80 ขึ้นไป (40 คะแนนขึ้นไป) = <b>ดีมาก</b> · ร้อยละ 60–79 (30–39) = <b>ดี</b> · ต่ำกว่าร้อยละ 60 = <b>พัฒนา</b></p>';
+        }).join('') + '</tbody></table></div>';
+      h += '<p class="pub-legend">ภาคเรียนที่ 1 เต็ม ' + mid.max + ' (คะแนนเก็บ + คะแนนสอบ) · <span class="pub-lv pub-lv-a">ดีมาก</span> 40 ขึ้นไป · <span class="pub-lv pub-lv-b">ดี</span> 30–39 · <span class="pub-lv pub-lv-c">พัฒนา</span> ต่ำกว่า 30</p>';
     } else {
       h += '<div class="pub-tbl-wrap"><table class="pub-tbl"><thead><tr><th class="l">รายวิชา</th><th>คะแนนเก็บภาคเรียนที่ 1</th><th>ร้อยละ</th></tr></thead><tbody>' +
         mid.subjects.map(function (s) {
@@ -54,6 +72,21 @@
           return '<tr><td class="l"><b>' + esc(s.name) + '</b><small>' + esc(s.code) + '</small></td><td class="pub-strong" data-l="คะแนนเก็บ">' + d(s.collect) + '<small> / ' + d(s.collectMax) + '</small></td><td data-l="ร้อยละ">' + d(p, 0) + pctBar(p) + '</td></tr>';
         }).join('') + '</tbody></table></div>';
       if (mid.attendance && mid.attendance.pct != null) h += '<p class="pub-note">เวลาเรียนภาคเรียนที่ 1 ร้อยละ ' + d(mid.attendance.pct, 1) + '</p>';
+    }
+    return h;
+  }
+
+  function evalsHtml(f) {
+    var h = '';
+    var ev = [];
+    if (f.ind) ev.push(['ผลการประเมินตัวชี้วัด', f.ind.total ? 'ผ่าน ' + f.ind.passed + ' จาก ' + f.ind.total + ' ตัวชี้วัด' : '–', f.ind.total ? f.ind.passed >= f.ind.total : null]);
+    if (f.chars) ev.push(['คุณลักษณะอันพึงประสงค์', f.chars, ['ดีเยี่ยม', 'ดี', 'ผ่าน'].indexOf(f.chars) >= 0]);
+    if (f.rtw) ev.push(['การอ่าน คิดวิเคราะห์ และเขียน', f.rtw, f.rtw !== 'ไม่ผ่าน']);
+    (f.acts || []).forEach(function (a) { ev.push([a[0], a[1] || '–', a[1] ? a[1] === 'ผ่าน' : null]); });
+    if (ev.length) {
+      h += '<h3 class="pub-h3">ผลการประเมินด้านอื่น ๆ</h3><div class="pub-evals">' + ev.map(function (e) {
+        return '<div class="pub-eval ' + (e[2] === true ? 'ok' : e[2] === false ? 'bad' : '') + '"><span>' + esc(e[0]) + '</span><b>' + esc(e[1]) + '</b></div>';
+      }).join('') + '</div>';
     }
     return h;
   }
@@ -67,6 +100,7 @@
       tile('เวลาเรียน', f.attPct != null ? d(f.attPct, 1) + '<small>%</small>' : d(null), f.attPct == null ? '' : f.attPct >= 80 ? 'ผ่านเกณฑ์ 80%' : 'ไม่ถึงเกณฑ์ 80%') +
       tile('ผลการตัดสิน', pr, f.promote === true ? '✓ ' + 'ผ่านเกณฑ์ทุกด้าน' : '', f.promote === true ? 'pub-ok' : f.promote === false ? 'pub-bad' : '') + '</div>';
     if (f.partial) h += '<p class="pub-note">ผลบางวิชายังไม่ครบ (แสดงเป็น –) ระดับผลการเรียนเฉลี่ยและผลการตัดสินจะแสดงเมื่อครบทุกวิชา</p>';
+    if (VIEW === 'grid') { h += finalGrid(f); return h + evalsHtml(f); }
     var showTerms = f.subjects.some(function (s) { return s.t1 != null || s.t2 != null; });
     var showCE = !showTerms && f.subjects.some(function (s) { return s.collect != null || s.exam != null; });
     var ncol = 4 + (showTerms || showCE ? 2 : 0);
@@ -81,16 +115,7 @@
       });
     });
     h += '</tbody></table></div>';
-    var ev = [];
-    if (f.ind) ev.push(['ผลการประเมินตัวชี้วัด', f.ind.total ? 'ผ่าน ' + f.ind.passed + ' จาก ' + f.ind.total + ' ตัวชี้วัด' : '–', f.ind.total ? f.ind.passed >= f.ind.total : null]);
-    if (f.chars) ev.push(['คุณลักษณะอันพึงประสงค์', f.chars, ['ดีเยี่ยม', 'ดี', 'ผ่าน'].indexOf(f.chars) >= 0]);
-    if (f.rtw) ev.push(['การอ่าน คิดวิเคราะห์ และเขียน', f.rtw, f.rtw !== 'ไม่ผ่าน']);
-    (f.acts || []).forEach(function (a) { ev.push([a[0], a[1] || '–', a[1] ? a[1] === 'ผ่าน' : null]); });
-    if (ev.length) {
-      h += '<h3 class="pub-h3">ผลการประเมินด้านอื่น ๆ</h3><div class="pub-evals">' + ev.map(function (e) {
-        return '<div class="pub-eval ' + (e[2] === true ? 'ok' : e[2] === false ? 'bad' : '') + '"><span>' + esc(e[0]) + '</span><b>' + esc(e[1]) + '</b></div>';
-      }).join('') + '</div>';
-    }
+    h += evalsHtml(f);
     return h;
   }
 
@@ -100,11 +125,11 @@
     var years = (res.years || []).slice().sort(function (a, b) { return b.year - a.year; });
     var st = { y: 0, tab: null };
     // มุมมองแบบแคบ (เหมาะกับมือถือ): ตารางกลายเป็นการ์ดเรียงลงมา · จำค่าที่เลือกไว้ในเครื่อง
-    var narrow = window.innerWidth < 640;
-    try { var nv = localStorage.getItem('pp5-narrow'); if (nv != null) narrow = nv === '1'; } catch (e) {}
+    try { VIEW = localStorage.getItem('pp5-view') || 'grid'; } catch (e) { VIEW = 'grid'; }
     function draw() {
+      var narrow = VIEW === 'table' && window.innerWidth < 640;   // ตารางบนจอแคบ → การ์ดเรียงลงมา
       el.classList.toggle('pub-narrow', narrow);
-      document.body.classList.toggle('pub-narrow-page', narrow);
+      document.body.classList.add('pub-has-result');
       var y = years[st.y] || {};
       if (!st.tab) st.tab = y.final ? 'final' : 'mid';
       var h = '<div class="pub-card pub-student"><div class="pub-av">' + esc((res.first || res.name || '?').replace(/^(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '').charAt(0)) + '</div>' +
@@ -115,7 +140,7 @@
         '<button data-t="final" class="' + (st.tab === 'final' ? 'on' : '') + '">ผลปลายปี<small>ทั้งปี · เกรด</small></button></div>';
       if (y.pending) h += '<div class="pub-card pub-body"><p class="pub-note" style="margin:0">พบชื่อนักเรียนในทะเบียนแล้ว แต่ครูยังไม่ได้บันทึกคะแนนเข้าระบบ กรุณาตรวจสอบอีกครั้งภายหลัง</p></div>';
       h += '<div class="pub-card pub-body">' + (st.tab === 'mid' ? midView(y.mid) : finalView(y.final)) + '</div>';
-      if (opt.actions !== false) h += '<div class="pub-actions"><button class="pub-btn ghost" data-p="narrow">' + (narrow ? '🖥 มุมมองแบบกว้าง' : '📱 มุมมองแบบแคบ') + '</button><button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
+      if (opt.actions !== false) h += '<div class="pub-actions"><button class="pub-btn ghost" data-p="view">' + (VIEW === 'grid' ? '📋 ดูแบบตาราง' : '🔲 ดูแบบการ์ด') + '</button><button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
       el.innerHTML = h;
     }
     el.onclick = function (e) {
@@ -123,7 +148,7 @@
       if (t) { st.tab = t.dataset.t; draw(); return; }
       var p = e.target.closest('[data-p]');
       if (p && p.dataset.p === 'print') window.print();
-      if (p && p.dataset.p === 'narrow') { narrow = !narrow; try { localStorage.setItem('pp5-narrow', narrow ? '1' : '0'); } catch (e2) {} draw(); return; }
+      if (p && p.dataset.p === 'view') { VIEW = VIEW === 'grid' ? 'table' : 'grid'; try { localStorage.setItem('pp5-view', VIEW); } catch (e2) {} draw(); return; }
       if (p && p.dataset.p === 'back' && opt.onBack) opt.onBack();
     };
     el.onchange = function (e) { if (e.target.classList.contains('pub-year')) { st.y = +e.target.value; st.tab = null; draw(); } };
@@ -180,7 +205,7 @@
     }).join('');
 
     var form = $('pubForm'), out = $('pubResult'), err = $('pubErr');
-    function back() { out.hidden = true; out.innerHTML = ''; $('pubSearch').hidden = false; $('pubId').value = ''; if ($('pubNid')) $('pubNid').value = ''; $('pubId').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    function back() { document.body.classList.remove('pub-has-result'); out.hidden = true; out.innerHTML = ''; $('pubSearch').hidden = false; $('pubId').value = ''; if ($('pubNid')) $('pubNid').value = ''; $('pubId').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       var id = $('pubId').value.trim(), nid = $('pubNid') ? $('pubNid').value.trim() : '';

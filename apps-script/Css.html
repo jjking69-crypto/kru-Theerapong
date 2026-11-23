@@ -318,6 +318,17 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .sup-top .top-acts .home-tb { color: #7f1d1d; }
 .top-acts .home-tb:hover { background: #e0e7ff; }
 
+.sup-brand { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 8px 0 12px; }
+.sup-person input { width: 100%; margin: 4px 0; }
+.sup-pic { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.sup-pic-box { width: 100%; height: 110px; border: 1px dashed #cbd5e1; border-radius: 12px; display: grid; place-items: center; background: repeating-conic-gradient(#f8fafc 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+.sup-pic-box img { max-width: 92%; max-height: 100px; }
+.sup-sigs { display: flex; flex-wrap: wrap; gap: 10px; }
+.sup-sig { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; text-align: center; background: #fff; }
+.sup-sig img { display: block; height: 46px; max-width: 160px; margin: 0 auto 2px; }
+.rc-locked { background: #f8fafc; }
+.rc-lock-n { font-weight: 600; margin: 4px 0 0; }
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }
@@ -560,7 +571,7 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .pub-lv-b { background: #dbeafe; color: #1e40af; }
 .pub-lv-c { background: #ffedd5; color: #9a3412; }
 /* มุมมองแบบแคบ: คอลัมน์เดียวกลางจอ ตารางเป็นการ์ด */
-body.pub-narrow-page .pub-main { max-width: 480px; }
+
 .pub-narrow .pub-tiles { grid-template-columns: 1fr 1fr; }
 .pub-narrow .pub-tbl-wrap { overflow: visible; border: 0; background: transparent; }
 .pub-narrow .pub-tbl, .pub-narrow .pub-tbl tbody { display: block; width: 100%; }
@@ -572,6 +583,33 @@ body.pub-narrow-page .pub-main { max-width: 480px; }
 .pub-narrow .pub-tbl td[data-l]::before { content: attr(data-l); color: #64748b; font-size: 13px; font-weight: 500; text-align: left; }
 .pub-narrow .pub-tbl td .pub-bar { display: none; }
 .pub-narrow .pub-evals { grid-template-columns: 1fr; }
+
+/* การ์ดวิชาเรียงแนวนอน (สั้น อ่านง่าย) */
+.pub-sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 8px; }
+.pub-sc { border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px 10px 9px; text-align: center; background: #fff; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pub-sc.extra { background: #f8fafc; }
+.pub-sc-n { font-weight: 700; font-size: 15px; line-height: 1.25; min-height: 2.5em; display: flex; align-items: center; justify-content: center; }
+.pub-sc-v { font: 700 28px "Prompt", sans-serif; line-height: 1; }
+.pub-sc-v small { font-size: 14px; color: #64748b; font-weight: 500; }
+.pub-sc-g .pub-g { font-size: 22px; min-width: 52px; }
+.pub-sc-s { font-size: 12.5px; color: #64748b; }
+.pub-legend { font-size: 13px; color: #64748b; margin: 6px 0 0; line-height: 2; }
+.pub-legend .pub-lv { font-size: 12px; padding: 1px 8px; }
+@media (max-width: 420px) { .pub-sgrid { grid-template-columns: repeat(2, 1fr); gap: 8px; } .pub-sc-v { font-size: 24px; } }
+/* แสดงผลแล้ว: หัวหน้าเว็บย่อลง ไม่ต้องเลื่อนยาว */
+body.pub-has-result .pub-hero { padding-top: 18px; padding-bottom: 70px; }
+body.pub-has-result .pub-hero .pub-kicker, body.pub-has-result .pub-status, body.pub-has-result .pub-logo { display: none; }
+body.pub-has-result .pub-hero-t { font-size: 24px; }
+body.pub-has-result .pub-school { display: none; }
+body.pub-has-result .pub-hero { padding-bottom: 62px; }
+@media (max-width: 520px) {
+  .pub-login { position: static !important; margin: 0 auto 10px; width: max-content; }
+  body.pub-has-result .pub-hero { padding-top: 10px; }
+  body.pub-has-result .pub-tiles { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  body.pub-has-result .pub-tile { padding: 8px; }
+  body.pub-has-result .pub-tile .v { font-size: 19px; }
+  body.pub-has-result .pub-tile .k, body.pub-has-result .pub-tile .s { font-size: 11.5px; }
+}
 
 [hidden]{display:none!important}
 </style>

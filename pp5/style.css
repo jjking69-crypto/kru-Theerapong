@@ -316,3 +316,14 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .top-acts .home-tb { background: #fff; color: #1d4ed8; border-color: #fff; font-weight: 700; }
 .sup-top .top-acts .home-tb { color: #7f1d1d; }
 .top-acts .home-tb:hover { background: #e0e7ff; }
+
+.sup-brand { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin: 8px 0 12px; }
+.sup-person input { width: 100%; margin: 4px 0; }
+.sup-pic { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.sup-pic-box { width: 100%; height: 110px; border: 1px dashed #cbd5e1; border-radius: 12px; display: grid; place-items: center; background: repeating-conic-gradient(#f8fafc 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+.sup-pic-box img { max-width: 92%; max-height: 100px; }
+.sup-sigs { display: flex; flex-wrap: wrap; gap: 10px; }
+.sup-sig { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; text-align: center; background: #fff; }
+.sup-sig img { display: block; height: 46px; max-width: 160px; margin: 0 auto 2px; }
+.rc-locked { background: #f8fafc; }
+.rc-lock-n { font-weight: 600; margin: 4px 0 0; }

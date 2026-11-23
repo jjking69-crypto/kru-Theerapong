@@ -9,7 +9,7 @@
     $('toasts').appendChild(t); setTimeout(function () { t.remove(); }, 4200);
   }
   function fmtDate(ms) { if (!ms) return '-'; var d = new Date(ms); return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
-  var S = { entries: [], pub: {}, roster: null, tpl: {} };
+  var S = { entries: [], pub: {}, roster: null, tpl: {}, brand: null, sigs: {} };
   var SLOT_NAME = { th: 'ไทย', ma: 'คณิต', sci: 'วิทย์', soc: 'สังคม', his: 'ประวัติ', pe: 'สุขศึกษา', art: 'ศิลปะ', work: 'การงาน', eng: 'อังกฤษ', cor: 'ทุจริต' };
 
   function acts() {
@@ -23,7 +23,7 @@
 
   function flagsCard() {
     var defs = DB.flagDefs || {}, f = DB.flags || {};
-    var groups = [['หน้าประกาศผล (ผู้ปกครอง)', ['publicOpen', 'showMid', 'showFinal']], ['ระบบครู', ['allowUpload', 'allowEdit', 'allowDelete', 'allowRoster', 'allowPublish', 'allowReport']]];
+    var groups = [['หน้าประกาศผล (ผู้ปกครอง)', ['publicOpen', 'showMid', 'showFinal']], ['ระบบครู', ['allowUpload', 'allowEdit', 'allowDelete', 'allowRoster', 'allowPublish', 'allowReport', 'allowSignature']]];
     return '<section class="card sup-card"><h2>⚙️ เปิด-ปิดระบบ</h2><p class="sub">มีผลทันทีกับทุกคน (ผู้ดูแลระบบใช้ได้ทุกอย่างเสมอ) · ระบบตรวจที่เซิร์ฟเวอร์ด้วย</p>' +
       groups.map(function (g) {
         return '<h3 class="sup-h3">' + g[0] + '</h3><div class="flag-list">' + g[1].filter(function (k) { return defs[k]; }).map(function (k) {
@@ -69,6 +69,28 @@
       '<input type="file" id="supRosterFile" accept=".docx" hidden></section>';
   }
 
+  // โลโก้ + ผู้บริหาร: ตั้งครั้งเดียว ยึดใช้ในใบรายงาน ปพ.6 ทุกห้อง (ครูแก้ไม่ได้)
+  function brandCard() {
+    var b = S.brand || {}, d = b.director || {}, p = b.deputy || {};
+    function pic(src, key, label) {
+      return '<div class="sup-pic"><div class="sup-pic-box">' + (src ? '<img src="' + src + '" alt="">' : '<span class="muted">ยังไม่มี</span>') + '</div>' +
+        '<button class="btn" data-up="' + key + '">🖼 ' + (src ? 'เปลี่ยน' : 'อัปโหลด') + label + '</button>' + (src ? '<button class="btn" data-rm="' + key + '">ลบ</button>' : '') + '</div>';
+    }
+    function person(k, x, lab) {
+      return '<div class="sup-person"><h3 class="sup-h3">' + lab + '</h3><input type="text" data-b="' + k + '.name" value="' + esc(x.name || '') + '" placeholder="ชื่อ-สกุล">' +
+        '<input type="text" data-b="' + k + '.position" value="' + esc(x.position || '') + '" placeholder="ตำแหน่ง">' + pic(x.img, k, 'ลายเซ็น') + '</div>';
+    }
+    var names = Object.keys(S.sigs || {});
+    return '<section class="card sup-card"><h2>🖋 โลโก้โรงเรียน และลายเซ็นผู้บริหาร</h2>' +
+      '<p class="sub">ตั้งครั้งเดียว ระบบ<b>ยึดใช้ในใบรายงาน ปพ.6 ทุกห้อง</b> และหน้าประกาศผล — ครูแก้ไขไม่ได้ · ลายเซ็นครูประจำชั้น ครูอัปโหลดเองในแท็บ ใบรายงาน (ปพ.6)</p>' +
+      '<div class="sup-brand"><div class="sup-person"><h3 class="sup-h3">โรงเรียน</h3><input type="text" data-b="school" value="' + esc(b.school || 'โรงเรียนวัดทุ่งแฝก') + '" placeholder="ชื่อโรงเรียน">' + pic(b.logo, 'logo', 'โลโก้') + '</div>' +
+      person('director', d, 'ผู้อำนวยการ') + person('deputy', p, 'รองผู้อำนวยการ') + '</div>' +
+      '<div class="slot-acts"><button class="btn pri" id="supBrandSave">💾 บันทึกชื่อและตำแหน่ง</button></div>' +
+      '<h3 class="sup-h3" style="margin-top:16px">ลายเซ็นครูที่อัปโหลดแล้ว (' + names.length + ')</h3>' +
+      (names.length ? '<div class="sup-sigs">' + names.map(function (n) { return '<div class="sup-sig"><img src="' + S.sigs[n].img + '" alt=""><small>' + esc(n) + '</small></div>'; }).join('') + '</div>' : '<p class="sub">ยังไม่มี</p>') +
+      '<input type="file" id="supImgFile" accept="image/*" hidden></section>';
+  }
+
   function tplCard() {
     var ks = Object.keys(S.tpl).sort();
     return '<section class="card sup-card"><h2>🗂 แม่แบบรูปแบบต้นฉบับ</h2><p class="sub">ระบบหยิบไฟล์ต้นฉบับจากโฟลเดอร์ของโรงเรียนให้อัตโนมัติเมื่อครูดาวน์โหลด Excel ครั้งแรกของแต่ละชั้น/วิชา</p>' +
@@ -82,18 +104,44 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + overviewCard() + tplCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + brandCard() + overviewCard() + tplCard() + pinCard();
     var main = $('sup');
     main.onchange = async function (e) {
       if (e.target.dataset.flag) return saveFlags();
       if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
+      if (e.target.id === 'supImgFile' && e.target.files[0]) return uploadImg(e.target.files[0]);
     };
     main.onclick = function (e) {
       var b = e.target.closest('[data-fl]');
       if (b) { Array.prototype.forEach.call(main.querySelectorAll('[data-flag]'), function (c) { c.checked = b.dataset.fl === 'all1'; }); saveFlags(); return; }
+      var up = e.target.closest('[data-up]'), rm = e.target.closest('[data-rm]');
+      if (up) { pendingImg = up.dataset.up; $('supImgFile').value = ''; $('supImgFile').click(); return; }
+      if (rm && confirm('ลบรูปนี้?')) { saveBrand(imgPatch(rm.dataset.rm, null), 'ลบรูปแล้ว'); return; }
+      if (e.target.id === 'supBrandSave') { saveBrand(textPatch(), 'บันทึกชื่อและตำแหน่งแล้ว'); return; }
       if (e.target.id === 'supRosterUp') { $('supRosterFile').value = ''; $('supRosterFile').click(); }
       if (e.target.id === 'supSrc') { DB.clearSourceCache().then(function (n) { toast('อ่านโฟลเดอร์ต้นฉบับใหม่แล้ว พบ ' + n + ' ไฟล์', 'ok'); }, function (er) { toast(er.message, 'err'); }); }
     };
+  }
+  var pendingImg = null;
+  function imgPatch(key, img) { var p = {}; if (key === 'logo') p.logo = img; else p[key] = { img: img }; return p; }
+  function textPatch() {
+    var p = { director: {}, deputy: {} };
+    Array.prototype.forEach.call(document.querySelectorAll('[data-b]'), function (i) {
+      var k = i.dataset.b.split('.');
+      if (k.length === 1) p[k[0]] = i.value.trim(); else p[k[0]][k[1]] = i.value.trim();
+    });
+    return p;
+  }
+  async function uploadImg(file) {
+    try {
+      var logo = pendingImg === 'logo';
+      var img = await PP5Img.prepare(file, logo ? { maxW: 400, maxH: 400 } : { maxW: 600, maxH: 260, clearWhite: true });
+      await saveBrand(Object.assign(textPatch(), imgPatch(pendingImg, img)), logo ? 'บันทึกโลโก้แล้ว' : 'บันทึกลายเซ็นแล้ว');
+    } catch (e) { toast('อัปโหลดไม่สำเร็จ: ' + e.message, 'err'); }
+  }
+  async function saveBrand(patch, msg) {
+    try { await DB.saveBrand(patch); S.brand = await DB.getBrand(); toast(msg, 'ok'); render(); }
+    catch (e) { toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'); }
   }
   async function saveFlags() {
     var nf = {};
@@ -116,8 +164,9 @@
       await DB.open();
       if (DB.role !== 'admin') { $('sup').innerHTML = '<div class="card empty-state"><b>หน้านี้สำหรับผู้ดูแลระบบหลักเท่านั้น</b></div>'; return; }
       acts();
-      var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; })]);
-      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {};
+      var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; }),
+        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; })]);
+      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {};
       render();
     } catch (e) { $('sup').innerHTML = '<div class="card empty-state"><b>เข้าระบบไม่สำเร็จ</b>' + esc(e.message) + '</div>'; }
   }
