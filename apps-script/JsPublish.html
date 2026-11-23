@@ -1,0 +1,244 @@
+<script>
+/* รวบรวมผลรายคนจาก ปพ.5 / ปพ.6 ของห้อง เพื่อประกาศผลให้ผู้ปกครอง + แท็บตั้งค่าการประกาศผล */
+(function () {
+  'use strict';
+
+  var ctx = null;
+  var M = function () { return window.PP5Model; };
+  function esc(v) { return ctx.esc(v); }
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+  function r2(v) { return v == null ? null : Math.round(v * 100) / 100; }
+  function schoolName(s) { s = s || ''; return !s || /^โรงเรียน/.test(s) ? s : 'โรงเรียน' + s; }
+
+  // ---------- รวบรวมข้อมูลของห้อง ----------
+  function compileClass(c) {
+    var cls = c.classInfo(), p6 = c.pp6Record(), recs = c.classRecords().filter(function (r) { return r.data; });
+    if (p6 && !p6.data) p6 = null;
+    var map = {}, order = [], skipped = 0;
+    function base(s) {
+      if (!s.id) return null;
+      var k = String(s.id).trim();
+      if (!map[k]) { map[k] = { id: k, nid4: '', no: s.no, name: s.name || M().fullName(s), first: s.first || '', mid: null, final: null }; order.push(k); }
+      if (s.nid4 && !map[k].nid4) map[k].nid4 = s.nid4;
+      return map[k];
+    }
+    var all = (p6 ? [p6] : []).concat(recs);
+    all.forEach(function (r) { r.data.students.forEach(function (s) { if (!base(s)) skipped++; }); });
+    var meta = p6 ? p6.data.meta : null;
+    var className = meta ? meta.className : M().stageName((recs[0] && recs[0].data.meta.stage) || 'ป', cls.level) + '/' + cls.room;
+    var school = schoolName((meta && meta.school) || (recs[0] && recs[0].data.meta.school) || '');
+
+    // ผลกลางปี
+    if (p6) {
+      var max = meta.termMax || 50;
+      p6.data.students.forEach(function (s) {
+        var b = s.id && map[String(s.id).trim()];
+        if (!b) return;
+        var subs = p6.data.subjects.map(function (sub) { var x = s.t1[sub.code] || {}; return { code: sub.code, name: sub.name, collect: num(x.collect), exam: num(x.exam), total: num(x.total) }; });
+        if (!subs.some(function (x) { return x.total != null; })) return;
+        var a = (s.attendance && s.attendance.t1) || {};
+        b.mid = { source: 'pp6', max: max, subjects: subs, attendance: { total: num(a.total), present: num(a.present), pct: a.total ? r2(a.present / a.total * 100) : null } };
+      });
+    } else if (recs.length) {
+      order.forEach(function (k) {
+        var b = map[k], subs = [], att = null;
+        recs.forEach(function (r) {
+          var s = r.data.students.filter(function (x) { return String(x.id).trim() === k; })[0];
+          if (!s) return;
+          var inds = r.data.indicators.filter(function (i) { return (i.term || 1) === 1; });
+          var mx = 0, sc = 0, any = false;
+          inds.forEach(function (i) { mx += i.max || 0; var v = num(s.scores[i.idx]); if (v != null) { sc += v; any = true; } });
+          subs.push({ code: r.data.meta.code, name: r.data.meta.subject, collect: any ? sc : null, collectMax: mx || null });
+          if (!att && s.attendance && s.attendance.t1 && s.attendance.t1.pct != null) att = { pct: s.attendance.t1.pct };
+        });
+        if (subs.some(function (x) { return x.collect != null; })) b.mid = { source: 'pp5', subjects: subs, attendance: att };
+      });
+    }
+
+    // ผลปลายปี (เฉพาะคนที่มีเกรดครบทุกวิชา)
+    var hasT2 = p6 && p6.data.students.some(function (s) { return Object.keys(s.t2 || {}).some(function (k) { return s.t2[k]; }); });
+    if (p6 && hasT2) {
+      var list = window.PP6Report.computeWith(p6, c.reportCtx, { gradeMode: 'year' });
+      list.forEach(function (x) {
+        var b = x.s.id && map[String(x.s.id).trim()];
+        if (!b || !x.rows.every(function (r) { return r.grade != null && r.basis !== 'term1'; })) return;
+        var cr = x.rows.reduce(function (a, r) { return a + (typeof r.grade === 'number' && r.sub.credit ? r.sub.credit : 0); }, 0);
+        b.final = {
+          subjects: x.rows.map(function (r) { return { code: r.sub.code, name: r.sub.name, credit: r.sub.credit, basic: r.sub.basic, t1: r.t1, t2: r.t2, total: r.total, grade: r.grade }; }),
+          gpa: r2(x.gpa), pct: r2(x.pct), credits: cr, attPct: x.attPct, ind: { total: x.indTot, passed: x.indPassed },
+          chars: x.s.characteristics && x.s.characteristics.summary || '', rtw: x.s.rtw && x.s.rtw.result || '',
+          acts: x.acts, promote: x.promote, grad: meta.level === 6
+        };
+      });
+    } else if (!p6 && recs.length) {
+      order.forEach(function (k) {
+        var b = map[k], rows = [], ok = true, attS = [];
+        recs.forEach(function (r) {
+          var s = r.data.students.filter(function (x) { return String(x.id).trim() === k; })[0];
+          if (!s || !s.result) { ok = false; return; }
+          var g = s.result.rms || (s.result.grade === '' || s.result.grade == null ? null : parseFloat(s.result.grade));
+          if (g == null || s.result.final == null && r.data.maxima.final) ok = false;
+          rows.push({ code: r.data.meta.code, name: r.data.meta.subject, credit: r.data.meta.credit, basic: r.data.meta.type !== 'เพิ่มเติม', total: s.result.total, grade: g });
+          if (s.attendance && s.attendance.year && s.attendance.year.pct != null) attS.push(s.attendance.year.pct);
+        });
+        if (!ok || !rows.length) return;
+        var cr = 0, gp = 0, pp = 0;
+        rows.forEach(function (r) { if (typeof r.grade === 'number' && r.credit) { cr += r.credit; gp += r.grade * r.credit; pp += (r.total || 0) * r.credit; } });
+        var allPass = rows.every(function (r) { return typeof r.grade === 'number' && r.grade >= 1; });
+        b.final = { subjects: rows, gpa: cr ? r2(gp / cr) : null, pct: cr ? r2(pp / cr) : null, credits: cr, attPct: attS.length ? r2(attS.reduce(function (a, v) { return a + v; }, 0) / attS.length) : null, promote: allPass ? true : false, grad: cls.level === 6 };
+      });
+    }
+
+    return {
+      key: cls.year + '|' + cls.level + '|' + cls.room, year: cls.year, level: cls.level, room: cls.room,
+      className: className, school: school, teacher: meta ? meta.teacher : '', updatedAt: Date.now(),
+      logo: p6 && p6.data.images && p6.data.images.logo || null,
+      skipped: skipped, students: order.map(function (k) { return map[k]; }).sort(function (a, b) { return a.no - b.no; })
+    };
+  }
+
+  function studentView(pub, s) {
+    return { id: s.id, name: s.name, first: s.first, years: [{ year: pub.year, className: pub.className, no: s.no, school: pub.school, mid: s.mid, final: s.final }] };
+  }
+
+  // ---------- เผยแพร่อัตโนมัติหลังมีการเปลี่ยนแปลง ----------
+  var timers = {};
+  function autoPublish(c, cls) {
+    var store = c.store();
+    if (!store || !store.publish) return;
+    var key = cls.year + '|' + cls.level + '|' + cls.room;
+    clearTimeout(timers[key]);
+    timers[key] = setTimeout(function () { publishClass(c).then(function (n) { if (n != null) c.toast('อัปเดตหน้าประกาศผลแล้ว (' + n + ' คน)', 'ok'); }, function (e) { c.toast('อัปเดตหน้าประกาศผลไม่สำเร็จ: ' + e.message, 'err'); }); }, 600);
+  }
+  async function publishClass(c) {
+    var pub = compileClass(c);
+    var store = c.store();
+    if (!pub.students.length) { await store.unpublish(pub.key); return 0; }
+    await store.publish(pub.key, pub);
+    return pub.students.length;
+  }
+
+  // ---------- แท็บ "ประกาศผล" ----------
+  var view = { stu: null, cfg: null, status: null, loading: false };
+
+  function render(el, c) {
+    ctx = c;
+    var store = c.store(), server = !!(store && store.publish);
+    var cls = c.classInfo(), pub = compileClass(c);
+    var h = '<h2 class="sec">ประกาศผลการเรียนสำหรับผู้ปกครอง</h2>';
+    if (!server) {
+      h += '<p class="note">รุ่นนี้เก็บข้อมูลในเครื่อง จึงเปิดให้ผู้ปกครองดูไม่ได้ ใช้รุ่น Google Apps Script เพื่อเปิดหน้าประกาศผลจริง ด้านล่างเป็นตัวอย่างหน้าที่ผู้ปกครองจะเห็น</p>';
+    } else {
+      if (!view.cfg && !view.loading) {
+        view.loading = true;
+        Promise.all([store.getPublicCfg(), store.publicStatus()]).then(function (r) { view.cfg = r[0]; view.status = r[1]; view.loading = false; c.rerender(); }, function (e) { view.loading = false; c.toast('โหลดการตั้งค่าไม่สำเร็จ: ' + e.message, 'err'); });
+      }
+      h += cfgCard(c);
+    }
+    // สถานะห้องนี้
+    var nId = pub.students.length, nNid = pub.students.filter(function (s) { return s.nid4; }).length;
+    var nMid = pub.students.filter(function (s) { return s.mid; }).length, nFin = pub.students.filter(function (s) { return s.final; }).length;
+    var st = view.status && view.status[pub.key];
+    h += '<div class="card rc-panel"><h3>ข้อมูลประกาศผลของชั้น ' + esc(c.className()) + ' ปีการศึกษา ' + esc(cls.year) + '</h3><div class="tiles" style="margin:0">' +
+      tileH('นักเรียนที่ค้นหาได้', nId + ' คน', pub.skipped ? 'ไม่มีเลขประจำตัว ' + pub.skipped + ' รายการ' : 'ทุกคนมีเลขประจำตัว') +
+      tileH('ผลกลางปี', nMid + ' คน', nMid ? 'มีคะแนนภาคเรียนที่ 1' : 'ยังไม่มีคะแนนภาค 1') +
+      tileH('ผลปลายปี', nFin + ' คน', nFin ? 'มีเกรดครบทุกวิชา' : 'ยังไม่มีเกรดครบ') +
+      tileH('บัตร ปชช. 4 ตัวท้าย', nNid + ' / ' + nId, 'ใช้เมื่อเปิดการยืนยันตัวตน') + '</div>';
+    if (server) h += '<div class="rc-actions"><button class="btn pri" data-pb="pubClass">อัปเดตข้อมูลห้องนี้</button><button class="btn" data-pb="pubAll">อัปเดตทุกห้อง</button>' +
+      '<span class="sub" style="margin:0;align-self:center">' + (st ? 'อัปเดตล่าสุด ' + new Date(st.updatedAt).toLocaleString('th-TH') : 'ยังไม่เคยเผยแพร่ห้องนี้') + '</span></div>' +
+      '<p class="sub" style="margin-top:8px">ระบบอัปเดตให้อัตโนมัติทุกครั้งที่อัปโหลดหรือบันทึกไฟล์ของห้อง</p>';
+    h += '</div>';
+
+    // ตัวอย่าง
+    h += '<h2 class="sec" style="margin-top:18px">ตัวอย่างหน้าที่ผู้ปกครองเห็น</h2>';
+    if (!pub.students.length) h += '<div class="card empty-state"><b>ยังไม่มีข้อมูลนักเรียนที่มีเลขประจำตัวในห้องนี้</b>อัปโหลดหรือกรอก ปพ.5 / ปพ.6 ก่อน</div>';
+    else {
+      if (!pub.students.some(function (s) { return s.id === view.stu; })) view.stu = pub.students[0].id;
+      h += '<div class="rc-preview-bar"><select id="pbStu">' + pub.students.map(function (s) { return '<option value="' + esc(s.id) + '"' + (s.id === view.stu ? ' selected' : '') + '>' + s.no + '. ' + esc(s.name) + ' (' + esc(s.id) + ')</option>'; }).join('') + '</select></div>' +
+        '<div class="pub-page pub-preview"><div class="pub-main" style="margin-top:0;padding:0" id="pbPrev"></div></div>';
+    }
+    el.innerHTML = h;
+    var prev = document.getElementById('pbPrev');
+    if (prev) {
+      var s = pub.students.filter(function (x) { return x.id === view.stu; })[0];
+      window.PP5Public.renderStudent(prev, studentView(pub, s), { actions: false });
+    }
+    el.onclick = onClick; el.onchange = onChange;
+  }
+  function tileH(k, v, s) { return '<div class="card tile"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s) + '</div></div>'; }
+
+  function cfgCard(c) {
+    var cfg = view.cfg;
+    if (!cfg) return '<div class="card rc-panel"><b>กำลังโหลดการตั้งค่า...</b></div>';
+    var years = {};
+    c.allYears().forEach(function (y) { years[y] = 1; });
+    Object.keys(cfg.years || {}).forEach(function (y) { years[y] = 1; });
+    var h = '<div class="card rc-panel"><h3>หน้าประกาศผล</h3>' +
+      (cfg.url ? '<p style="margin:0 0 10px">ลิงก์สำหรับผู้ปกครอง: <a href="' + esc(cfg.url) + '" target="_blank" rel="noopener">' + esc(cfg.url) + '</a> <button class="btn" data-pb="copy">คัดลอกลิงก์</button></p>' : '') +
+      '<div class="ed-form" style="padding:0;border:0;box-shadow:none">' +
+      '<label class="ed-f"><span>หัวข้อหน้าเว็บ</span><input data-cfg="title" value="' + esc(cfg.title || 'ประกาศผลการเรียน') + '"></label>' +
+      '<label class="ed-f"><span>ชื่อโรงเรียน</span><input data-cfg="school" value="' + esc(cfg.school || '') + '" placeholder="เช่น โรงเรียนวัดทุ่งแฝก"></label>' +
+      '<label class="ed-f wide"><span>ข้อความประกาศ (ไม่บังคับ)</span><input data-cfg="announcement" value="' + esc(cfg.announcement || '') + '" placeholder="เช่น ประกาศผลปลายปี 31 มี.ค. 2569 ติดต่อครูประจำชั้นได้ที่..."></label>' +
+      '<label class="ed-f wide"><span>วิธีค้นหาผล</span><select data-cfg="verify">' +
+      '<option value="id"' + (cfg.verify !== 'id+nid4' ? ' selected' : '') + '>เลขประจำตัวนักเรียนอย่างเดียว</option>' +
+      '<option value="id+nid4"' + (cfg.verify === 'id+nid4' ? ' selected' : '') + '>เลขประจำตัวนักเรียน + เลขบัตรประชาชน 4 ตัวท้าย (แนะนำ)</option></select></label></div>' +
+      (cfg.verify !== 'id+nid4' ? '<p class="note" style="margin-top:10px">ค้นหาด้วยเลขประจำตัวอย่างเดียว ใครก็ลองพิมพ์เลขแล้วเห็นผลการเรียนของเด็กคนอื่นได้ (เลขประจำตัวมักเรียงกัน) แนะนำให้ใช้แบบมีเลขบัตรประชาชน 4 ตัวท้ายด้วย</p>' : '') +
+      '<h3 style="margin-top:14px">เปิดให้ดูผล</h3><table class="rc-yt"><thead><tr><th>ปีการศึกษา</th><th>ผลกลางปี (คะแนน)</th><th>ผลปลายปี (เกรด)</th></tr></thead><tbody>' +
+      Object.keys(years).sort().reverse().map(function (y) {
+        var v = (cfg.years || {})[y] || { mid: true, final: true };
+        return '<tr><td>' + esc(y) + '</td><td><label class="chk"><input type="checkbox" data-yr="' + y + '" data-k="mid"' + (v.mid ? ' checked' : '') + '> เปิด</label></td>' +
+          '<td><label class="chk"><input type="checkbox" data-yr="' + y + '" data-k="final"' + (v.final ? ' checked' : '') + '> เปิด</label></td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="rc-actions"><button class="btn pri" data-pb="saveCfg">บันทึกการตั้งค่า</button></div></div>';
+    return h;
+  }
+
+  async function onClick(e) {
+    var b = e.target.closest('[data-pb]');
+    if (!b) return;
+    var a = b.dataset.pb, store = ctx.store();
+    try {
+      if (a === 'copy') { await navigator.clipboard.writeText(view.cfg.url); ctx.toast('คัดลอกลิงก์แล้ว', 'ok'); }
+      else if (a === 'saveCfg') {
+        var cfg = JSON.parse(JSON.stringify(view.cfg)); delete cfg.url;
+        document.querySelectorAll('[data-cfg]').forEach(function (i) { cfg[i.dataset.cfg] = i.value.trim(); });
+        cfg.years = cfg.years || {};
+        document.querySelectorAll('[data-yr]').forEach(function (i) { var y = i.dataset.yr; cfg.years[y] = cfg.years[y] || { mid: true, final: true }; cfg.years[y][i.dataset.k] = i.checked; });
+        ctx.setBusy('กำลังบันทึก...');
+        await store.savePublicCfg(cfg);
+        view.cfg = Object.assign(cfg, { url: view.cfg.url });
+        ctx.toast('บันทึกการตั้งค่าหน้าประกาศผลแล้ว', 'ok');
+      } else if (a === 'pubClass') {
+        ctx.setBusy('กำลังอัปเดตหน้าประกาศผล...');
+        var n = await publishClass(ctx);
+        view.status = await store.publicStatus();
+        ctx.toast('อัปเดตแล้ว ' + n + ' คน', 'ok');
+      } else if (a === 'pubAll') {
+        var classes = ctx.allClasses(), done = 0, total = 0;
+        for (var i = 0; i < classes.length; i++) {
+          ctx.setBusy('กำลังอัปเดต ' + (i + 1) + '/' + classes.length + ' ห้อง...');
+          var cc = await ctx.withClass(classes[i]);
+          total += await publishClass(cc); done++;
+        }
+        view.status = await store.publicStatus();
+        ctx.toast('อัปเดตแล้ว ' + done + ' ห้อง ' + total + ' คน', 'ok');
+      }
+    } catch (err) {
+      ctx.toast('ไม่สำเร็จ: ' + (err && err.message ? err.message : err), 'err');
+    } finally { ctx.setBusy(''); ctx.rerender(); }
+  }
+  function onChange(e) {
+    var t = e.target;
+    if (t.id === 'pbStu') { view.stu = t.value; ctx.rerender(); return; }
+    if (t.dataset.cfg && view.cfg) { view.cfg[t.dataset.cfg] = t.value.trim(); if (t.dataset.cfg === 'verify') ctx.rerender(); return; }
+    if (t.dataset.yr && view.cfg) {
+      var y = t.dataset.yr; view.cfg.years = view.cfg.years || {};
+      view.cfg.years[y] = view.cfg.years[y] || { mid: true, final: true };
+      view.cfg.years[y][t.dataset.k] = t.checked;
+    }
+  }
+
+  window.PP5Publish = { compileClass: compileClass, render: render, autoPublish: autoPublish, publishClass: publishClass, studentView: studentView };
+})();
+
+</script>

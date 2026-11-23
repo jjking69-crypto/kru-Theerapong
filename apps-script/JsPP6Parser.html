@@ -71,8 +71,7 @@
     for (var r = hr + 1; r <= b.e.r; r++) {
       var no = num(cell(ws, r, 0));
       if (no == null) { if (out.length && cell(ws, r, 0) != null) break; continue; }
-      var first = cell(ws, r, firstNameCol);
-      if (first && typeof first === 'string') out.push({ r: r, no: no });
+      out.push({ r: r, no: no, first: str(cell(ws, r, firstNameCol)) });
     }
     return out;
   }
@@ -98,6 +97,7 @@
       }
     }
     rows(ws, hr + 2, 3).forEach(function (s) {
+      if (!s.first) return; // รายชื่อหลักต้องมีชื่อ
       var sc = {};
       out.subjects.forEach(function (sub) {
         var a = num(cell(ws, s.r, sub.col)), e = num(cell(ws, s.r, sub.col + 1)), t = num(cell(ws, s.r, sub.col + 2));

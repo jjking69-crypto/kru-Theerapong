@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#1767ee">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <?!= include('Css') ?>
 </head>
 <body>
@@ -49,11 +49,12 @@
       <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
       <button data-tab="student" role="tab">รายบุคคล</button>
       <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
+      <button data-tab="publish" role="tab">ประกาศผล</button>
     </nav>
 
     <section id="view"></section>
 
-    <p class="privacy">ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบไม่อ่านเลขประจำตัวประชาชน
+    <p class="privacy">ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย
       · <button class="link" id="clearAll">ล้างข้อมูลทั้งหมด</button></p>
   </main>
 
@@ -72,6 +73,11 @@
   <?!= include('JsStore') ?>
   <?!= include('JsParser') ?>
   <?!= include('JsPP6Parser') ?>
+  <?!= include('JsModel') ?>
+  <?!= include('JsGrid') ?>
+  <?!= include('JsEditor') ?>
+  <?!= include('JsPublic') ?>
+  <?!= include('JsPublish') ?>
   <?!= include('JsReport') ?>
   <?!= include('JsApp') ?>
 </body>

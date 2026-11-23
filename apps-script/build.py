@@ -10,6 +10,9 @@
   JsPP6Parser.html อ่านไฟล์ ปพ.6
   JsReport.html    ใบรายงาน ปพ.6 และ PDF
   JsApp.html       หน้าจอหลัก
+  JsModel/JsGrid/JsEditor.html   กรอก ปพ. ในระบบ และสร้างไฟล์ Excel
+  JsPublish.html   รวบรวมผลเพื่อประกาศ
+  Public.html, CssPublic.html, JsPublic.html   หน้าแรก: ประกาศผลสำหรับผู้ปกครอง
   appsscript.json  ไฟล์ตั้งค่าโปรเจกต์ (สำหรับผู้ใช้ clasp)
 
 วิธีใช้:  python3 apps-script/build.py
@@ -42,11 +45,15 @@ def replace_once(text, old, new):
 
 def build():
     html = read(WEB / 'index.html')
-    css = read(WEB / 'style.css') + '\n' + read(WEB / 'report.css') + '\n[hidden]{display:none!important}\n'
+    css = read(WEB / 'style.css') + '\n' + read(WEB / 'report.css') + '\n' + read(WEB / 'public.css') + '\n[hidden]{display:none!important}\n'
 
     html = replace_once(html, '<link rel="stylesheet" href="style.css">', "<?!= include('Css') ?>")
     (HERE / 'Css.html').write_text('<style>\n' + css + '</style>\n', encoding='utf-8')
     html = replace_once(html, '  <link rel="stylesheet" href="report.css">\n', '')
+    html = replace_once(html, '  <link rel="stylesheet" href="public.css">\n', '')
+    # หน้าสาธารณะ (หน้าแรก)
+    (HERE / 'CssPublic.html').write_text('<style>\n' + read(WEB / 'public.css') + '</style>\n', encoding='utf-8')
+    (HERE / 'Public.html').write_text(read(SRC / 'public.html'), encoding='utf-8')
     html = re.sub(r'\s*<link rel="(icon|apple-touch-icon)"[^>]*>', '', html)
     html = re.sub(r'\s*<meta name="viewport"[^>]*>', '', html)  # Apps Script ใส่ให้ใน doGet
     html = replace_once(
@@ -55,13 +62,15 @@ def build():
         '<a class="home" id="driveLink" href="#" target="_blank" rel="noopener" hidden title="เปิดโฟลเดอร์ใน Google Drive">📁</a>')
     html = replace_once(
         html,
-        'ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบไม่อ่านเลขประจำตัวประชาชน',
-        'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบไม่อ่านเลขประจำตัวประชาชน')
+        'ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)',
+        'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย')
 
     parts = [('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
+             ('JsModel', WEB / 'model.js'), ('JsGrid', WEB / 'grid.js'), ('JsEditor', WEB / 'editor.js'),
+             ('JsPublic', WEB / 'public.js'), ('JsPublish', WEB / 'publish.js'),
              ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]
     html = replace_once(html, '<script src="vendor/xlsx.full.min.js"></script>', '<script src="' + CDN_XLSX + '"></script>')
-    html = re.sub(r'  <script src="(parser|pp6parser|report|app)\.js"></script>\n', '', html)
+    html = re.sub(r'  <script src="[a-z0-9]+\.js"></script>\n', '', html)
     if re.search(r'(src|href)="(?!https://|#)', html):
         raise SystemExit('ยังมีไฟล์ที่อ้างแบบ relative เหลืออยู่')
     html = replace_once(html, '</body>', ''.join("  <?!= include('%s') ?>\n" % n for n, _ in parts) + '</body>')

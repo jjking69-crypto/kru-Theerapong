@@ -10,9 +10,10 @@
   <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="public.css">
 </head>
 <body>
   <header class="top">
@@ -53,11 +54,12 @@
       <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
       <button data-tab="student" role="tab">รายบุคคล</button>
       <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
+      <button data-tab="publish" role="tab">ประกาศผล</button>
     </nav>
 
     <section id="view"></section>
 
-    <p class="privacy">ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบไม่อ่านเลขประจำตัวประชาชน
+    <p class="privacy">ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)
       · <button class="link" id="clearAll">ล้างข้อมูลทั้งหมด</button></p>
   </main>
 
@@ -75,6 +77,11 @@
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="parser.js"></script>
   <script src="pp6parser.js"></script>
+  <script src="model.js"></script>
+  <script src="grid.js"></script>
+  <script src="editor.js"></script>
+  <script src="public.js"></script>
+  <script src="publish.js"></script>
   <script src="report.js"></script>
   <script src="app.js"></script>
 </body>

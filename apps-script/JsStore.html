@@ -80,6 +80,11 @@
       if (rec.url) window.open(rec.url, '_blank', 'noopener');
       else alert('ไม่พบลิงก์ไฟล์ใน Drive');
     },
+    publish: function (key, pub) { return call('api_publish', [key, JSON.stringify(pub)]); },
+    unpublish: function (key) { return call('api_unpublish', [key]); },
+    publicStatus: function () { return call('api_publicStatus'); },
+    getPublicCfg: function () { return call('api_getPublicCfg'); },
+    savePublicCfg: function (cfg) { return call('api_savePublicCfg', [JSON.stringify(cfg)]); },
     saveOutput: async function (blob, name) {
       if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');
       return call('api_saveOutput', [name, await blobToB64(blob), blob.type || 'application/pdf']);

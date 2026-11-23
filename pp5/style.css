@@ -205,3 +205,41 @@ dialog::backdrop { background: #0b1a3a77; }
   .g, .bar i, .badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 .print-only { display: none; }
+
+/* ---------- กรอก ปพ. ในระบบ ---------- */
+.ed-bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; padding: 12px 14px; margin-bottom: 12px; position: sticky; top: 0; z-index: 20; }
+.ed-t b { display: block; font-size: 17px; }
+.ed-t span { font-size: 13.5px; color: var(--muted); }
+.ed-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ed-acts .btn { padding: 8px 14px; }
+.ed-tabs { margin-bottom: 10px; }
+.ed-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; padding: 16px; }
+.ed-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ed-f.wide { grid-column: 1 / -1; }
+.ed-f span { font-size: 13px; color: var(--muted); font-weight: 600; }
+.ed-f input, .ed-f select { border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 15px; background: #fff; width: 100%; }
+.ed-f input:focus, .ed-f select:focus { outline: 2px solid #1767ee55; border-color: var(--brand); }
+.ed-f input:disabled { background: var(--bg); color: var(--muted); }
+.ed-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 4px; font-size: 14px; }
+.ed-mini { width: 70px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
+.g-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 12px; background: #fff; -webkit-overflow-scrolling: touch; }
+.g-tbl { border-collapse: separate; border-spacing: 0; font-size: 14px; width: max-content; min-width: 100%; }
+.g-tbl th, .g-tbl td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 0; white-space: nowrap; }
+.g-tbl thead th { position: sticky; top: 0; background: #f2f5fa; z-index: 3; padding: 5px 6px; font-weight: 600; font-size: 13px; text-align: center; line-height: 1.2; white-space: normal; vertical-align: bottom; }
+.g-tbl thead tr:nth-child(2) th { top: 27px; }
+.g-tbl thead th small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; max-width: 120px; margin: 0 auto; }
+.g-tbl th.g-grp { background: var(--brand-l); color: var(--brand-d); }
+.g-tbl .g-rh { position: sticky; left: 0; background: #f8fafd; z-index: 2; text-align: left; padding: 4px 8px; font-weight: 500; min-width: 54px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.g-tbl thead .g-rh { z-index: 4; }
+.g-name { font-size: 13.5px; }
+.g-in input, .g-in select { width: 100%; border: 0; background: transparent; padding: 6px 6px; font-size: 14px; font-variant-numeric: tabular-nums; min-height: 32px; }
+.g-in input:focus, .g-in select:focus { outline: 2px solid var(--brand); outline-offset: -2px; background: #fff; }
+.g-in:hover { background: #f7faff; }
+.g-bad { background: var(--bad-l) !important; }
+.g-bad input { color: var(--bad); font-weight: 700; }
+.g-ro { background: #f6f8fb; color: #2b3954; padding: 6px 8px !important; text-align: center; font-variant-numeric: tabular-nums; }
+.g-strong { font-weight: 700; color: var(--ink); }
+.g-fill { display: block; margin: 3px auto 0; font-size: 11.5px; padding: 1px 2px; border-radius: 6px; border: 1px solid var(--line); max-width: 100%; min-width: 0; }
+.rc-yt { border-collapse: collapse; font-size: 14.5px; }
+.rc-yt th, .rc-yt td { border-bottom: 1px solid var(--line); padding: 6px 14px; text-align: left; }
+.pub-preview { min-height: 0; background: #eef3fb; border-radius: var(--radius); padding: 14px; }

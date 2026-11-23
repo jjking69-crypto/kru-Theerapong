@@ -433,7 +433,10 @@
         '<div class="slot card empty" data-slot="pp6" tabindex="0" role="button" style="min-height:130px">' +
         '<div class="slot-h"><div class="slot-ic" style="background:#0b7285">6</div><div><div class="slot-n">อัปโหลดไฟล์ ปพ.6 ของห้องนี้</div>' +
         '<div class="slot-c">ไฟล์แบบรายงานการพัฒนาคุณภาพผู้เรียนรายบุคคล (.xlsx) ที่มีชีต "ผลสัมฤทธิ์ฯ เทอม 1"</div></div></div>' +
-        '<div class="slot-empty-t">แตะเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่ ระบบจะจัดเข้าชั้น/ห้องตามข้อมูลในไฟล์</div></div>';
+        '<div class="slot-empty-t">ลากไฟล์มาวางที่นี่ หรือเลือกวิธีด้านล่าง</div>' +
+        '<div class="slot-acts"><button class="btn pri" data-act="upload" data-slot="pp6">อัปโหลดไฟล์ ปพ.6</button>' +
+        '<button class="btn" data-act="online" data-slot="pp6">กรอก ปพ.6 ในระบบ</button>' +
+        '<button class="btn" data-act="template" data-slot="pp6">สร้างไฟล์ Excel ปพ.6</button></div></div>';
       return;
     }
     var d = rec.data, st = settingsOf(rec), all = computeAll(rec, st);
@@ -444,7 +447,7 @@
     h += '<div class="card rc-panel"><div class="slot-h" style="margin-bottom:10px"><div class="slot-ic" style="background:#0b7285">6</div><div style="flex:1;min-width:0">' +
       '<div class="slot-n">' + esc(d.meta.className) + ' · ปีการศึกษา ' + esc(d.meta.year) + ' · ' + d.students.length + ' คน · ' + d.subjects.length + ' รายวิชา</div>' +
       '<div class="slot-f" style="margin-top:4px">📄 ' + esc(rec.fileName) + '</div></div></div>' +
-      '<div class="slot-acts"><button class="btn" data-rc="replace">แทนที่ไฟล์</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>';
+      '<div class="slot-acts"><button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button><button class="btn" data-rc="replace">อัปโหลดใหม่</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>';
     if (!hasT2) h += '<p class="note" style="margin-top:12px">ไฟล์นี้ยังไม่มีคะแนนภาคเรียนที่ 2 (ในไฟล์ Excel เกรดจึงขึ้น #VALUE!) เลือกได้ว่าจะคิดระดับผลการเรียนจากคะแนนภาคเรียนที่ 1 ไปก่อน หรือเว้นว่างไว้จนกว่าจะมีคะแนนครบ</p>';
     h += '</div>';
 
@@ -538,5 +541,9 @@
     };
   }
 
-  window.PP6Report = { render: render, compute: function (rec, c) { ctx = c; return computeAll(rec, settingsOf(rec)); } };
+  window.PP6Report = {
+    render: render,
+    compute: function (rec, c) { ctx = c; return computeAll(rec, settingsOf(rec)); },
+    computeWith: function (rec, c, over) { ctx = c; return computeAll(rec, Object.assign(settingsOf(rec), over || {})); }
+  };
 })();

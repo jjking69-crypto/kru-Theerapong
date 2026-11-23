@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="theme-color" content="#1b3fae">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <?!= include('CssPublic') ?>
+</head>
+<body class="pub-page">
+  <header class="pub-hero">
+    <img id="pubLogo" class="pub-logo" alt="" hidden>
+    <div><span class="pub-kicker">ระบบประกาศผลการเรียนออนไลน์</span></div>
+    <h1 class="pub-hero-t" id="pubTitle">ประกาศผลการเรียน</h1>
+    <div class="pub-school" id="pubSchool"></div>
+    <div class="pub-status" id="pubStatus"></div>
+  </header>
+
+  <main class="pub-main">
+    <section id="pubSearch">
+      <div class="pub-card pub-search">
+        <div class="pub-ann" id="pubAnn" hidden></div>
+        <h2>ตรวจสอบผลการเรียน</h2>
+        <p>กรอกเลขประจำตัวนักเรียน เพื่อดูผลการเรียนกลางปีและปลายปี</p>
+        <form id="pubForm" autocomplete="off">
+          <div class="pub-fields" id="pubFields">
+            <div class="pub-field">
+              <label for="pubId">เลขประจำตัวนักเรียน</label>
+              <input id="pubId" inputmode="numeric" maxlength="20" placeholder="เช่น 6099" autofocus>
+            </div>
+            <div class="pub-field" id="pubNidRow" hidden>
+              <label for="pubNid">เลขบัตรประชาชน 4 ตัวท้าย</label>
+              <input id="pubNid" inputmode="numeric" maxlength="4" placeholder="••••">
+            </div>
+          </div>
+          <button class="pub-btn wide" type="submit">ดูผลการเรียน</button>
+          <div class="pub-err" id="pubErr" hidden></div>
+        </form>
+      </div>
+      <div class="pub-help">
+        <div><span class="ic">📘</span><b>ผลกลางปี</b>คะแนนเก็บและคะแนนสอบภาคเรียนที่ 1 (ยังไม่มีเกรด)</div>
+        <div><span class="ic">🎓</span><b>ผลปลายปี</b>คะแนนรวมทั้งปี ระดับผลการเรียน (เกรด) และผลการเลื่อนชั้น</div>
+        <div><span class="ic">❓</span><b>ไม่พบข้อมูล?</b>ตรวจเลขประจำตัวอีกครั้ง หรือติดต่อครูประจำชั้น</div>
+      </div>
+    </section>
+    <section id="pubResult" hidden></section>
+    <p class="pub-foot">ข้อมูลผลการเรียนเป็นข้อมูลส่วนบุคคล กรุณาไม่เผยแพร่ต่อ · <a id="pubAdmin" href="#">สำหรับครู</a></p>
+  </main>
+  <?!= include('JsPublic') ?>
+  <script>
+    (function () {
+      if (document.getElementById('pubNidRow').hidden === false) document.getElementById('pubFields').classList.add('two');
+      var obs = new MutationObserver(function () { document.getElementById('pubFields').classList.toggle('two', !document.getElementById('pubNidRow').hidden); });
+      obs.observe(document.getElementById('pubNidRow'), { attributes: true });
+      PP5Public.boot();
+    })();
+  </script>
+</body>
+</html>

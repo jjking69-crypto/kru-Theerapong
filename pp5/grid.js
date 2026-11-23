@@ -1,0 +1,166 @@
+/* ตารางกรอกข้อมูลแบบ spreadsheet: วางจาก Excel ได้, Enter/ลูกศรเลื่อนช่อง, เลือกค่าเดียวกันทั้งคอลัมน์ */
+(function () {
+  'use strict';
+
+  function esc(v) {
+    return v == null ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
+  }
+  function parseVal(col, raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (col.type === 'num') {
+      if (s === '') return null;
+      var n = parseFloat(s.replace(/,/g, ''));
+      return isFinite(n) ? n : undefined;
+    }
+    if (col.type === 'select') {
+      if (s === '') return '';
+      var opts = col.options || [];
+      for (var i = 0; i < opts.length; i++) { var o = opts[i]; var v = typeof o === 'object' ? o.v : o; if (String(v) === s || String(typeof o === 'object' ? o.t : o) === s) return v; }
+      return col.free ? s : undefined;
+    }
+    return s;
+  }
+  function show(v, col) {
+    if (v == null) return '';
+    if (typeof v === 'number' && col && col.dec != null) return String(Math.round(v * Math.pow(10, col.dec)) / Math.pow(10, col.dec));
+    return String(v);
+  }
+
+  /*
+   * opts: { cols:[{key,label,sub,w,type:'num'|'text'|'select'|'ro',options,max,min,get(row),set(row,v),dec,fill,cls,group}],
+   *         rows:[...], onChange(row, col), rowLabel(row,i) }
+   */
+  function Grid(el, opts) {
+    this.el = el; this.o = opts;
+    this.render();
+    this.bind();
+  }
+  Grid.prototype.get = function (row, col) { return col.get ? col.get(row) : row[col.key]; };
+  Grid.prototype.render = function () {
+    var o = this.o, self = this, h = '<div class="g-wrap"><table class="g-tbl"><thead>';
+    var groups = o.cols.some(function (c) { return c.group; });
+    if (groups) {
+      h += '<tr><th class="g-rh" rowspan="2">' + esc(o.corner || '') + '</th>';
+      var i = 0;
+      while (i < o.cols.length) {
+        var g = o.cols[i].group || '', n = 1;
+        while (i + n < o.cols.length && (o.cols[i + n].group || '') === g && g) n++;
+        h += g ? '<th class="g-grp" colspan="' + n + '">' + esc(g) + '</th>' : '<th rowspan="2" class="g-h">' + head(o.cols[i], i) + '</th>';
+        i += n;
+      }
+      h += '</tr><tr>';
+      o.cols.forEach(function (c, ci) { if (c.group) h += '<th class="g-h">' + head(c, ci) + '</th>'; });
+      h += '</tr>';
+    } else {
+      h += '<tr><th class="g-rh">' + esc(o.corner || '') + '</th>' + o.cols.map(function (c, ci) { return '<th class="g-h">' + head(c, ci) + '</th>'; }).join('') + '</tr>';
+    }
+    h += '</thead><tbody>';
+    o.rows.forEach(function (row, r) {
+      h += '<tr><th class="g-rh">' + (o.rowLabel ? o.rowLabel(row, r) : r + 1) + '</th>';
+      o.cols.forEach(function (c, ci) { h += self.cellHtml(row, r, c, ci); });
+      h += '</tr>';
+    });
+    h += '</tbody></table></div>';
+    this.el.innerHTML = h;
+    function head(c, ci) {
+      var t = esc(c.label) + (c.sub ? '<small>' + esc(c.sub) + '</small>' : '');
+      if (c.fill && c.type === 'select') {
+        t += '<select class="g-fill" data-fill="' + ci + '" title="ใส่ค่าเดียวกันทั้งคอลัมน์"><option value="">ทั้งคอลัมน์…</option>' +
+          c.options.map(function (op) { var v = typeof op === 'object' ? op.v : op, tt = typeof op === 'object' ? op.t : op; return v === '' ? '' : '<option value="' + esc(v) + '">' + esc(tt) + '</option>'; }).join('') + '</select>';
+      }
+      return t;
+    }
+  };
+  Grid.prototype.cellHtml = function (row, r, c, ci) {
+    var v = this.get(row, c), st = c.w ? ' style="min-width:' + c.w + 'px;width:' + c.w + 'px"' : '';
+    if (c.type === 'ro') return '<td class="g-ro ' + (c.cls || '') + '" data-r="' + r + '" data-c="' + ci + '"' + st + '>' + esc(show(v, c)) + '</td>';
+    var bad = c.type === 'num' && v != null && ((c.max != null && v > c.max) || (c.min != null && v < c.min));
+    var inner;
+    if (c.type === 'select') {
+      inner = '<select data-r="' + r + '" data-c="' + ci + '">' + c.options.map(function (op) {
+        var ov = typeof op === 'object' ? op.v : op, t = typeof op === 'object' ? op.t : op;
+        return '<option value="' + esc(ov) + '"' + (String(ov) === String(v == null ? '' : v) ? ' selected' : '') + '>' + esc(t) + '</option>';
+      }).join('') + '</select>';
+    } else {
+      inner = '<input data-r="' + r + '" data-c="' + ci + '" value="' + esc(show(v, c)) + '"' + (c.type === 'num' ? ' inputmode="decimal"' : '') + ' autocomplete="off">';
+    }
+    return '<td class="g-in ' + (bad ? 'g-bad ' : '') + (c.cls || '') + '"' + st + '>' + inner + '</td>';
+  };
+  Grid.prototype.refresh = function () {
+    var self = this, o = this.o;
+    Array.prototype.forEach.call(this.el.querySelectorAll('td.g-ro'), function (td) {
+      var r = +td.dataset.r, c = o.cols[+td.dataset.c];
+      td.textContent = show(self.get(o.rows[r], c), c);
+    });
+  };
+  Grid.prototype.setCell = function (r, ci, raw) {
+    var o = this.o, c = o.cols[ci], row = o.rows[r];
+    if (!c || !row || c.type === 'ro') return false;
+    var v = parseVal(c, raw);
+    if (v === undefined) return false;
+    if (c.set) c.set(row, v); else row[c.key] = v;
+    return true;
+  };
+  Grid.prototype.focus = function (r, ci) {
+    var el = this.el.querySelector('[data-r="' + r + '"][data-c="' + ci + '"]');
+    if (el && el.tagName !== 'TD') { el.focus(); if (el.select) el.select(); }
+  };
+  Grid.prototype.bind = function () {
+    var self = this, o = this.o;
+    function changed(t) {
+      var r = +t.dataset.r, ci = +t.dataset.c, c = o.cols[ci];
+      var ok = self.setCell(r, ci, t.value);
+      var td = t.parentNode, v = self.get(o.rows[r], c);
+      td.classList.toggle('g-bad', !ok || (c.type === 'num' && v != null && ((c.max != null && v > c.max) || (c.min != null && v < c.min))));
+      if (o.onChange) o.onChange(o.rows[r], c);
+      self.refresh();
+    }
+    this.el.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.classList.contains('g-fill')) {
+        var ci = +t.dataset.fill, val = t.value;
+        if (val === '') return;
+        o.rows.forEach(function (row, r) { self.setCell(r, ci, val); if (o.onChange) o.onChange(row, o.cols[ci]); });
+        t.value = '';
+        self.render();
+        return;
+      }
+      if (t.dataset.r != null) changed(t);
+    });
+    this.el.addEventListener('keydown', function (e) {
+      var t = e.target;
+      if (t.dataset.r == null) return;
+      var r = +t.dataset.r, ci = +t.dataset.c;
+      var mv = { Enter: [1, 0], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[e.key];
+      if (t.tagName === 'INPUT' && (e.key === 'ArrowRight' && t.selectionStart === t.value.length || e.key === 'ArrowLeft' && t.selectionStart === 0)) mv = [0, e.key === 'ArrowRight' ? 1 : -1];
+      if (!mv || (t.tagName === 'SELECT' && e.key !== 'Enter')) return;
+      e.preventDefault();
+      if (t.tagName === 'INPUT') changed(t);
+      var nr = r + mv[0], nc = ci + mv[1];
+      while (o.cols[nc] && o.cols[nc].type === 'ro') nc += mv[1] || 1;
+      self.focus(Math.max(0, Math.min(o.rows.length - 1, nr)), Math.max(0, Math.min(o.cols.length - 1, nc)));
+    });
+    // วางข้อมูลหลายช่องจาก Excel / Google Sheets
+    this.el.addEventListener('paste', function (e) {
+      var t = e.target;
+      if (t.dataset.r == null) return;
+      var text = (e.clipboardData || window.clipboardData).getData('text');
+      if (!text || (text.indexOf('\t') < 0 && text.indexOf('\n') < 0)) return;
+      e.preventDefault();
+      var lines = text.replace(/\r/g, '').replace(/\n$/, '').split('\n');
+      var r0 = +t.dataset.r, c0 = +t.dataset.c, n = 0;
+      lines.forEach(function (line, i) {
+        var cells = line.split('\t'), ci = c0;
+        cells.forEach(function (val) {
+          while (o.cols[ci] && o.cols[ci].type === 'ro') ci++;
+          if (self.setCell(r0 + i, ci, val)) { n++; if (o.onChange) o.onChange(o.rows[r0 + i], o.cols[ci]); }
+          ci++;
+        });
+      });
+      self.render();
+      if (o.onPaste) o.onPaste(n);
+    });
+  };
+
+  window.PP5Grid = Grid;
+})();

@@ -101,7 +101,8 @@
     for (var r = block.r + 1; r <= b.e.r; r++) {
       var no = num(cell(ws, r, block.cNo));
       var name = cell(ws, r, block.cName);
-      if (no != null && typeof name === 'string' && name.length > 1) rows.push({ r: r, no: no, name: name });
+      // จับคู่ด้วยเลขที่ ชื่ออาจว่างได้ (ไฟล์ที่ระบบสร้างแต่ยังไม่เคยเปิดคำนวณใน Excel)
+      if (no != null) rows.push({ r: r, no: no, name: typeof name === 'string' ? name : '' });
     }
     return rows;
   }
@@ -178,7 +179,8 @@
       blocks = [{ r: h.r, cNo: h.c }];
     }
     var hr = blocks[0].r, b = bounds(ws), cols = {};
-    var map = { 'เลขประจำตัวนักเรียน': 'id', 'คำนำหน้า': 'prefix', 'ชื่อ': 'first', 'นามสกุล': 'last', 'เพศ': 'sex', 'สถานะ': 'status' };
+    var map = { 'เลขประจำตัวนักเรียน': 'id', 'คำนำหน้า': 'prefix', 'ชื่อ': 'first', 'นามสกุล': 'last', 'เพศ': 'sex', 'สถานะ': 'status',
+      'เลขประจำตัวประชาชน': 'nid', 'เลขประจำตัวประชาชน(4ตัวท้าย)': 'nid' };
     for (var c = 0; c <= Math.min(b.e.c, 15); c++) {
       var key = map[norm(cell(ws, hr, c))];
       if (key) cols[key] = c;
@@ -193,6 +195,8 @@
         var v = cell(ws, r, cols[k]);
         s[k] = v == null ? '' : String(v);
       }
+      // เก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครองในหน้าประกาศผล)
+      if (s.nid != null) { var d = s.nid.replace(/\D/g, ''); s.nid4 = d.length >= 4 ? d.slice(-4) : ''; delete s.nid; }
       out[no] = s;
     }
     return out;
@@ -545,7 +549,7 @@
       var fullName = ro.first ? ((ro.prefix || '') + ro.first + ' ' + (ro.last || '')).trim() : (sc.name || '').replace(/\s+/g, ' ');
       var filled = indicators.filter(function (i) { return sc.vals[i.idx] != null; }).length;
       return {
-        no: no, id: ro.id || '', prefix: ro.prefix || '', first: ro.first || '', last: ro.last || '',
+        no: no, id: ro.id || '', nid4: ro.nid4 || '', prefix: ro.prefix || '', first: ro.first || '', last: ro.last || '',
         name: fullName, sex: ro.sex || '', status: ro.status || '',
         scores: sc.vals, levels: (levels.byNo[no] || {}).vals || {},
         filled: filled,

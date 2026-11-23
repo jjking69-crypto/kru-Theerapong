@@ -138,7 +138,7 @@
     files = Array.prototype.filter.call(files, function (f) { return /\.(xlsm|xlsx|xls)$/i.test(f.name); });
     if (!files.length) { toast('กรุณาเลือกไฟล์ Excel (.xlsm / .xlsx)', 'err'); return; }
     if (typeof XLSX === 'undefined') { toast('ยังโหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) กรุณารีเฟรชหน้าแล้วลองใหม่', 'err'); return; }
-    var last = null, ok = 0;
+    var last = null, ok = 0, changedClasses = {};
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
       setBusy('กำลังอ่านไฟล์ ' + (i + 1) + '/' + files.length + ' : ' + f.name);
@@ -148,11 +148,14 @@
         var u8 = new Uint8Array(buf);
         var wb = XLSX.read(u8, { type: 'array', cellFormula: false, cellHTML: false, cellStyles: false, bookVBA: false });
         var isPP6 = PP6Parser.isPP6(wb);
-        var data = isPP6 ? PP6Parser.parse(wb, u8) : PP5Parser.parseWorkbook(wb);
+        var data = isPP6 ? PP5Model.fillPP6(PP6Parser.parse(wb, u8), false) : PP5Model.fillPP5(PP5Parser.parseWorkbook(wb), false);
         var meta = data.meta;
         var slot = isPP6 ? 'pp6' : slotOf(meta);
         var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
         var existed = records.filter(function (r) { return r.key === key; })[0];
+        if (isPP6 && existed && existed.data && !Object.keys(data.images || {}).length && existed.data.images) {
+          data.images = existed.data.images; data.allImages = existed.data.allImages || [];
+        }
         var rec = {
           key: key, year: meta.year, level: meta.level, room: meta.room, slot: slot,
           fileName: isPP6 ? pp6FileName(meta, f.name) : newFileName(meta, f.name), origName: f.name, size: f.size,
@@ -165,6 +168,7 @@
         last = rec; ok++;
         var where = isPP6 ? meta.levelName + '/' + meta.room + ' ใบรายงาน ปพ.6' : meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
         if (isPP6 && !expected) state.tab = 'report';
+        changedClasses[classKey(meta.year, meta.level, meta.room)] = { year: meta.year, level: meta.level, room: meta.room };
         if (expected && (expected.level !== meta.level || expected.room !== meta.room || expected.slot !== slot)) {
           toast('ไฟล์นี้เป็นของ ' + where + ' (ตามชีตตั้งค่า) จึงจัดเก็บไว้ที่ช่องนั้นแทน', 'info');
         } else {
@@ -176,6 +180,7 @@
       }
     }
     setBusy('');
+    Object.keys(changedClasses).forEach(function (k) { afterChange(changedClasses[k]); });
     if (last) {
       state.year = last.year; state.level = last.level; state.room = last.room;
       if (ok > 0 && state.tab === 'student') state.student = null;
@@ -214,8 +219,76 @@
     await DB.del(rec.key);
     records = records.filter(function (r) { return r.key !== rec.key; });
     toast('ลบแล้ว', 'info');
+    afterChange({ year: rec.year, level: rec.level, room: rec.room });
     render();
   }
+
+  // ---------- ตัวช่วยสำหรับ editor / ประกาศผล ----------
+  function recsOf(cls) { return records.filter(function (r) { return r.year === cls.year && r.level === cls.level && r.room === cls.room; }); }
+  function ctxFor(cls) {
+    var rs = recsOf(cls);
+    var subj = function () { return rs.filter(function (r) { return r.slot !== 'pp6'; }); };
+    return {
+      esc: esc, toast: toast, setBusy: setBusy, rerender: function () { render(); }, store: function () { return DB === LocalDB ? null : DB; },
+      classInfo: function () { return cls; }, classRecords: subj,
+      pp6Record: function () { return rs.filter(function (r) { return r.slot === 'pp6'; })[0] || null; },
+      className: function () { return 'ป.' + cls.level + '/' + cls.room; },
+      reportCtx: Object.assign({}, reportCtx, { classRecords: subj }),
+      allYears: function () { return years(); },
+      allClasses: function () {
+        var seen = {}, out = [];
+        records.forEach(function (r) { var k = classKey(r.year, r.level, r.room); if (!seen[k]) { seen[k] = 1; out.push({ year: r.year, level: r.level, room: r.room }); } });
+        return out;
+      },
+      withClass: async function (c2) {
+        var need = recsOf(c2).filter(function (r) { return !r.data; });
+        if (need.length && DB.ensureData) await DB.ensureData(need);
+        return ctxFor(c2);
+      }
+    };
+  }
+  function curClass() { return { year: state.year, level: state.level, room: state.room }; }
+  function publishCtx() { return ctxFor(curClass()); }
+  function afterChange(cls) {
+    if (DB === LocalDB || !window.PP5Publish) return;
+    var c = ctxFor(cls);
+    c.withClass(cls).then(function (cc) { PP5Publish.autoPublish(cc, cls); });
+  }
+  function fileNameFor(kind, meta) { return kind === 'pp6' ? pp6FileName(meta, 'x.xlsx') : newFileName(meta, 'x.xlsx'); }
+  function downloadBlob(blob, name) {
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  async function saveEdited(kind, data, oldKey) {
+    var meta = data.meta, slot = kind === 'pp6' ? 'pp6' : slotOf(meta);
+    var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
+    var existing = records.filter(function (r) { return r.key === key; })[0];
+    var old = oldKey ? records.filter(function (r) { return r.key === oldKey; })[0] : null;
+    if (existing && key !== oldKey && !confirm('มีข้อมูลวิชานี้อยู่แล้ว (' + existing.fileName + ') ต้องการแทนที่หรือไม่?')) throw new Error('ยกเลิกการบันทึก');
+    var blob = PP5Model.toBlob(kind === 'pp6' ? PP5Model.exportPP6(data) : PP5Model.exportPP5(data));
+    var rec = {
+      key: key, year: meta.year, level: meta.level, room: meta.room, slot: slot,
+      fileName: fileNameFor(kind, meta), origName: '(กรอกในระบบ)', size: blob.size, uploadedAt: Date.now(), blob: blob,
+      data: data, settings: (existing && existing.settings) || (old && old.settings) || undefined
+    };
+    var saved = await DB.put(rec);
+    if (saved && typeof saved === 'object') Object.assign(rec, saved);
+    records = records.filter(function (r) { return r.key !== key; }).concat([rec]);
+    if (oldKey && oldKey !== key) { await DB.del(oldKey); records = records.filter(function (r) { return r.key !== oldKey; }); }
+    afterChange({ year: meta.year, level: meta.level, room: meta.room });
+    return rec;
+  }
+  var editorCtx = {
+    esc: esc, toast: toast, setBusy: setBusy,
+    rerender: function () { render(); },
+    classInfo: curClass,
+    classRecords: function () { return classRecords(); },
+    pp6Record: function () { return pp6Record(); },
+    findRecord: function (key) { return records.filter(function (r) { return r.key === key; })[0]; },
+    coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
+    saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor
+  };
   var reportCtx = {
     esc: esc, toast: toast,
     classRecords: function () { return classRecords(); },
@@ -299,7 +372,7 @@
     var any = classRecords().filter(function (r) { return r.data; })[0] || withData.filter(function (r) { return r.slot !== 'pp6'; })[0];
     if (any) {
       var m = any.data.meta;
-      $('schoolLine').textContent = 'โรงเรียน' + (m.school || '') + (m.district ? ' อ.' + m.district : '') + (m.province ? ' จ.' + m.province : '');
+      $('schoolLine').textContent = (/^โรงเรียน/.test(m.school || '') ? '' : 'โรงเรียน') + (m.school || '') + (m.district ? ' อ.' + m.district : '') + (m.province ? ' จ.' + m.province : '');
     } else if (withData[0]) {
       $('schoolLine').textContent = withData[0].data.meta.school || '';
     } else if (records[0] && records[0].school) {
@@ -328,6 +401,9 @@
       }
     }
     var cls = 'ป.' + state.level + '/' + state.room;
+    view.onclick = view.onchange = null;
+    if (window.PP5Editor && PP5Editor.active()) { PP5Editor.render(view, editorCtx); saveUI(); return; }
+    if (state.tab === 'publish') { PP5Publish.render(view, publishCtx()); saveUI(); return; }
     if (state.tab === 'subjects') renderSubjects(cls);
     else if (state.tab === 'summary') renderSummary(cls);
     else if (state.tab === 'report') PP6Report.render(view, reportCtx);
@@ -344,14 +420,14 @@
     recs.forEach(function (r) { if (slots.indexOf(r.slot) < 0) slots.push(r.slot); });
 
     var html = '<h2 class="sec">รายวิชาชั้น ' + esc(cls) + ' ปีการศึกษา ' + esc(state.year) + '</h2>' +
-      '<p class="sub">อัปโหลดแล้ว ' + recs.length + ' วิชา · แตะช่องว่างหรือลากไฟล์มาวางบนช่องเพื่ออัปโหลด</p><div class="slots">';
+      '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา · แต่ละวิชาเลือกได้ว่าจะอัปโหลดไฟล์ ปพ.5 กรอกในระบบ หรือสร้างไฟล์ Excel ไปกรอกในคอม (ลากไฟล์มาวางบนช่องก็ได้)</p><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
       var ic = '<div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>';
       if (!rec) {
         html += '<div class="slot card empty" data-slot="' + esc(slot) + '" tabindex="0" role="button" aria-label="อัปโหลด ' + esc(info.name) + '">' +
           '<div class="slot-h">' + ic + '<div><div class="slot-n">' + esc(info.name) + '</div><div class="slot-c">รายวิชาพื้นฐาน</div></div></div>' +
-          '<div class="slot-empty-t">ยังไม่มีไฟล์ · แตะเพื่ออัปโหลด</div></div>';
+          '<div class="slot-empty-t">ยังไม่มีข้อมูล</div>' + startButtons(slot) + '</div>';
         return;
       }
       var d = rec.data, m = d.meta, n = d.students.length;
@@ -360,23 +436,30 @@
       var dist = gradeCounts(d.students);
       html += '<div class="slot card" data-slot="' + esc(slot) + '">' +
         '<div class="slot-h">' + ic + '<div><div class="slot-n">' + esc(m.subject) + '</div><div class="slot-c">' + esc(m.code) + ' · ' + esc(m.type || '') + ' · ' + fmt(m.credit) + ' หน่วยกิต</div></div></div>' +
-        '<div class="slot-f" title="ชื่อไฟล์เดิม: ' + esc(rec.origName) + '">📄 ' + esc(rec.fileName) + '</div>' +
+        '<div class="slot-f" title="ชื่อไฟล์เดิม: ' + esc(rec.origName) + '">' + (d.source === 'online' ? '✏️ กรอกในระบบ · ' : '📄 ') + esc(rec.fileName) + '</div>' +
         '<div class="slot-meta"><span>' + n + ' คน</span><span>' + d.indicators.length + ' ตัวชี้วัด</span>' +
         (m.teacher ? '<span>ครู' + esc(String(m.teacher).replace(/^(นาย|นางสาว|นาง)/, '')) + '</span>' : '') + '</div>' +
         '<div class="slot-meta">' + (full ? '<span class="badge ok">คะแนนครบทุกตัวชี้วัด</span>' : '<span class="badge warn">กรอกคะแนนแล้ว ' + filledAll + '/' + d.indicators.length + ' ตัวชี้วัด</span>') +
         (dist.rest ? '' : '') + '</div>' +
         '<div class="slot-acts">' +
         '<button class="btn pri" data-act="open" data-key="' + esc(rec.key) + '">ดูคะแนน</button>' +
-        '<button class="btn" data-act="replace" data-slot="' + esc(slot) + '">แทนที่</button>' +
-        '<button class="btn" data-act="download" data-key="' + esc(rec.key) + '">ดาวน์โหลด</button>' +
+        '<button class="btn" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button>' +
+        '<button class="btn" data-act="replace" data-slot="' + esc(slot) + '">อัปโหลดใหม่</button>' +
+        '<button class="btn" data-act="download" data-key="' + esc(rec.key) + '">ไฟล์ Excel</button>' +
         '<button class="btn danger" data-act="delete" data-key="' + esc(rec.key) + '">ลบ</button>' +
         '</div></div>';
     });
     html += '<div class="slot card empty" data-slot="__extra" tabindex="0" role="button">' +
       '<div class="slot-h"><div class="slot-ic" style="background:' + EXTRA_COLOR + '">+</div><div><div class="slot-n">รายวิชาเพิ่มเติม</div><div class="slot-c">เช่น หน้าที่พลเมือง, คอมพิวเตอร์</div></div></div>' +
-      '<div class="slot-empty-t">แตะเพื่ออัปโหลดรายวิชาเพิ่มเติม</div></div>';
+      '<div class="slot-empty-t">อัปโหลด กรอกในระบบ หรือสร้างไฟล์ Excel</div>' + startButtons('__extra') + '</div>';
     html += '</div>';
     view.innerHTML = html;
+  }
+
+  function startButtons(slot) {
+    return '<div class="slot-acts"><button class="btn pri" data-act="upload" data-slot="' + esc(slot) + '">อัปโหลดไฟล์</button>' +
+      '<button class="btn" data-act="online" data-slot="' + esc(slot) + '">กรอกในระบบ</button>' +
+      '<button class="btn" data-act="template" data-slot="' + esc(slot) + '">สร้างไฟล์ Excel</button></div>';
   }
 
   function gradeCounts(students) {
@@ -667,11 +750,16 @@
   });
   function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') >= 0; }
 
-  $('yearSel').addEventListener('change', function (e) { state.year = +e.target.value; state.student = null; render(); });
-  $('roomSel').addEventListener('change', function (e) { state.room = +e.target.value; state.student = null; render(); });
+  function leaveEditor() {
+    if (!window.PP5Editor || !PP5Editor.active()) return true;
+    PP5Editor.close();
+    return !PP5Editor.active();
+  }
+  $('yearSel').addEventListener('change', function (e) { if (!leaveEditor()) { renderPicker(); return; } state.year = +e.target.value; state.student = null; render(); });
+  $('roomSel').addEventListener('change', function (e) { if (!leaveEditor()) { renderPicker(); return; } state.room = +e.target.value; state.student = null; render(); });
   $('levelChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-level]');
-    if (!b) return;
+    if (!b || !leaveEditor()) return;
     state.level = +b.dataset.level;
     var rooms = roomsOf(state.year, state.level);
     state.room = rooms[0];
@@ -680,7 +768,7 @@
   });
   document.querySelector('.tabs').addEventListener('click', function (e) {
     var b = e.target.closest('[data-tab]');
-    if (b) { state.tab = b.dataset.tab; render(); }
+    if (b && leaveEditor()) { state.tab = b.dataset.tab; render(); }
   });
 
   view.addEventListener('click', async function (e) {
@@ -689,6 +777,9 @@
       var act = a.dataset.act, key = a.dataset.key;
       var rec = key && records.filter(function (r) { return r.key === key; })[0];
       if (act === 'open') openSubject(key);
+      else if (act === 'upload') pickFor(a.dataset.slot);
+      else if (act === 'online' || act === 'template') PP5Editor.open({ kind: a.dataset.slot === 'pp6' ? 'pp6' : 'pp5', slot: a.dataset.slot, intent: act === 'template' ? 'excel' : 'online' }, editorCtx);
+      else if (act === 'edit' && rec) PP5Editor.open({ kind: rec.slot === 'pp6' ? 'pp6' : 'pp5', key: rec.key }, editorCtx);
       else if (act === 'replace') pickFor(a.dataset.slot);
       else if (act === 'download' && rec) download(rec);
       else if (act === 'delete' && rec) {
@@ -701,7 +792,7 @@
       return;
     }
     var slot = e.target.closest('.slot.empty');
-    if (slot) { pickFor(slot.dataset.slot); return; }
+    if (slot && !e.target.closest('button')) { pickFor(slot.dataset.slot); return; }
     var tr = e.target.closest('[data-student]');
     if (tr) { state.student = tr.dataset.student; state.tab = 'student'; render(); window.scrollTo({ top: 0 }); }
   });
