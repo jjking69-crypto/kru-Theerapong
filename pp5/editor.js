@@ -62,7 +62,7 @@
       else if (opt.slot === 'cor') Object.assign(base, { code: 'ส1210' + cls.level, subject: 'การป้องกันการทุจริต', group: 'สังคมศึกษา ศาสนา และวัฒนธรรม', credit: 1, hours: 40, type: 'เพิ่มเติม' });
       else Object.assign(base, { code: '', subject: '', credit: 1, hours: 40, type: 'เพิ่มเติม' });
       // คลังจากไฟล์ต้นฉบับของโรงเรียน: ตัวชี้วัด มาตรฐาน รหัส ชั่วโมง คะแนนเต็ม ของชั้น/วิชานี้
-      var lib = window.PP5Library ? PP5Library.get(cls.level, opt.slot) : null;
+      var lib = c.libSync ? c.libSync(cls.level, opt.slot) : (window.PP5Library ? PP5Library.get(cls.level, opt.slot) : null);
       if (lib) ['code', 'subject', 'type', 'group', 'hours', 'credit', 'maxCollect', 'maxFinal'].forEach(function (k) { if (lib[k] != null && lib[k] !== '') base[k] = lib[k]; });
       data = M().newPP5(base);
       if (lib) { data.indicators = lib.indicators; data.standards = lib.standards; data = M().fillPP5(data, true); }
@@ -79,6 +79,18 @@
     ed = { kind: opt.kind, data: data, oldKey: oldKey, section: 'info', dirty: false, intent: opt.intent || 'online' };
     c.rerender();
     window.scrollTo({ top: 0 });
+    // ปพ.5 ใหม่ที่ยังไม่มีตัวชี้วัด: ลองหาจากไฟล์ ปพ.5 ปีที่แล้วในโฟลเดอร์ต้นฉบับให้อัตโนมัติ
+    if (opt.kind === 'pp5' && !opt.key && !data.indicators.length && c.libFor) {
+      var mine = ed;
+      c.libFor(cls.level, opt.slot, cls.room).then(function (lib) {
+        if (!lib || ed !== mine || ed.data.indicators.length) return;
+        ['code', 'subject', 'hours', 'credit', 'maxCollect', 'maxFinal'].forEach(function (k) { if (lib[k] != null && lib[k] !== '') ed.data.meta[k] = lib[k]; });
+        ed.data.indicators = lib.indicators;
+        if (lib.standards && lib.standards.length) ed.data.standards = lib.standards;
+        recompute(); c.rerender();
+        c.toast('ใส่ตัวชี้วัด ' + lib.indicators.length + ' ตัว จาก' + lib.via, 'ok');
+      }, function () {});
+    }
   }
   function close(force) {
     if (!force && ed && ed.dirty && !confirm('ยังไม่ได้บันทึกการแก้ไข ต้องการปิดหรือไม่?')) return;
@@ -210,6 +222,22 @@
       });
       recompute(); touch(); ctx.rerender();
     },
+    pullInd: async function () {
+      var m = ed.data.meta;
+      if (!ctx.libFor) return;
+      ctx.setBusy('กำลังหาตัวชี้วัด ' + (m.levelName || '') + ' ' + (m.subject || '') + '...');
+      var lib = null;
+      try { lib = await ctx.libFor(m.level, ctx.slotOf(m), m.room); } catch (e) { console.warn(e); } finally { ctx.setBusy(''); }
+      if (!lib || !lib.indicators || !lib.indicators.length) {
+        ctx.toast('ยังไม่พบตัวชี้วัดของ ' + (m.levelName || '') + ' วิชา' + (m.subject || '') + ' ในคลังและโฟลเดอร์ต้นฉบับ — ใส่ไฟล์ ปพ.5 ของวิชานี้ในโฟลเดอร์ต้นฉบับ หรืออัปโหลดเข้าระบบสัก 1 ไฟล์ ระบบจะจำไว้ให้ทุกห้อง', 'err');
+        return;
+      }
+      if (ed.data.indicators.length && !confirm('แทนที่ตัวชี้วัดเดิม ' + ed.data.indicators.length + ' ตัว ด้วย ' + lib.indicators.length + ' ตัวจาก ' + lib.via + '?\n(คะแนนที่กรอกไว้จะจับคู่ตามลำดับตัวชี้วัด)')) return;
+      ed.data.indicators = lib.indicators;
+      if (lib.standards && lib.standards.length) ed.data.standards = lib.standards;
+      recompute(); touch(); ctx.rerender();
+      ctx.toast('ใส่ตัวชี้วัด ' + lib.indicators.length + ' ตัว จาก' + lib.via, 'ok');
+    },
     addInd: function (b) {
       var inds = ed.data.indicators, n = +b.dataset.n;
       for (var i = 0; i < n; i++) {
@@ -269,7 +297,9 @@
     },
     roster: rosterSection,
     ind: function (el) {
-      el.innerHTML = tools('<button class="btn" data-ed="addInd" data-n="1">+ เพิ่ม 1 ตัวชี้วัด</button><button class="btn" data-ed="addInd" data-n="5">+ เพิ่ม 5</button><button class="btn danger" data-ed="delInd">ลบตัวสุดท้าย</button>') +
+      var none = !ed.data.indicators.length;
+      el.innerHTML = (none ? '<div class="ed-empty-ind"><b>ยังไม่มีตัวชี้วัด</b> กดปุ่มด้านล่าง ระบบจะดึงตัวชี้วัดของ ' + esc(ed.data.meta.levelName || '') + ' วิชา' + esc(ed.data.meta.subject || '') + ' จากคลัง/ไฟล์ ปพ.5 ปีที่แล้วในโฟลเดอร์ต้นฉบับให้</div>' : '') +
+        tools('<button class="btn ' + (none ? 'pri' : '') + '" data-ed="pullInd">📥 ดึงตัวชี้วัด (ปพ.5 ปีที่แล้ว)</button><button class="btn" data-ed="addInd" data-n="1">+ เพิ่ม 1 ตัวชี้วัด</button><button class="btn" data-ed="addInd" data-n="5">+ เพิ่ม 5</button><button class="btn danger" data-ed="delInd">ลบตัวสุดท้าย</button>') +
         hint('กำหนดตัวชี้วัดและคะแนนเต็มของแต่ละตัว คะแนนเก็บจะคิดเป็นสัดส่วนจากผลรวมคะแนนเต็ม') + '<div class="ed-g"></div>';
       grid(el.querySelector('.ed-g'), {
         corner: 'ลำดับ', rows: ed.data.indicators, rowLabel: function (x) { return x.idx; },

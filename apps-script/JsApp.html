@@ -59,6 +59,9 @@
     putTemplate: function (kind, bytes, name) { return this.tx('readwrite', function (s) { return s.put({ kind: kind, bytes: bytes, name: name, savedAt: Date.now() }); }, 'templates'); },
     getRoster: function () { return this.tx('readonly', function (s) { return s.get('current'); }, 'roster'); },
     putRoster: function (r) { var o = Object.assign({ key: 'current' }, r); return this.tx('readwrite', function (s) { return s.put(o); }, 'roster').then(function () { return o; }); },
+    // คลังตัวชี้วัดที่เรียนรู้จากไฟล์ (รุ่นในเครื่อง)
+    getLib: function () { try { return Promise.resolve(JSON.parse(localStorage.getItem('pp5-lib') || '{}')); } catch (e) { return Promise.resolve({}); } },
+    saveLib: function (key, v) { var m = {}; try { m = JSON.parse(localStorage.getItem('pp5-lib') || '{}'); m[key] = v; localStorage.setItem('pp5-lib', JSON.stringify(m)); } catch (e) {} return Promise.resolve(true); },
     // โลโก้/ลายเซ็น (รุ่นในเครื่อง เก็บในเบราว์เซอร์)
     getBrand: function () { try { return Promise.resolve(JSON.parse(localStorage.getItem('pp5-brand') || 'null')); } catch (e) { return Promise.resolve(null); } },
     saveBrand: function (b) { try { localStorage.setItem('pp5-brand', JSON.stringify(b)); } catch (e) { return Promise.reject(new Error('พื้นที่เก็บในเบราว์เซอร์เต็ม')); } return Promise.resolve(true); },
@@ -202,6 +205,7 @@
         last = rec; ok++;
         var where = isPP6 ? meta.levelName + '/' + meta.room + ' ใบรายงาน ปพ.6' : meta.levelName + '/' + meta.room + ' วิชา ' + meta.code + ' ' + meta.subject;
         if (isPP6 && !expected) state.tab = 'report';
+        if (!isPP6) learnLib(data, f.name);   // จำตัวชี้วัดของชั้น/วิชานี้ไว้ใช้ครั้งต่อไป
         var tk = window.PP5Templates ? PP5Templates.detect(wb.SheetNames) : null;
         if (tk) {
           // ไฟล์ต้นฉบับที่อัปโหลด = แม่แบบของห้อง/วิชานี้ (และเป็นแม่แบบทั่วไปถ้ายังไม่มี)
@@ -401,6 +405,49 @@
   }
   function fileNameFor(kind, meta, ext) { var x = 'x' + (ext || '.xlsx'); return kind === 'pp6' ? pp6FileName(meta, x) : newFileName(meta, x); }
 
+  // ---------- คลังตัวชี้วัด: คลังในระบบ + ที่เรียนรู้จากไฟล์ที่อัปโหลด + ไฟล์ในโฟลเดอร์ต้นฉบับ ----------
+  var learned = {};
+  function libEntryFrom(d, from) {
+    var inds = (d.indicators || []).filter(function (i) { return i.text || i.code; });
+    if (!inds.length) return null;
+    var m = d.meta;
+    return { code: m.code, subject: m.subject, type: m.type, group: m.group, hours: m.hours, credit: m.credit, maxCollect: m.maxCollect, maxFinal: m.maxFinal,
+      indicators: inds.map(function (i) { return { idx: i.idx, term: i.term, std: i.std, code: i.code, text: i.text, max: i.max }; }),
+      standards: (d.standards || []).filter(function (x) { return x.text; }), from: from || '', at: Date.now() };
+  }
+  function learnLib(d, from) {
+    if (!d || !d.meta || !d.meta.level || !DB.saveLib) return;
+    var slot = slotOf(d.meta), e = libEntryFrom(d, from);
+    if (!e || /^x-/.test(slot) && !d.meta.code) return;
+    var key = d.meta.level + '|' + slot;
+    learned[key] = e;
+    DB.saveLib(key, e).catch(function (er) { console.warn('lib', er); });
+  }
+  function libSync(level, slot) {
+    var k = level + '|' + slot;
+    if (learned[k]) return JSON.parse(JSON.stringify(learned[k]));
+    return window.PP5Library ? PP5Library.get(level, slot) : null;
+  }
+  // หาในคลังก่อน ไม่พบ → อ่านไฟล์ ปพ.5 ชั้น/วิชาเดียวกันในโฟลเดอร์ต้นฉบับ แล้วจำไว้
+  async function libFor(level, slot, room) {
+    var hit = libSync(level, slot);
+    if (hit) return Object.assign(hit, { via: hit.from ? 'คลังที่เรียนรู้จากไฟล์ ' + hit.from : 'คลังตัวชี้วัดของระบบ' });
+    if (!DB.sourceList) return null;
+    if (!srcList) { try { srcList = await DB.sourceList(); } catch (e) { srcList = []; } }
+    var c = srcList.map(function (x) { return { x: x, s: srcScore(x, 'pp5', level, room, slot) }; })
+      .filter(function (o) { return o.s >= 31; }).sort(function (a, b) { return b.s - a.s; });
+    for (var i = 0; i < c.length && i < 3; i++) {
+      try {
+        var f = await DB.sourceFile(c[i].x.id);
+        var d = PP5Parser.parseWorkbook(XLSX.read(f.bytes, { type: 'array' }));
+        if (+d.meta.level !== +level || slotOf(d.meta) !== slot) continue;
+        learnLib(d, f.name);
+        return Object.assign(libSync(level, slot), { via: 'ไฟล์ต้นฉบับ ' + f.name });
+      } catch (e) { console.warn('lib source', e); }
+    }
+    return null;
+  }
+
   // ---------- แม่แบบรูปแบบต้นฉบับ (บังคับใช้เสมอ) ----------
   // ลำดับการหาแม่แบบ: ของห้อง/วิชานั้น → ไฟล์ต้นฉบับในโฟลเดอร์ของโรงเรียน (ชั้น/วิชาเดียวกันก่อน) → แม่แบบทั่วไป
   var tplInfo = {}, tplCache = {}, srcList = null;
@@ -482,6 +529,7 @@
     var existing = records.filter(function (r) { return r.key === key; })[0];
     var old = oldKey ? records.filter(function (r) { return r.key === oldKey; })[0] : null;
     if (existing && key !== oldKey && !confirm('มีข้อมูลวิชานี้อยู่แล้ว (' + existing.fileName + ') ต้องการแทนที่หรือไม่?')) throw new Error('ยกเลิกการบันทึก');
+    if (kind === 'pp5') learnLib(data, 'กรอกในระบบ ' + (meta.levelName || '') + '/' + meta.room);
     var built = await buildFile(kind, data);
     var blob = built.blob;
     var rec = {
@@ -506,6 +554,7 @@
     coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
     masterRoster: function () { var c = rosterClass(curClass()); return c ? { students: c.students, teachers: c.teachers, date: roster.data.date ? roster.data.date.display : roster.data.dateText } : null; },
     saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor,
+    libSync: libSync, libFor: libFor, slotOf: function (m) { return slotOf(m); },
     buildFile: buildFile
   };
   // โลโก้ + ลายเซ็นผู้บริหาร (ผู้ดูแลตั้ง ใช้ทุกห้อง) และลายเซ็นครู
@@ -1254,6 +1303,7 @@
       records = await DB.all();
       if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
       if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
+      if (DB.getLib) { try { learned = (await DB.getLib()) || {}; } catch (le) { learned = {}; } }
       if (DB.getBrand) { try { brand = await DB.getBrand(); sigs = (await DB.getSigs()) || {}; } catch (be) { console.warn('brand', be); } }
       rosterVer++;
     } catch (e) {

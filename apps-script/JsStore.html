@@ -104,6 +104,8 @@
     },
     templateInfo: function () { return call('api_templateInfo'); },
     setFlags: function (f) { var self = this; return call('api_setFlags', [JSON.stringify(f)]).then(function (r) { self.flags = r; return r; }); },
+    getLib: function () { return call('api_getLib'); },
+    saveLib: function (key, v) { return call('api_saveLib', [key, JSON.stringify(v)]); },
     getBrand: function () { return call('api_getBrand'); },
     saveBrand: function (b) { return call('api_saveBrand', [JSON.stringify(b)]); },
     getSigs: function () { return call('api_getSigs'); },

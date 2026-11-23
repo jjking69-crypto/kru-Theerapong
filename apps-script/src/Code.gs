@@ -353,6 +353,21 @@ function api_saveSig(pin, name, dataUrl) {
   });
 }
 
+// ===== คลังตัวชี้วัดที่ระบบเรียนรู้จากไฟล์ ปพ.5 ที่ครูอัปโหลด (ชั้น|วิชา → ตัวชี้วัด มาตรฐาน) =====
+function lib_() { var t = readText_(props_().getProperty('LIB_ID')); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
+function api_getLib(pin) { checkPin_(pin); return lib_(); }
+function api_saveLib(pin, key, json) {
+  checkPin_(pin);
+  if (!/^\d{1,2}\|[A-Za-z0-9_\-]{1,40}$/.test(String(key))) throw new Error('คีย์คลังไม่ถูกต้อง');
+  var v = JSON.parse(json || 'null');
+  if (!v || !v.indicators || !v.indicators.length || json.length > 200000) throw new Error('ข้อมูลตัวชี้วัดไม่ถูกต้อง');
+  return withLock_(function () {
+    var all = lib_(); all[key] = v;
+    props_().setProperty('LIB_ID', writeText_(subFolder_(rootFolder_(), DATA_FOLDER_NAME), 'library.json', props_().getProperty('LIB_ID'), JSON.stringify(all)));
+    return true;
+  });
+}
+
 // ===== ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) — เก็บทุกฉบับไว้เป็นประวัติ ใช้ฉบับล่าสุด =====
 function api_saveRoster(pin, b64, fileName, dataJson, dateText) {
   need_(pin, 'allowRoster');
