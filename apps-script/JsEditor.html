@@ -512,7 +512,9 @@
 
   window.PP5Editor = {
     open: open, close: close, render: render,
-    active: function () { return !!ed; }
+    active: function () { return !!ed; },
+    kind: function () { return ed ? ed.kind : null; },
+    title: function () { return ed && ed.kind === 'pp5' ? ((ed.data.meta.code || '') + ' ' + (ed.data.meta.subject || '')).trim() : ''; }
   };
 })();
 

@@ -26,10 +26,11 @@ var ROSTER_FOLDER_NAME = 'รายชื่อนักเรียน';
 var PROP_PREFIX = 'rec:';
 
 function doGet(e) {
-  var admin = e && e.parameter && e.parameter.page === 'admin';
-  var cfg = admin ? null : getCfg_();
-  return HtmlService.createTemplateFromFile(admin ? 'Index' : 'Public').evaluate()
-    .setTitle(admin ? ADMIN_TITLE : (cfg.title || 'ประกาศผลการเรียน') + (cfg.school ? ' ' + cfg.school : ''))
+  var page = e && e.parameter && e.parameter.page;
+  var admin = page === 'admin', sup = page === 'super';
+  var cfg = admin || sup ? null : getCfg_();
+  return HtmlService.createTemplateFromFile(sup ? 'Super' : admin ? 'Index' : 'Public').evaluate()
+    .setTitle(sup ? 'ระบบผู้ดูแล (แอดมิน)' : admin ? ADMIN_TITLE : (cfg.title || 'ประกาศผลการเรียน') + (cfg.school ? ' ' + cfg.school : ''))
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -281,6 +282,11 @@ function api_sourceList(pin) {
   try { cache_().put('srcList', JSON.stringify(out), 21600); } catch (e) {}
   return out;
 }
+function api_clearSourceCache(pin) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  try { cache_().remove('srcList'); } catch (e) {}
+  return api_sourceList(pin).length;
+}
 function api_sourceFile(pin, id) {
   checkPin_(pin);
   var list = api_sourceList(pin), hit = list.filter(function (x) { return x.id === id; })[0];
@@ -391,7 +397,7 @@ function api_savePublicCfg(pin, cfgJson) {
 // ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
 function api_publicInfo() {
   var fl = flags_();
-  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_() };
+  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_() };
   var cfg = getCfg_(), idx = readIndex_(), years = {};
   Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
   var u = webUrl_();
@@ -399,10 +405,11 @@ function api_publicInfo() {
     title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
     years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
     logo: readText_(props_().getProperty('PUB_LOGO_ID')),
-    adminUrl: adminUrl_()
+    adminUrl: adminUrl_(), superUrl: superUrl_()
   };
 }
 function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }
+function superUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=super' : ''; }
 
 /** ค้นหาผลของนักเรียน 1 คน (คืนเฉพาะข้อมูลของคนนั้น ไม่คืนทั้งห้อง) */
 function api_lookup(id, code) {

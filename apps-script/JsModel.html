@@ -236,6 +236,83 @@
     return data;
   }
 
+  // ---------- สร้าง ปพ.6 จาก ปพ.5 ของห้อง (ใช้เมื่อยังไม่มีไฟล์ ปพ.6) ----------
+  // คะแนนเก็บรายภาค = คะแนนตัวชี้วัดของภาคนั้น เทียบเป็นครึ่งหนึ่งของคะแนนเก็บ (ภาค 2 ปรับให้รวมแล้วเท่ากับคะแนนเก็บใน ปพ.5)
+  // คะแนนสอบปลายภาคใน ปพ.5 แบ่งครึ่งให้ภาค 1 / ภาค 2  — ตรงกับวิธีที่โรงเรียนใช้ในไฟล์ ปพ.6
+  var LV_TEXT = { 3: 'ดีเยี่ยม', 2: 'ดี', 1: 'ผ่าน', 0: 'ไม่ผ่าน' };
+  function nameKey(s) { return String(s || '').replace(/\s+/g, '').replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|นาง)/, ''); }
+  function findStu(list, s) {
+    if (!s) return null;
+    var id = s.id != null ? String(s.id).trim() : '';
+    var hit = id ? list.filter(function (x) { return String(x.id || '').trim() === id; })[0] : null;
+    if (hit) return hit;
+    var nk = nameKey(s.name || fullName(s));
+    return nk ? list.filter(function (x) { return nameKey(x.name || fullName(x)) === nk; })[0] || null : null;
+  }
+  function pp5TermScores(rec, s) {
+    var mc = num(rec.meta.maxCollect) == null ? 70 : rec.meta.maxCollect, half = mc / 2, out = { t1: null, t2: null };
+    var raw = { 1: 0, 2: 0 }, mx = { 1: 0, 2: 0 }, any = { 1: false, 2: false };
+    (rec.indicators || []).forEach(function (i) {
+      var t = i.term === 2 ? 2 : 1;
+      mx[t] += i.max || 0;
+      var v = num(s.scores && s.scores[i.idx]);
+      if (v != null) { raw[t] += v; any[t] = true; }
+    });
+    var r = s.result || {}, fin = num(r.final), col = num(r.collect);
+    var e1 = fin == null ? null : Math.floor(fin / 2), e2 = fin == null ? null : fin - Math.floor(fin / 2);
+    var c1 = any[1] && mx[1] ? Math.round(raw[1] / mx[1] * half) : null;
+    var c2 = any[2] && mx[2] ? Math.round(raw[2] / mx[2] * half) : null;
+    if (col != null && c1 != null && c2 != null) c2 = col - c1;
+    if (c1 != null || e1 != null) out.t1 = { collect: c1, exam: e1, total: (c1 || 0) + (e1 || 0) };
+    if (c2 != null) out.t2 = { collect: c2, exam: e2, total: (c2 || 0) + (e2 || 0) };
+    return out;
+  }
+  function pp6FromPP5(o) {
+    var recs = (o.records || []).filter(function (d) { return d && d.students; });
+    var subjects = recs.map(function (d) {
+      var m = d.meta;
+      return { code: m.code, name: m.subject, hours: m.hours, credit: m.credit != null ? m.credit : (m.hours ? m.hours / 40 : null), basic: m.type !== 'เพิ่มเติม' };
+    });
+    var studs = o.students && o.students.length ? o.students : [];
+    if (!studs.length) {
+      var seen = {};
+      recs.forEach(function (d) { d.students.forEach(function (s) { var k = s.id || nameKey(s.name); if (k && !seen[k]) { seen[k] = 1; studs.push(s); } }); });
+      studs.sort(function (a, b) { return (a.no || 0) - (b.no || 0); });
+    }
+    var data = newPP6({ year: o.year, level: o.level, room: o.room, stage: o.stage, school: o.school, teacher: o.teacher, subjects: subjects, students: studs });
+    data.source = 'pp5';
+    recs.forEach(function (d) {
+      var key = d.meta.subject.replace(/\s+/g, '');
+      if (data.indicatorTable[key]) data.indicatorTable[key] = { total: (d.indicators || []).length || null, passed: null };
+    });
+    // ชั่วโมงเรียนรายภาค: ใช้วิชาที่มีชั่วโมงมากที่สุด
+    var hrs = recs.slice().sort(function (a, b) { return ((b.hours && b.hours.year) || 0) - ((a.hours && a.hours.year) || 0); })[0];
+    data.students.forEach(function (st) {
+      var found = recs.map(function (d) { return { d: d, s: findStu(d.students, st) }; });
+      found.forEach(function (f) {
+        if (!f.s) return;
+        var ts = pp5TermScores(f.d, f.s);
+        st.t1[f.d.meta.code] = ts.t1; st.t2[f.d.meta.code] = ts.t2;
+      });
+      var hs = hrs ? findStu(hrs.students, st) : null;
+      if (hs && hs.attendance) {
+        ['t1', 't2'].forEach(function (t) {
+          var a = hs.attendance[t] || {};
+          var tot = hrs.hours && num(hrs.hours[t]);
+          if (a.present != null || tot) st.attendance[t] = { total: tot, present: num(a.present) };
+        });
+      }
+      var rt = found.filter(function (f) { return f.s && f.s.rtw && f.s.rtw.t1; })[0];
+      if (rt) {
+        var w = rt.s.rtw, lv = function (k) { var a = num(w.t1 && w.t1[k]), b = num(w.t2 && w.t2[k]); return a != null && b != null ? (a + b) / 2 : a != null ? a : b; };
+        st.rtw.scores = ['read', 'think', 'write'].map(function (k, i) { var v = lv(k); return v == null ? null : Math.round(v / 3 * data.rtwItems[i].max); });
+      }
+      var ch = found.filter(function (f) { return f.s && f.s.characteristics && f.s.characteristics.items; })[0];
+      if (ch) st.characteristics.items = data.characteristicItems.map(function (n, i) { var v = num(ch.s.characteristics.items[i + 1]); return v == null ? '' : LV_TEXT[Math.round(v)] || ''; });
+    });
+    return fillPP6(data, true);
+  }
+
   // ---------- เขียนไฟล์ Excel ----------
   function enc(r, c) { return XLSX.utils.encode_cell({ r: r, c: c }); }
   function col(c) { return XLSX.utils.encode_col(c); }
@@ -525,7 +602,7 @@
   }
 
   return {
-    newPP5: newPP5, newPP6: newPP6, fillPP5: fillPP5, fillPP6: fillPP6,
+    newPP5: newPP5, newPP6: newPP6, fillPP5: fillPP5, fillPP6: fillPP6, pp6FromPP5: pp6FromPP5, pp5TermScores: pp5TermScores, findStu: findStu, nameKey: nameKey,
     exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob,
     defaultSubjects: defaultSubjects, subjectDefaults: subjectDefaults, blankStudent: blankStudent, copyRoster: copyRoster,
     gradeOf: gradeOf, fullName: fullName, stageName: stageName,

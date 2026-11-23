@@ -10,7 +10,7 @@
   ];
   function b64ToBytes(b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
 
-  var PIN_KEY = 'pp5-pin';
+  var PIN_KEY = window.PP5_PIN_KEY || 'pp5-pin';
   function getPin() { try { return localStorage.getItem(PIN_KEY) || ''; } catch (e) { return window.__pp5pin || ''; } }
   function setPin(v) { window.__pp5pin = v; try { localStorage.setItem(PIN_KEY, v); } catch (e) { /* ใช้ค่าในหน่วยความจำ */ } }
 
@@ -27,10 +27,13 @@
   function askPin(msg) {
     if (asking) return asking;
     asking = window.PP5PinPad.ask({
-      title: 'เข้าสู่ระบบสำหรับครู', sub: msg || 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
+      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบสำหรับครู', sub: msg || 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {
-          google.script.run.withSuccessHandler(function (r) { res(r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง')); })
+          google.script.run.withSuccessHandler(function (r) {
+            if (r && r.role && window.PP5_NEED_ADMIN && r.role !== 'admin') return res('รหัสนี้เป็นรหัสครู ใช้เข้าระบบครูเท่านั้น');
+            res(r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'));
+          })
             .withFailureHandler(function () { res('เชื่อมต่อไม่สำเร็จ ลองใหม่'); }).api_checkPin(p);
         });
       }
@@ -99,6 +102,7 @@
     },
     templateInfo: function () { return call('api_templateInfo'); },
     setFlags: function (f) { var self = this; return call('api_setFlags', [JSON.stringify(f)]).then(function (r) { self.flags = r; return r; }); },
+    clearSourceCache: function () { return call('api_clearSourceCache'); },
     sourceList: function () { return call('api_sourceList'); },
     sourceFile: async function (id) { var t = await call('api_sourceFile', [id]); return { name: t.name, bytes: b64ToBytes(t.b64) }; },
     getRoster: async function () {

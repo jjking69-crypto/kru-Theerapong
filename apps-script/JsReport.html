@@ -425,12 +425,49 @@
     return '<div class="rc-sig-pick">' + (src ? '<img src="' + src + '" alt="">' : '') + '<select data-img="' + role + '">' + opts + '</select></div>';
   }
 
+  // ---------- ตรวจความถูกต้อง: รายชื่อเทียบทะเบียน / คะแนนเทียบ ปพ.5 ----------
+  function checkPanel(rec) {
+    var h = '<div class="card rc-panel chk-panel"><h3>🔎 ตรวจสอบความถูกต้อง</h3><div class="chk-grid">';
+    var c = rec.check;
+    if (rec.virtual) h += rec.fromRoster ? chkItem(true, 'รายชื่อนักเรียน', 'ใช้รายชื่อจาก' + ctx.rosterLabel()) : chkItem(null, 'รายชื่อนักเรียน', 'ยังไม่มีทะเบียนรายชื่อของห้องนี้ในปีการศึกษานี้ จึงใช้รายชื่อจากไฟล์ ปพ.5');
+    else if (!c) h += chkItem(null, 'รายชื่อนักเรียน', 'ยังไม่มีทะเบียนรายชื่อ (ไฟล์ Word) ให้เทียบ');
+    else if (!c.issues) h += chkItem(true, 'รายชื่อนักเรียน', 'ตรงกับทะเบียนทั้ง ' + c.matched + ' คน');
+    else {
+      h += chkItem(false, 'รายชื่อนักเรียน', 'ไม่ตรงทะเบียน ' + c.issues + ' รายการ — ระบบใช้ชื่อและเลขที่ตามทะเบียนแล้ว',
+        '<ul class="chk-list">' + c.diffs.map(function (d) { return '<li>เลขที่ ' + esc(d.no) + ' ' + esc(d.name) + ': ' + esc(d.items.join(', ')) + '</li>'; }).join('') +
+        c.notInRoster.map(function (d) { return '<li class="bad">ไม่มีในทะเบียน: ' + esc(d.name) + (d.id ? ' (' + esc(d.id) + ')' : '') + '</li>'; }).join('') +
+        c.missing.map(function (d) { return '<li class="bad">มีในทะเบียนแต่ไม่มีในไฟล์: เลขที่ ' + esc(d.no) + ' ' + esc(d.name) + '</li>'; }).join('') + '</ul>');
+    }
+    if (rec.virtual) h += chkItem(true, 'คะแนน', 'คำนวณจากไฟล์ ปพ.5 โดยตรง');
+    else {
+      var cmp = ctx.compare ? ctx.compare(rec) : null;
+      if (!cmp) h += chkItem(null, 'คะแนนเทียบ ปพ.5', 'ยังไม่มีไฟล์ ปพ.5 ของห้องนี้ให้เทียบ');
+      else if (!cmp.compared) h += chkItem(null, 'คะแนนเทียบ ปพ.5', 'ไม่พบรายวิชาที่ตรงกันระหว่าง ปพ.6 กับ ปพ.5');
+      else if (!cmp.list.length) h += chkItem(true, 'คะแนนเทียบ ปพ.5', 'ตรงกันทั้งหมด (' + cmp.subjects.length + ' วิชา ' + cmp.compared + ' รายการ)');
+      else {
+        var subs = Object.keys(cmp.bySubject).map(function (k) { var n = (cmp.subjects.filter(function (x) { return x.code === k; })[0] || {}).name || k; return esc(n) + ' ' + cmp.bySubject[k]; }).join(' · ');
+        h += chkItem(false, 'คะแนนเทียบ ปพ.5', 'ไม่ตรง ' + cmp.list.length + ' จุด จาก ' + cmp.compared + ' รายการ (' + cmp.subjects.length + ' วิชา) · ' + subs,
+          '<p class="sub" style="margin:6px 0">ค่าจาก ปพ.5 คิดแบบ: คะแนนเก็บรายภาค = ตัวชี้วัดของภาคนั้นเทียบครึ่งหนึ่งของคะแนนเก็บ, คะแนนสอบ = ปลายภาคแบ่งครึ่ง (ถ้าครูแบ่งคะแนนสอบแต่ละภาคไม่เท่ากัน จะขึ้นว่าไม่ตรงได้)</p>' +
+          '<div class="tbl-wrap" style="max-height:320px"><table><thead><tr><th>เลขที่</th><th class="l">ชื่อ-สกุล</th><th class="l">วิชา</th><th>ภาค</th><th>รายการ</th><th>ปพ.6</th><th>ปพ.5</th></tr></thead><tbody>' +
+          cmp.list.slice(0, 300).map(function (x) {
+            return '<tr><td>' + esc(x.no) + '</td><td class="l">' + esc(x.name) + '</td><td class="l">' + esc(x.subject || x.code) + '</td><td>' + x.term + '</td><td>' + (x.field === 'collect' ? 'คะแนนเก็บ' : 'คะแนนสอบ') + '</td><td><b>' + dash(x.pp6) + '</b></td><td>' + dash(x.pp5) + '</td></tr>';
+          }).join('') + '</tbody></table></div>');
+      }
+    }
+    return h + '</div></div>';
+  }
+  function chkItem(ok, title, text, more) {
+    var ic = ok === true ? '✅' : ok === false ? '⚠️' : 'ℹ️';
+    return '<div class="chk-it ' + (ok === true ? 'ok' : ok === false ? 'bad' : '') + '"><div class="chk-h">' + ic + ' <b>' + esc(title) + '</b></div><div class="chk-t">' + text + '</div>' +
+      (more ? '<details><summary>ดูรายละเอียด</summary>' + more + '</details>' : '') + '</div>';
+  }
+
   function render(view, c) {
     ctx = c;
     var rec = ctx.pp6Record();
     var cls = ctx.className();
     if (!rec) {
-      view.innerHTML = '<h2 class="sec">ใบรายงานผลการเรียนรายบุคคล (ปพ.6) ชั้น ' + esc(cls) + '</h2>' +
+      view.innerHTML = '<p class="sub">ยังไม่มีคะแนน ปพ.5 หรือไฟล์ ปพ.6 ของห้องนี้ · เมื่อมีคะแนน ปพ.5 ระบบจะสร้างใบรายงาน ปพ.6 ให้อัตโนมัติ</p>' +
         '<div class="slot card empty" data-slot="pp6" tabindex="0" role="button" style="min-height:130px">' +
         '<div class="slot-h"><div class="slot-ic" style="background:#0b7285">6</div><div><div class="slot-n">อัปโหลดไฟล์ ปพ.6 ของห้องนี้</div>' +
         '<div class="slot-c">ไฟล์แบบรายงานการพัฒนาคุณภาพผู้เรียนรายบุคคล (.xlsx) ที่มีชีต "ผลสัมฤทธิ์ฯ เทอม 1"</div></div></div>' +
@@ -444,13 +481,17 @@
     var hasT2 = d.students.some(function (s) { return Object.keys(s.t2).some(function (k) { return s.t2[k]; }); });
     if (preview.no == null || !d.students.some(function (s) { return String(s.no) === String(preview.no); })) preview.no = d.students[0].no;
 
-    var h = '<h2 class="sec">ใบรายงานผลการเรียนรายบุคคล (ปพ.6) ชั้น ' + esc(cls) + '</h2>';
+    var h = '';
     h += '<div class="card rc-panel"><div class="slot-h" style="margin-bottom:10px"><div class="slot-ic" style="background:#0b7285">6</div><div style="flex:1;min-width:0">' +
       '<div class="slot-n">' + esc(d.meta.className) + ' · ปีการศึกษา ' + esc(d.meta.year) + ' · ' + d.students.length + ' คน · ' + d.subjects.length + ' รายวิชา</div>' +
-      '<div class="slot-f" style="margin-top:4px">📄 ' + esc(rec.fileName) + '</div></div></div>' +
-      '<div class="slot-acts"><button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button><button class="btn" data-rc="replace">อัปโหลดใหม่</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>';
+      '<div class="slot-f" style="margin-top:4px">' + (rec.virtual ? '⚙️ ' : '📄 ') + esc(rec.fileName) + '</div></div></div>' +
+      (rec.virtual
+        ? '<p class="note" style="margin:0 0 10px">ยังไม่มีไฟล์ ปพ.6 ของห้องนี้ ระบบจึง<b>สร้างให้อัตโนมัติ</b>จากคะแนน ปพ.5 ทุกวิชาที่มี และรายชื่อจากทะเบียนนักเรียน (คะแนนเก็บรายภาคคิดจากตัวชี้วัดของภาคนั้น คะแนนสอบปลายภาคแบ่งครึ่ง 2 ภาค) · ถ้าอัปโหลดไฟล์ ปพ.6 เข้ามา ระบบจะใช้ไฟล์นั้นแทน</p>' +
+          '<div class="slot-acts"><button class="btn pri" data-rc="dlx">⬇ ดาวน์โหลด ปพ.6 (Excel รูปแบบต้นฉบับ)</button><button class="btn" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไข/บันทึกเป็น ปพ.6</button><button class="btn" data-rc="replace">⇪ อัปโหลดไฟล์ ปพ.6 มาใช้แทน</button></div>'
+        : '<div class="slot-acts"><button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button><button class="btn" data-rc="replace">อัปโหลดใหม่</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>');
     if (!hasT2) h += '<p class="note" style="margin-top:12px">ไฟล์นี้ยังไม่มีคะแนนภาคเรียนที่ 2 (ในไฟล์ Excel เกรดจึงขึ้น #VALUE!) เลือกได้ว่าจะคิดระดับผลการเรียนจากคะแนนภาคเรียนที่ 1 ไปก่อน หรือเว้นว่างไว้จนกว่าจะมีคะแนนครบ</p>';
     h += '</div>';
+    h += checkPanel(rec);
 
     h += '<div class="card rc-panel"><h3>รูปแบบใบรายงาน</h3><div class="rc-row">' +
       '<div class="rc-opt"><span>ขนาดกระดาษ</span><div class="seg" data-set="paper">' +

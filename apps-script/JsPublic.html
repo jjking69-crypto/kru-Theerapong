@@ -134,15 +134,17 @@
     var tb = $('pubTeacher');
     if (tb) tb.addEventListener('click', function () {
       if (!window.PP5PinPad) { if (info.adminUrl) window.open(info.adminUrl, '_top'); return; }
+      var role = null;
       PP5PinPad.ask({
-        title: 'สำหรับครู', sub: 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
+        title: 'เข้าสู่ระบบ', sub: 'รหัสครู หรือ รหัสผู้ดูแลระบบ แล้วกด ตกลง', length: 12, autoSubmit: false,
         check: function (p) {
-          return call('api_checkPin', [p]).then(function (r) { return r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'); });
+          return call('api_checkPin', [p]).then(function (r) { role = r && r.role; return role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'); });
         }
       }).then(function (p) {
         if (p == null) return;
-        try { localStorage.setItem('pp5-pin', p); } catch (e) {}
-        var u = info.adminUrl || '';
+        // รหัสครู → ระบบครู · รหัสผู้ดูแล → ระบบแอดมิน (แยกกัน)
+        try { localStorage.setItem(role === 'admin' ? 'pp5-admin-pin' : 'pp5-pin', p); } catch (e) {}
+        var u = role === 'admin' ? (info.superUrl || '') : (info.adminUrl || '');
         if (u) window.open(u, '_top');
       });
     });

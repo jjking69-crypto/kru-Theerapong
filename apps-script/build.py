@@ -55,6 +55,9 @@ def build():
     # หน้าสาธารณะ (หน้าแรก)
     (HERE / 'CssPublic.html').write_text('<style>\n' + read(WEB / 'public.css') + '</style>\n', encoding='utf-8')
     (HERE / 'Public.html').write_text(read(SRC / 'public.html'), encoding='utf-8')
+    # หน้าผู้ดูแล (แอดมิน) แยกจากระบบครู
+    (HERE / 'Super.html').write_text(read(SRC / 'super.html'), encoding='utf-8')
+    (HERE / 'JsSuper.html').write_text('<script>\n' + inline_js(read(WEB / 'super.js')) + '\n</script>\n', encoding='utf-8')
     html = re.sub(r'\s*<link rel="(icon|apple-touch-icon)"[^>]*>', '', html)
     html = re.sub(r'\s*<meta name="viewport"[^>]*>', '', html)  # Apps Script ใส่ให้ใน doGet
     html = replace_once(
@@ -67,7 +70,7 @@ def build():
         'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย')
 
     parts = [('JsPinPad', WEB / 'pinpad.js'), ('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
-             ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'), ('JsRoster', WEB / 'roster.js'), ('JsTeachers', WEB / 'teachers.js'), ('JsLibrary', WEB / 'library.js'),
+             ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'), ('JsRoster', WEB / 'roster.js'), ('JsTeachers', WEB / 'teachers.js'), ('JsReconcile', WEB / 'reconcile.js'), ('JsLibrary', WEB / 'library.js'),
              ('JsGrid', WEB / 'grid.js'), ('JsEditor', WEB / 'editor.js'),
              ('JsPublic', WEB / 'public.js'), ('JsPublish', WEB / 'publish.js'),
              ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]

@@ -46,13 +46,14 @@
     <section id="rosterBar"></section>
 
     <nav class="tabs" role="tablist">
-      <button data-tab="subjects" role="tab">รายวิชา</button>
-      <button data-tab="summary" role="tab">สรุปทั้งห้อง</button>
-      <button data-tab="student" role="tab">รายบุคคล</button>
-      <button data-tab="report" role="tab">ใบรายงาน ปพ.6</button>
-      <button data-tab="publish" role="tab">ประกาศผล</button>
+      <button data-tab="subjects" role="tab" style="--tc:#1d5bd8"><span class="ti">📘</span>รายวิชา (ปพ.5)</button>
+      <button data-tab="report" role="tab" style="--tc:#0b7285"><span class="ti">📗</span>ใบรายงาน (ปพ.6)</button>
+      <button data-tab="summary" role="tab" style="--tc:#5f3dc4"><span class="ti">📊</span>สรุปทั้งห้อง</button>
+      <button data-tab="student" role="tab" style="--tc:#c2255c"><span class="ti">🧒</span>รายบุคคล</button>
+      <button data-tab="publish" role="tab" style="--tc:#2b8a3e"><span class="ti">📢</span>ประกาศผล</button>
     </nav>
 
+    <section id="banner" aria-live="polite"></section>
     <section id="view"></section>
 
     <p class="privacy">ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)
@@ -81,6 +82,7 @@
   <script src="roster.js"></script>
   <script src="pinpad.js"></script>
   <script src="teachers.js"></script>
+  <script src="reconcile.js"></script>
   <script src="library.js"></script>
   <script src="grid.js"></script>
   <script src="editor.js"></script>

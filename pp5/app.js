@@ -155,7 +155,8 @@
 
   // expected = { level, room, slot } เมื่ออัปโหลดผ่านช่องวิชาโดยตรง
   async function handleFiles(files, expected) {
-    var docs = Array.prototype.filter.call(files, function (f) { return /\.docx$/i.test(f.name); });
+    files = Array.prototype.slice.call(files || []); // สำเนาไว้ก่อน (ช่องเลือกไฟล์ถูกล้างระหว่างรอ)
+    var docs = files.filter(function (f) { return /\.docx$/i.test(f.name); });
     if (docs.length) { await handleRoster(docs[0]); if (docs.length === files.length) return; }
     files = Array.prototype.filter.call(files, function (f) { return /\.(xlsm|xlsx|xls)$/i.test(f.name); });
     if (!files.length) { toast('กรุณาเลือกไฟล์ Excel (.xlsm / .xlsx)', 'err'); return; }
@@ -222,6 +223,7 @@
 
   // ---------- ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) ----------
   var roster = null; // { fileName, bytes?, url?, data, uploadedAt }
+  var rosterVer = 0;  // เปลี่ยนเมื่อทะเบียนเปลี่ยน (ให้ตรวจ/ใช้ชื่อจากทะเบียนใหม่)
   async function handleRoster(file) {
     try {
       setBusy('กำลังอ่านไฟล์รายชื่อ...');
@@ -237,6 +239,7 @@
       var saved = await DB.putRoster({ fileName: file.name, bytes: bytes, data: data, uploadedAt: Date.now() });
       roster = Object.assign({ fileName: file.name, data: data, uploadedAt: Date.now() }, saved || {});
       if (DB !== LocalDB) roster.bytes = bytes;
+      rosterVer++;
       toast('อัปเดตรายชื่อนักเรียนตามข้อมูลวันที่ ' + newDate + ' แล้ว (' + data.classes.length + ' ห้อง ' + data.total + ' คน)' + (data.warnings.length ? ' · มีข้อควรตรวจ ' + data.warnings.length + ' รายการ' : ''), data.warnings.length ? 'info' : 'ok');
       if (data.year && years().indexOf(data.year) < 0) state.year = data.year;
       state.tab = 'roster';
@@ -286,11 +289,61 @@
     return list.length ? list : [1];
   }
   function classRecords() {
+    applyRosterTo(recsOf(curClass()), curClass());
     return records.filter(function (r) { return r.slot !== 'pp6' && r.year === state.year && r.level === state.level && r.room === state.room; })
       .sort(function (a, b) { return slotOrder(a.slot) - slotOrder(b.slot) || a.data.meta.code.localeCompare(b.data.meta.code); });
   }
+  // ---------- ทะเบียน = ข้อมูลหลัก: ใช้ชื่อ/เลขที่จากทะเบียนในไฟล์ ปพ. ทุกไฟล์ของห้อง ----------
+  function applyRosterTo(recs, cls) {
+    if (!window.PP5Reconcile) return;
+    var rc = rosterClass(cls), list = rc ? rc.students : null;
+    recs.forEach(function (r) {
+      if (!r.data || r.virtual || r._rv === rosterVer) return;
+      r._rv = rosterVer;
+      r.check = list ? PP5Reconcile.applyRoster(r.data, list) : null;
+    });
+  }
+  // ---------- ปพ.6: ใช้ไฟล์ที่อัปโหลด ถ้าไม่มีสร้างจาก ปพ.5 ของห้องให้อัตโนมัติ ----------
+  var vcache = {};
+  function vSettingsKey(key) { return 'pp5-vset:' + key; }
+  function virtualPP6(cls, rs) {
+    var real = rs.filter(function (r) { return r.slot === 'pp6'; })[0];
+    if (real) return real;
+    var p5 = rs.filter(function (r) { return r.slot !== 'pp6' && r.data; })
+      .sort(function (a, b) { return slotOrder(a.slot) - slotOrder(b.slot); });
+    if (!p5.length) return null;
+    var key = classKey(cls.year, cls.level, cls.room) + '|pp6';
+    var sig = rosterVer + '|' + p5.map(function (r) { return r.key + ':' + r.uploadedAt + ':' + (r.size || 0); }).join(',');
+    if (vcache[key] && vcache[key].sig === sig) return vcache[key].rec;
+    var rc = rosterClass(cls);
+    var donor = records.filter(function (r) { return r.slot === 'pp6' && r.data; })[0];
+    var school = 'โรงเรียน' + (window.PP5Teachers ? PP5Teachers.SCHOOL : 'วัดทุ่งแฝก');
+    var hr = rc && rc.teachers.length ? rc.teachers[0] : '';
+    if (hr && window.PP5Teachers) hr = PP5Teachers.fullName(hr);
+    var data = PP5Model.pp6FromPP5({ year: cls.year, level: cls.level, room: cls.room, school: school, teacher: hr, students: rc ? rc.students : null, records: p5.map(function (r) { return r.data; }) });
+    if (donor) {
+      ['deputy', 'director'].forEach(function (k) { if (donor.data.meta.signers && donor.data.meta.signers[k]) data.meta.signers[k] = Object.assign({}, donor.data.meta.signers[k]); });
+      if (donor.data.images && donor.data.images.logo) data.images = { logo: donor.data.images.logo };
+    }
+    var st = null; try { st = JSON.parse(localStorage.getItem(vSettingsKey(key)) || 'null'); } catch (e) { st = null; }
+    var rec = { key: key, year: cls.year, level: cls.level, room: cls.room, slot: 'pp6', virtual: true, fromRoster: !!rc, data: data, settings: st || undefined,
+      fileName: 'สร้างอัตโนมัติจาก ปพ.5 (' + p5.length + ' วิชา)', origName: '(สร้างจาก ปพ.5)', uploadedAt: Date.now() };
+    vcache[key] = { sig: sig, rec: rec };
+    return rec;
+  }
   function pp6Record() {
-    return records.filter(function (r) { return r.slot === 'pp6' && r.year === state.year && r.level === state.level && r.room === state.room; })[0] || null;
+    var cls = curClass(), rs = recsOf(cls);
+    applyRosterTo(rs, cls);
+    return virtualPP6(cls, rs);
+  }
+  // เทียบคะแนน ปพ.6 ที่อัปโหลด กับคะแนนที่คิดจาก ปพ.5
+  function compareWithPP5(rec) {
+    if (!rec || rec.virtual || !window.PP5Reconcile) return null;
+    var cls = { year: rec.year, level: rec.level, room: rec.room };
+    var p5 = recsOf(cls).filter(function (r) { return r.slot !== 'pp6' && r.data; });
+    if (!p5.length) return null;
+    var derived = PP5Model.pp6FromPP5({ year: cls.year, level: cls.level, room: cls.room, students: rec.data.students, records: p5.map(function (r) { return r.data; }) });
+    return PP5Reconcile.compareScores(rec.data, derived);
   }
   async function removeRecord(rec) {
     if (!confirm('ลบไฟล์ ' + rec.fileName + ' ออกจากระบบ?')) return;
@@ -305,11 +358,12 @@
   function recsOf(cls) { return records.filter(function (r) { return r.year === cls.year && r.level === cls.level && r.room === cls.room; }); }
   function ctxFor(cls) {
     var rs = recsOf(cls);
+    applyRosterTo(rs, cls);
     var subj = function () { return rs.filter(function (r) { return r.slot !== 'pp6'; }); };
     return {
       esc: esc, toast: toast, setBusy: setBusy, rerender: function () { render(); }, store: function () { return DB === LocalDB ? null : DB; },
       classInfo: function () { return cls; }, classRecords: subj,
-      pp6Record: function () { return rs.filter(function (r) { return r.slot === 'pp6'; })[0] || null; },
+      pp6Record: function () { return virtualPP6(cls, rs); },
       className: function () { return 'ป.' + cls.level + '/' + cls.room; },
       reportCtx: Object.assign({}, reportCtx, { classRecords: subj }),
       rosterById: function () { return roster && roster.data ? PP5Roster.byId(roster.data) : {}; },
@@ -437,7 +491,7 @@
     classInfo: curClass,
     classRecords: function () { return classRecords(); },
     pp6Record: function () { return pp6Record(); },
-    findRecord: function (key) { return records.filter(function (r) { return r.key === key; })[0]; },
+    findRecord: function (key) { var p6 = pp6Record(); return records.filter(function (r) { return r.key === key; })[0] || (p6 && p6.key === key ? p6 : undefined); },
     coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
     masterRoster: function () { var c = rosterClass(curClass()); return c ? { students: c.students, teachers: c.teachers, date: roster.data.date ? roster.data.date.display : roster.data.dateText } : null; },
     saveEdited: saveEdited, downloadBlob: downloadBlob, fileNameFor: fileNameFor,
@@ -448,10 +502,19 @@
     classRecords: function () { return classRecords(); },
     pp6Record: function () { return pp6Record(); },
     className: function () { return 'ป.' + state.level + '/' + state.room; },
-    save: function (rec) { return DB.saveSettings ? DB.saveSettings(rec) : DB.put(rec); },
+    save: function (rec) {
+      if (rec.virtual) { try { localStorage.setItem(vSettingsKey(rec.key), JSON.stringify(rec.settings || {})); } catch (e) {} return Promise.resolve(); }
+      return DB.saveSettings ? DB.saveSettings(rec) : DB.put(rec);
+    },
+    compare: compareWithPP5,
+    rosterLabel: function () { return roster && roster.data ? 'ทะเบียนรายชื่อ (ข้อมูล ' + (roster.data.date ? roster.data.date.display : roster.data.dateText) + ')' : ''; },
     rerender: function () { render(); },
     pickFor: function (slot) { pickFor(slot); },
-    download: function (rec) { download(rec); },
+    download: async function (rec) {
+      if (!rec.virtual) return download(rec);
+      try { setBusy('กำลังสร้างไฟล์ ปพ.6...'); var f = await buildFile('pp6', rec.data); downloadBlob(f.blob, fileNameFor('pp6', rec.data.meta, f.ext)); }
+      catch (e) { toast('สร้างไฟล์ไม่สำเร็จ: ' + e.message, 'err'); } finally { setBusy(''); }
+    },
     remove: function (rec) { removeRecord(rec); }
   };
   function slotOrder(s) {
@@ -553,6 +616,7 @@
       }
     }
     var cls = 'ป.' + state.level + '/' + state.room;
+    renderBanner(cls);
     view.onclick = view.onchange = null;
     if (window.PP5Editor && PP5Editor.active()) { PP5Editor.render(view, editorCtx); saveUI(); return; }
     if (state.tab === 'publish') { PP5Publish.render(view, publishCtx()); saveUI(); return; }
@@ -564,6 +628,30 @@
     saveUI();
   }
 
+  // ---------- แบนเนอร์บอกส่วนที่กำลังทำ ----------
+  var BANNERS = {
+    subjects: { c: '#1d5bd8', i: '📘', k: 'ปพ.5 · แบบบันทึกผลการพัฒนาคุณภาพผู้เรียนรายวิชา', t: 'รายวิชา (ปพ.5)', s: 'กรอกคะแนน อัปโหลด หรือดาวน์โหลด Excel ของแต่ละวิชา' },
+    report: { c: '#0b7285', i: '📗', k: 'ปพ.6 · แบบรายงานผลการพัฒนาคุณภาพผู้เรียนรายบุคคล', t: 'ใบรายงาน (ปพ.6)', s: 'ใบรายงานผลของนักเรียนทุกคน พิมพ์/ดาวน์โหลด PDF และตรวจความถูกต้องกับ ปพ.5' },
+    summary: { c: '#5f3dc4', i: '📊', k: 'ภาพรวมห้องเรียน', t: 'สรุปผลทั้งห้อง', s: 'เกรดเฉลี่ยและผลการเรียนทุกวิชาของทั้งห้อง' },
+    student: { c: '#c2255c', i: '🧒', k: 'ผลการเรียนรายบุคคล', t: 'รายบุคคล', s: 'ดูคะแนนทุกวิชาของนักเรียนทีละคน' },
+    publish: { c: '#2b8a3e', i: '📢', k: 'หน้าประกาศผลสำหรับผู้ปกครอง', t: 'ประกาศผล', s: 'ตั้งค่าและตรวจข้อมูลที่ผู้ปกครองจะเห็น' },
+    roster: { c: '#495057', i: '📋', k: 'ข้อมูลหลักของระบบ', t: 'ทะเบียนรายชื่อนักเรียน', s: 'รายชื่อจากไฟล์ Word ใช้เป็นชื่อ-เลขที่หลักในทุกไฟล์ ปพ.' }
+  };
+  function renderBanner(cls) {
+    var el = $('banner');
+    if (!el) return;
+    var b, extra = '';
+    if (window.PP5Editor && PP5Editor.active()) {
+      var ek = PP5Editor.kind ? PP5Editor.kind() : 'pp5';
+      b = ek === 'pp6' ? { c: '#0b7285', i: '✎', k: 'กำลังกรอกข้อมูล ปพ.6', t: 'กรอก/แก้ไข ใบรายงาน ปพ.6', s: 'อย่าลืมกด "บันทึกในระบบ" ก่อนออก' }
+        : { c: '#1d5bd8', i: '✎', k: 'กำลังกรอกข้อมูล ปพ.5', t: 'กรอก/แก้ไข ปพ.5 ' + (PP5Editor.title ? PP5Editor.title() : ''), s: 'อย่าลืมกด "บันทึกในระบบ" ก่อนออก' };
+    } else b = BANNERS[state.tab] || BANNERS.subjects;
+    if (state.tab === 'subjects') { var n = classRecords().length; extra = '<div class="bx">มีข้อมูล<b>' + n + ' วิชา</b></div>'; }
+    else if (state.tab === 'report') { var p6 = pp6Record(); extra = '<div class="bx">' + (p6 ? (p6.virtual ? 'สร้างจาก ปพ.5' : 'ไฟล์ที่อัปโหลด') + '<b>' + p6.data.students.length + ' คน</b>' : 'ยังไม่มีข้อมูล') + '</div>'; }
+    el.innerHTML = '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div><div class="bk">' + esc(b.k) + '</div>' +
+      '<div class="bt">' + esc(b.t) + ' · ชั้น ' + esc(cls) + '</div><div class="bs">ปีการศึกษา ' + esc(state.year || '') + ' · ' + esc(b.s) + '</div></div>' + extra + '</div>';
+  }
+
   // ---------- แท็บ: รายวิชา ----------
   function renderSubjects(cls) {
     var recs = classRecords();
@@ -573,7 +661,7 @@
     recs.forEach(function (r) { if (slots.indexOf(r.slot) < 0) slots.push(r.slot); });
 
     var fl = DB.flags || {}, off = DB.role !== 'admin' ? Object.keys(DB.flagDefs || {}).filter(function (k) { return fl[k] === false && /^allow/.test(k); }) : [];
-    var html = (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') + '<h2 class="sec">รายวิชาชั้น ' + esc(cls) + ' ปีการศึกษา ' + esc(state.year) + '</h2>' +
+    var html = (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') +
       '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา · กด <b>กรอกคะแนน</b> เพื่อกรอกในระบบ หรือ <b>⬇ Excel</b> เพื่อโหลดไฟล์รูปแบบต้นฉบับไปกรอกในคอม แล้วอัปโหลดกลับ</p><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
@@ -593,6 +681,7 @@
         '<div class="slot-f" title="ชื่อไฟล์เดิม: ' + esc(rec.origName) + '">' + (d.source === 'online' ? '✏️ กรอกในระบบ · ' : '📄 ') + esc(rec.fileName) + '</div>' +
         '<div class="slot-meta"><span>' + n + ' คน</span><span>' + d.indicators.length + ' ตัวชี้วัด</span>' +
         (m.teacher ? '<span>ครู' + esc(String(m.teacher).replace(/^(นาย|นางสาว|นาง)/, '')) + '</span>' : '') + '</div>' +
+        rosterChip(rec) +
         '<div class="slot-meta">' + (full ? '<span class="badge ok">คะแนนครบทุกตัวชี้วัด</span>' : '<span class="badge warn">กรอกคะแนนแล้ว ' + filledAll + '/' + d.indicators.length + ' ตัวชี้วัด</span>') +
         (dist.rest ? '' : '') + '</div>' +
         '<div class="slot-acts">' +
@@ -657,6 +746,16 @@
   }
   function tileR(k, v, s) { return '<div class="card tile"><div class="k">' + esc(k) + '</div><div class="v">' + esc(v) + '</div><div class="s">' + esc(s || '') + '</div></div>'; }
 
+  function rosterChip(rec) {
+    var c = rec.check;
+    if (!c) return '';
+    if (!c.issues) return '<div class="slot-meta"><span class="badge ok">✓ รายชื่อตรงกับทะเบียน</span></div>';
+    var tip = [].concat(
+      c.diffs.map(function (d) { return 'เลขที่ ' + d.no + ' ' + d.name + ': ' + d.items.join(', '); }),
+      c.notInRoster.map(function (d) { return 'ไม่มีในทะเบียน: ' + d.name; }),
+      c.missing.map(function (d) { return 'ไม่มีในไฟล์: เลขที่ ' + d.no + ' ' + d.name; })).join('\n');
+    return '<div class="slot-meta"><span class="badge warn" title="' + esc(tip) + '">⚠ ไม่ตรงทะเบียน ' + c.issues + ' รายการ (ใช้ชื่อตามทะเบียนแล้ว)</span></div>';
+  }
   function startButtons(slot) {
     var f = DB.flags || {}, adm = DB.role === 'admin';
     var canEdit = adm || f.allowEdit !== false, canUp = adm || f.allowUpload !== false;
@@ -769,7 +868,7 @@
     var incompleteCount = 0;
     recs.forEach(function (rec) { rec.data.students.forEach(function (s) { if (incomplete(rec, s).missing) incompleteCount++; }); });
 
-    var h = '<h2 class="sec">สรุปผลการเรียนชั้น ' + esc(cls) + ' ปีการศึกษา ' + esc(state.year) + '</h2>';
+    var h = '';
     h += '<div class="tiles">' +
       tile('นักเรียน', studs.length + ' คน', sexCount(studs)) +
       tile('รายวิชาที่มีข้อมูล', recs.length + ' วิชา', 'รวม ' + recs.reduce(function (a, r) { return a + (r.data.meta.credit || 0); }, 0) + ' หน่วยกิต') +
@@ -985,7 +1084,7 @@
     var a = e.target.closest('[data-act]');
     if (a) {
       var act = a.dataset.act, key = a.dataset.key;
-      var rec = key && records.filter(function (r) { return r.key === key; })[0];
+      var rec = key && (records.filter(function (r) { return r.key === key; })[0] || editorCtx.findRecord(key));
       if (act === 'open') openSubject(key);
       else if (act === 'upload') pickFor(a.dataset.slot);
       else if (act === 'online' || act === 'template') PP5Editor.open({ kind: a.dataset.slot === 'pp6' ? 'pp6' : 'pp5', slot: a.dataset.slot, intent: act === 'template' ? 'excel' : 'online' }, editorCtx);
@@ -1046,7 +1145,7 @@
     if (!el || DB === LocalDB) return;
     var adm = DB.role === 'admin';
     el.innerHTML = '<span class="role">' + (adm ? '👑 ผู้ดูแลระบบหลัก' : '👩‍🏫 ครู') + '</span>' +
-      (adm ? '<button class="tb" data-top="flags">⚙ เปิด-ปิดระบบ</button>' : '') +
+      (adm && DB.publicUrl ? '<a class="tb" href="' + esc(DB.publicUrl.replace(/\?.*$/, '')) + '?page=super" target="_top" style="text-decoration:none">🛡 ระบบแอดมิน</a>' : '') +
       (DB.publicUrl ? '<a class="tb" href="' + esc(DB.publicUrl) + '" target="_top" style="text-decoration:none">🏠 หน้าประกาศผล</a>' : '') +
       '<button class="tb" data-top="logout">ออกจากระบบ</button>';
     $('upBtn').hidden = !adm && DB.flags && DB.flags.allowUpload === false;
@@ -1089,6 +1188,7 @@
       records = await DB.all();
       if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
       if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
+      rosterVer++;
     } catch (e) {
       console.error(e);
       if (DB === LocalDB) {

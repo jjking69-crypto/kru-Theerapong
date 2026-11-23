@@ -1,0 +1,123 @@
+/* ระบบผู้ดูแล (แอดมิน) — แยกจากระบบครู: เปิด-ปิดระบบ ภาพรวมทุกห้อง ทะเบียนนักเรียน แม่แบบ */
+(function () {
+  'use strict';
+  var DB = window.PP5_STORE, $ = function (id) { return document.getElementById(id); };
+  function esc(v) { return v == null ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function toast(msg, kind) {
+    var t = document.createElement('div'); t.className = 'toast ' + (kind || 'info'); t.textContent = msg;
+    $('toasts').appendChild(t); setTimeout(function () { t.remove(); }, 4200);
+  }
+  function fmtDate(ms) { if (!ms) return '-'; var d = new Date(ms); return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
+  var S = { entries: [], pub: {}, roster: null, tpl: {} };
+  var SLOT_NAME = { th: 'ไทย', ma: 'คณิต', sci: 'วิทย์', soc: 'สังคม', his: 'ประวัติ', pe: 'สุขศึกษา', art: 'ศิลปะ', work: 'การงาน', eng: 'อังกฤษ', cor: 'ทุจริต' };
+
+  function acts() {
+    var base = (DB.publicUrl || '').replace(/\?.*$/, '');
+    $('supActs').innerHTML = '<span class="role">👑 ผู้ดูแลระบบหลัก</span>' +
+      (base ? '<a class="tb" href="' + esc(base) + '?page=admin" target="_top">👩‍🏫 ไปที่ระบบครู</a><a class="tb" href="' + esc(base) + '" target="_top">🏠 หน้าประกาศผล</a>' : '') +
+      '<button class="tb" id="supOut">ออกจากระบบ</button>';
+    $('supOut').onclick = function () { if (confirm('ออกจากระบบผู้ดูแล?')) window.PP5_LOGOUT(); };
+  }
+
+  function flagsCard() {
+    var defs = DB.flagDefs || {}, f = DB.flags || {};
+    var groups = [['หน้าประกาศผล (ผู้ปกครอง)', ['publicOpen', 'showMid', 'showFinal']], ['ระบบครู', ['allowUpload', 'allowEdit', 'allowDelete', 'allowRoster', 'allowPublish', 'allowReport']]];
+    return '<section class="card sup-card"><h2>⚙️ เปิด-ปิดระบบ</h2><p class="sub">มีผลทันทีกับทุกคน (ผู้ดูแลระบบใช้ได้ทุกอย่างเสมอ) · ระบบตรวจที่เซิร์ฟเวอร์ด้วย</p>' +
+      groups.map(function (g) {
+        return '<h3 class="sup-h3">' + g[0] + '</h3><div class="flag-list">' + g[1].filter(function (k) { return defs[k]; }).map(function (k) {
+          return '<label class="flag-row"><b>' + esc(defs[k]) + '</b><span class="sw"><input type="checkbox" data-flag="' + k + '"' + (f[k] !== false ? ' checked' : '') + '><span></span></span></label>';
+        }).join('') + '</div>';
+      }).join('') +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="btn" data-fl="all0">ปิดทั้งหมด</button><button class="btn" data-fl="all1">เปิดทั้งหมด</button></div></section>';
+  }
+
+  function overviewCard() {
+    var cls = {};
+    S.entries.forEach(function (e) {
+      var k = e.year + '|' + e.level + '|' + e.room;
+      var c = cls[k] = cls[k] || { year: e.year, level: e.level, room: e.room, p5: [], p6: null, last: 0 };
+      if (e.slot === 'pp6') c.p6 = e; else c.p5.push(e);
+      c.last = Math.max(c.last, e.uploadedAt || 0);
+    });
+    Object.keys(S.pub).forEach(function (k) { if (!cls[k]) { var p = k.split('|'); cls[k] = { year: +p[0], level: +p[1], room: +p[2], p5: [], p6: null, last: 0 }; } });
+    var keys = Object.keys(cls).sort(function (a, b) { var x = cls[a], y = cls[b]; return y.year - x.year || x.level - y.level || x.room - y.room; });
+    var rows = keys.map(function (k) {
+      var c = cls[k], p = S.pub[k];
+      return '<tr><td><b>ป.' + c.level + '/' + c.room + '</b></td><td>' + c.year + '</td><td class="l">' + (c.p5.length ? '<b>' + c.p5.length + '</b> วิชา <small>(' + c.p5.map(function (e) { return SLOT_NAME[e.slot] || 'เพิ่มเติม'; }).join(', ') + ')</small>' : '<span class="muted">-</span>') + '</td>' +
+        '<td>' + (c.p6 ? '📄 อัปโหลดแล้ว' : c.p5.length ? '⚙️ สร้างจาก ปพ.5' : '-') + '</td>' +
+        '<td>' + (p ? p.count + ' คน <small>(กลางปี ' + (p.mid || 0) + ' · ปลายปี ' + (p.final || 0) + ')</small>' : '<span class="muted">ยังไม่เผยแพร่</span>') + '</td><td><small>' + fmtDate(Math.max(c.last, p ? p.updatedAt : 0)) + '</small></td></tr>';
+    }).join('');
+    var nP5 = S.entries.filter(function (e) { return e.slot !== 'pp6'; }).length;
+    return '<section class="card sup-card"><h2>📊 ภาพรวมข้อมูลทุกห้อง</h2>' +
+      '<div class="tiles"><div class="tile"><div class="k">ห้องที่มีข้อมูล</div><div class="v">' + keys.length + '</div></div><div class="tile"><div class="k">ไฟล์ ปพ.5</div><div class="v">' + nP5 + '</div></div>' +
+      '<div class="tile"><div class="k">ประกาศผลแล้ว</div><div class="v">' + Object.keys(S.pub).reduce(function (a, k) { return a + (S.pub[k].count || 0); }, 0) + ' คน</div></div></div>' +
+      (rows ? '<div class="tbl-wrap"><table><thead><tr><th>ชั้น</th><th>ปี</th><th class="l">ปพ.5</th><th>ปพ.6</th><th>หน้าประกาศผล</th><th>อัปเดตล่าสุด</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '<p class="sub">ยังไม่มีข้อมูลในระบบ</p>') + '</section>';
+  }
+
+  function rosterCard() {
+    var r = S.roster, d = r && r.data;
+    return '<section class="card sup-card"><h2>📋 ทะเบียนรายชื่อนักเรียน (ข้อมูลหลักของระบบ)</h2>' +
+      '<p class="sub">ชื่อ เลขที่ และเลขประจำตัวในทะเบียนนี้ใช้เป็นข้อมูลหลักของทุกไฟล์ ปพ.5 / ปพ.6 และหน้าประกาศผล</p>' +
+      (d ? '<div class="tiles"><div class="tile"><div class="k">ข้อมูลวันที่</div><div class="v" style="font-size:20px">' + esc(d.date ? d.date.display : d.dateText) + '</div></div>' +
+        '<div class="tile"><div class="k">นักเรียน</div><div class="v">' + d.total + ' คน</div><div class="s">' + d.classes.length + ' ห้อง · ปีการศึกษา ' + esc(d.year || '') + '</div></div></div>' +
+        (d.warnings && d.warnings.length ? '<div class="note"><b>ข้อควรตรวจ:</b> ' + d.warnings.map(esc).join(' · ') + '</div>' : '') +
+        '<div class="chips" style="margin:10px 0">' + d.classes.map(function (c) { return '<span class="chip">' + esc(c.label) + ' <small>(' + c.students.length + ')</small></span>'; }).join('') + '</div>'
+        : '<p class="note">ยังไม่มีทะเบียนรายชื่อ</p>') +
+      '<div class="slot-acts"><button class="btn pri" id="supRosterUp">⇪ อัปโหลดทะเบียนรายชื่อ (.docx)</button>' + (r && r.url ? '<a class="btn" href="' + esc(r.url) + '" target="_blank" rel="noopener">⬇ เปิดไฟล์ปัจจุบัน</a>' : '') + '</div>' +
+      '<input type="file" id="supRosterFile" accept=".docx" hidden></section>';
+  }
+
+  function tplCard() {
+    var ks = Object.keys(S.tpl).sort();
+    return '<section class="card sup-card"><h2>🗂 แม่แบบรูปแบบต้นฉบับ</h2><p class="sub">ระบบหยิบไฟล์ต้นฉบับจากโฟลเดอร์ของโรงเรียนให้อัตโนมัติเมื่อครูดาวน์โหลด Excel ครั้งแรกของแต่ละชั้น/วิชา</p>' +
+      (ks.length ? '<ul class="sup-list">' + ks.map(function (k) { return '<li><b>' + esc(k.replace('pp5', 'ปพ.5').replace('pp6', 'ปพ.6').replace(/\|/g, ' · ')) + '</b> <small>จาก ' + esc(String(S.tpl[k].name || '').slice(0, 70)) + ' · ' + fmtDate(S.tpl[k].savedAt) + '</small></li>'; }).join('') + '</ul>' : '<p class="sub">ยังไม่มีแม่แบบ</p>') +
+      '<button class="btn" id="supSrc">🔄 อ่านรายการไฟล์ในโฟลเดอร์ต้นฉบับใหม่</button></section>';
+  }
+
+  function pinCard() {
+    return '<section class="card sup-card"><h2>🔑 รหัสเข้าใช้</h2><p class="sub">รหัสครู และรหัสผู้ดูแล ตั้งไว้ใน Code.gs (TEACHER_PIN / ADMIN_PIN) · รหัสครูเข้าได้เฉพาะระบบครู · รหัสผู้ดูแลเข้าได้ทั้งสองระบบ</p></section>';
+  }
+
+  function render() {
+    $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + overviewCard() + tplCard() + pinCard();
+    var main = $('sup');
+    main.onchange = async function (e) {
+      if (e.target.dataset.flag) return saveFlags();
+      if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
+    };
+    main.onclick = function (e) {
+      var b = e.target.closest('[data-fl]');
+      if (b) { Array.prototype.forEach.call(main.querySelectorAll('[data-flag]'), function (c) { c.checked = b.dataset.fl === 'all1'; }); saveFlags(); return; }
+      if (e.target.id === 'supRosterUp') { $('supRosterFile').value = ''; $('supRosterFile').click(); }
+      if (e.target.id === 'supSrc') { DB.clearSourceCache().then(function (n) { toast('อ่านโฟลเดอร์ต้นฉบับใหม่แล้ว พบ ' + n + ' ไฟล์', 'ok'); }, function (er) { toast(er.message, 'err'); }); }
+    };
+  }
+  async function saveFlags() {
+    var nf = {};
+    Array.prototype.forEach.call(document.querySelectorAll('[data-flag]'), function (c) { nf[c.dataset.flag] = c.checked; });
+    try { await DB.setFlags(nf); toast('บันทึกการเปิด-ปิดระบบแล้ว', 'ok'); } catch (e) { toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'); }
+  }
+  async function uploadRoster(file) {
+    try {
+      var bytes = new Uint8Array(await file.arrayBuffer());
+      var data = await PP5Roster.parseDocx(bytes);
+      var nd = data.date ? data.date.display : (data.dateText || 'ไม่ระบุวันที่');
+      if (!confirm('ใช้ทะเบียนรายชื่อข้อมูลวันที่ ' + nd + ' (' + data.total + ' คน ' + data.classes.length + ' ห้อง) เป็นข้อมูลหลักของระบบ?')) return;
+      S.roster = await DB.putRoster({ fileName: file.name, bytes: bytes, data: data });
+      toast('อัปเดตทะเบียนรายชื่อแล้ว', 'ok'); render();
+    } catch (e) { toast('อ่านไฟล์ไม่ได้: ' + e.message, 'err'); }
+  }
+
+  async function boot() {
+    try {
+      await DB.open();
+      if (DB.role !== 'admin') { $('sup').innerHTML = '<div class="card empty-state"><b>หน้านี้สำหรับผู้ดูแลระบบหลักเท่านั้น</b></div>'; return; }
+      acts();
+      var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; })]);
+      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {};
+      render();
+    } catch (e) { $('sup').innerHTML = '<div class="card empty-state"><b>เข้าระบบไม่สำเร็จ</b>' + esc(e.message) + '</div>'; }
+  }
+  boot();
+})();
