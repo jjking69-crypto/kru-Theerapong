@@ -2,7 +2,8 @@
  * ระบบวิเคราะห์ผลการเรียน ปพ.5 / ใบรายงาน ปพ.6 — รุ่น Google Apps Script
  *
  * วิธีติดตั้งโดยย่อ (รายละเอียดใน README):
- *   1) สร้างโปรเจกต์ Apps Script ใหม่ วางไฟล์นี้ใน Code.gs และสร้างไฟล์ HTML ชื่อ Index
+ *   1) สร้างโปรเจกต์ Apps Script ใหม่ วางไฟล์นี้ใน Code.gs
+ *      แล้วสร้างไฟล์ HTML 7 ไฟล์: Index, Css, JsStore, JsParser, JsPP6Parser, JsReport, JsApp
  *   2) ตั้งรหัสผ่านด้านล่าง (ACCESS_PIN) เพื่อกันคนอื่นเปิดดูคะแนนนักเรียน
  *   3) ทำให้ใช้งานได้ > การทำให้ใช้งานได้รายการใหม่ > เว็บแอป
  *      ดำเนินการในฐานะ: ฉัน   ผู้มีสิทธิ์เข้าถึง: ทุกคนที่มีบัญชี Google (หรือทุกคน)
@@ -24,10 +25,15 @@ var PDF_FOLDER_NAME = 'PDF ใบรายงาน';
 var PROP_PREFIX = 'rec:';
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle(APP_TITLE)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/** แทรกเนื้อหาไฟล์ HTML อื่น (Css, JsApp ฯลฯ) เข้าไปใน Index */
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
 // ===== ตัวช่วย =====

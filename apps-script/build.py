@@ -3,7 +3,13 @@
 
 ผลลัพธ์ (โฟลเดอร์ apps-script/):
   Code.gs          โค้ดฝั่งเซิร์ฟเวอร์ (คัดลอกจาก src/Code.gs)
-  Index.html       หน้าเว็บทั้งหมดรวมเป็นไฟล์เดียว (CSS + JS ฝังในไฟล์)
+  Index.html       โครงหน้าเว็บ (ดึงไฟล์อื่นเข้ามาด้วย include)
+  Css.html         หน้าตา (CSS)
+  JsStore.html     เชื่อมต่อ Google Drive
+  JsParser.html    อ่านไฟล์ ปพ.5
+  JsPP6Parser.html อ่านไฟล์ ปพ.6
+  JsReport.html    ใบรายงาน ปพ.6 และ PDF
+  JsApp.html       หน้าจอหลัก
   appsscript.json  ไฟล์ตั้งค่าโปรเจกต์ (สำหรับผู้ใช้ clasp)
 
 วิธีใช้:  python3 apps-script/build.py
@@ -38,7 +44,8 @@ def build():
     html = read(WEB / 'index.html')
     css = read(WEB / 'style.css') + '\n' + read(WEB / 'report.css') + '\n[hidden]{display:none!important}\n'
 
-    html = replace_once(html, '<link rel="stylesheet" href="style.css">', '<style>\n' + css + '</style>')
+    html = replace_once(html, '<link rel="stylesheet" href="style.css">', "<?!= include('Css') ?>")
+    (HERE / 'Css.html').write_text('<style>\n' + css + '</style>\n', encoding='utf-8')
     html = replace_once(html, '  <link rel="stylesheet" href="report.css">\n', '')
     html = re.sub(r'\s*<link rel="(icon|apple-touch-icon)"[^>]*>', '', html)
     html = re.sub(r'\s*<meta name="viewport"[^>]*>', '', html)  # Apps Script ใส่ให้ใน doGet
@@ -51,15 +58,15 @@ def build():
         'ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบไม่อ่านเลขประจำตัวประชาชน',
         'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบไม่อ่านเลขประจำตัวประชาชน')
 
-    scripts = ''.join(
-        '<script>\n' + inline_js(read(p)) + '\n</script>\n'
-        for p in [SRC / 'store.js', WEB / 'parser.js', WEB / 'pp6parser.js', WEB / 'report.js', WEB / 'app.js'])
+    parts = [('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
+             ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]
     html = replace_once(html, '<script src="vendor/xlsx.full.min.js"></script>', '<script src="' + CDN_XLSX + '"></script>')
     html = re.sub(r'  <script src="(parser|pp6parser|report|app)\.js"></script>\n', '', html)
     if re.search(r'(src|href)="(?!https://|#)', html):
         raise SystemExit('ยังมีไฟล์ที่อ้างแบบ relative เหลืออยู่')
-    html = replace_once(html, '</body>', scripts + '</body>')
-
+    html = replace_once(html, '</body>', ''.join("  <?!= include('%s') ?>\n" % n for n, _ in parts) + '</body>')
+    for n, p in parts:
+        (HERE / (n + '.html')).write_text('<script>\n' + inline_js(read(p)) + '\n</script>\n', encoding='utf-8')
     (HERE / 'Index.html').write_text(html, encoding='utf-8')
     (HERE / 'Code.gs').write_text(read(SRC / 'Code.gs'), encoding='utf-8')
     manifest = {
