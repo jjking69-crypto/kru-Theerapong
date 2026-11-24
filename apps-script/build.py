@@ -90,7 +90,7 @@ def build():
              ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'), ('JsRoster', WEB / 'roster.js'), ('JsTeachers', WEB / 'teachers.js'), ('JsReconcile', WEB / 'reconcile.js'), ('JsLibrary', WEB / 'library.js'),
              ('JsGrid', WEB / 'grid.js'), ('JsQuick', WEB / 'quick.js'), ('JsHistory', WEB / 'history.js'), ('JsEditor', WEB / 'editor.js'),
              ('JsPublic', WEB / 'public.js'), ('JsPublish', WEB / 'publish.js'),
-             ('JsReport', WEB / 'report.js'), ('JsApp', WEB / 'app.js')]
+             ('JsReport', WEB / 'report.js'), ('JsPp5Pdf', WEB / 'pp5pdf.js'), ('JsApp', WEB / 'app.js')]
     html = replace_once(html, '<script src="vendor/xlsx.full.min.js"></script>', '<script src="' + CDN_XLSX + '"></script>')
     html = replace_once(html, '<script src="vendor/jszip.min.js"></script>', '<script src="' + CDN_JSZIP + '"></script>')
     html = re.sub(r'  <script src="[a-z0-9]+\.js"></script>\n', '', html)

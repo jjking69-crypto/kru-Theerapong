@@ -643,6 +643,16 @@
     } catch (e) { console.warn('tpl images', e); tplImgs = {}; }
   }
   function normName(n) { return String(n || '').replace(/\s+/g, ' ').trim(); }
+  // PDF ปพ.5: ดาวน์โหลด + เก็บสำเนาใน Drive (รุ่น Apps Script)
+  var pdfCtx = {
+    toast: function (m, k) { toast(m, k); },
+    brand: function () { return effBrand(); },
+    sig: function (name) { var x = sigs[normName(name)]; return x ? x.img : null; },
+    save: function (blob, name) {
+      downloadBlob(blob, name);
+      if (DB.saveOutput && !readOnly()) DB.saveOutput(blob, name).then(function () { toast('เก็บสำเนา PDF ไว้ใน Google Drive แล้ว (โฟลเดอร์ "PDF ใบรายงาน")', 'ok'); }, function () {});
+    }
+  };
   var reportCtx = {
     esc: esc, toast: toast,
     brand: function () { return effBrand(); },
@@ -939,7 +949,7 @@
     var fl = DB.flags || {}, off = DB.role !== 'admin' ? Object.keys(DB.flagDefs || {}).filter(function (k) { return fl[k] === false && /^allow/.test(k); }) : [];
     var html = (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') +
       (kru ? '<div class="kru-note">👤 แสดงเฉพาะวิชาที่<b>' + esc(DB.me.name) + '</b>สอนในห้องนี้ (' + slots.length + ' วิชา' + (others ? ' · ซ่อนวิชาของครูท่านอื่น ' + others + ' วิชา' : '') + ') <button class="btn" data-kru="mine">⚙️ วิชาที่ฉันสอน</button></div>' : '') +
-      '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา</p><div class="slots">';
+      '<div class="p5-bar"><p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา</p>' + (recs.length && window.PP5Pdf ? '<button class="btn pri" data-act="pdf5all">📄 PDF ปพ.5 ' + (kru ? 'ทุกวิชาที่ฉันสอน' : 'ทุกวิชา') + ' (ห้องนี้)</button>' : '') + '</div><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
       var ic = '<div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>';
@@ -963,6 +973,7 @@
         (dist.rest ? '' : '') + '</div>' +
         '<div class="slot-acts act-list">' +
         actBtn('open', '', rec.key, '👁', 'ดูคะแนน', 'คะแนนทุกตัวชี้วัด รวม และเกรด', 'pri') +
+        actBtn('pdf5', '', rec.key, '📄', 'PDF ปพ.5', 'ทั้งเล่ม ทุกหน้า พร้อมพิมพ์') +
         (readOnly() ? actBtn('download', '', rec.key, '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.5 ของวิชานี้') :
           actBtn('edit', '', rec.key, '✏️', 'แก้ไข/กรอกต่อ', 'กรอกคะแนนเพิ่มบนเว็บ (เช่น เทอม 2)') +
           actBtn('replace', slot, '', '⇪', 'อัปโหลดไฟล์ใหม่', 'ไฟล์ Excel ใหม่ทับไฟล์เดิม') +
@@ -1481,6 +1492,11 @@
       else if (act === 'edit' && rec) PP5Editor.open({ kind: rec.slot === 'pp6' ? 'pp6' : 'pp5', key: rec.key }, editorCtx);
       else if (act === 'replace') pickFor(a.dataset.slot);
       else if (act === 'download' && rec) download(rec);
+      else if (act === 'pdf5' && rec) { if (rec.data) PP5Pdf.subject(rec, pdfCtx); }
+      else if (act === 'pdf5all') {
+        var mine = classRecords().filter(function (r) { return r.data && (!isKru() || mySlot(r.level, r.room, r.slot)); });
+        if (mine.length) PP5Pdf.classBook(mine, pdfCtx, 'ปพ.5_ป.' + state.level + '-' + state.room + '_ทุกวิชา_ปี' + state.year);
+      }
       else if (act === 'delete' && rec) {
         removeRecord(rec);
       } else if (act === 'prev' || act === 'next') {
