@@ -3,66 +3,112 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
-  <meta name="theme-color" content="#1b3fae">
+  <meta name="theme-color" content="#1e4fd6">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
   <?!= include('CssPublic') ?>
 </head>
-<body class="pub-page">
-  <header class="pub-hero">
-    <div class="pub-login">
-      <button type="button" class="pub-login-btn" id="pubLoginBtn" aria-haspopup="true" aria-expanded="false">🔐 เข้าสู่ระบบ <span aria-hidden="true">▾</span></button>
-      <div class="pub-login-menu" id="pubLoginMenu" role="menu" hidden>
-        <div class="plm-h">เข้าสู่ระบบในฐานะ</div>
-        <button type="button" role="menuitem" data-login="teacher"><span class="plm-ic t">👩‍🏫</span><span><b>ครู</b><small>กรอกคะแนน ปพ.5 / ปพ.6 · พิมพ์ใบรายงาน</small></span><i>›</i></button>
-        <button type="button" role="menuitem" data-login="admin"><span class="plm-ic a">🛡</span><span><b>แอดมิน</b><small>ผู้ดูแลระบบ · เปิด-ปิดระบบ · ทะเบียนนักเรียน</small></span><i>›</i></button>
+<body class="pub-page pv2">
+  <!-- เมนูซ้าย (☰) -->
+  <div class="pv-scrim" id="pubScrim" hidden></div>
+  <nav class="pv-drawer" id="pubDrawer" aria-label="เมนู" hidden>
+    <div class="pv-dh"><b>เมนู</b><button type="button" class="pv-x" id="pubDrawerClose" aria-label="ปิดเมนู">×</button></div>
+    <button type="button" class="pv-di" data-go="home">🏠 หน้าแรก</button>
+    <button type="button" class="pv-di" data-go="search">🔍 ตรวจสอบผลการเรียน</button>
+    <div class="pv-dsec" id="pubDrawerYears" hidden></div>
+    <div class="pv-dsep">เข้าสู่ระบบ</div>
+    <button type="button" class="pv-di" data-login="teacher">👩‍🏫 ครู</button>
+    <button type="button" class="pv-di" data-login="admin">🛡 แอดมิน</button>
+  </nav>
+
+  <header class="pv-hero">
+    <svg class="pv-cloud" viewBox="0 0 1200 260" preserveAspectRatio="none" aria-hidden="true"><path d="M0 170 Q120 110 240 150 T480 140 T720 150 T960 130 T1200 150 V260 H0Z" fill="#fff" opacity=".55"/><path d="M0 200 Q160 150 320 190 T640 180 T960 190 T1200 175 V260 H0Z" fill="#fff" opacity=".8"/></svg>
+    <div class="pv-top">
+      <button type="button" class="pv-burger" id="pubMenuBtn" aria-label="เปิดเมนู" aria-controls="pubDrawer"><span></span><span></span><span></span></button>
+      <img id="pubLogo" class="pv-logo" alt="ตราโรงเรียน" hidden>
+      <div class="pub-login">
+        <button type="button" class="pub-login-btn" id="pubLoginBtn" aria-haspopup="true" aria-expanded="false"><span class="pv-lock">🔐</span> เข้าสู่ระบบ <span aria-hidden="true">›</span></button>
+        <div class="pub-login-menu" id="pubLoginMenu" role="menu" hidden>
+          <div class="plm-h">เข้าสู่ระบบในฐานะ</div>
+          <button type="button" role="menuitem" data-login="teacher"><span class="plm-ic t">👩‍🏫</span><span><b>ครู</b><small>กรอกคะแนน ปพ.5 / ปพ.6 · พิมพ์ใบรายงาน</small></span><i>›</i></button>
+          <button type="button" role="menuitem" data-login="admin"><span class="plm-ic a">🛡</span><span><b>แอดมิน</b><small>ผู้ดูแลระบบ · เปิด-ปิดระบบ · ทะเบียนนักเรียน</small></span><i>›</i></button>
+        </div>
       </div>
     </div>
-    <img id="pubLogo" class="pub-logo" alt="" hidden>
-    <div><span class="pub-kicker">ระบบประกาศผลการเรียนออนไลน์</span></div>
-    <h1 class="pub-hero-t" id="pubTitle">ประกาศผลการเรียน</h1>
-    <div class="pub-school" id="pubSchool"></div>
-    <div class="pub-status" id="pubStatus"></div>
+    <div class="pv-stage">
+      <!-- อาคารเรียน -->
+      <svg class="pv-school" viewBox="0 0 220 150" aria-hidden="true">
+        <rect x="12" y="62" width="196" height="80" rx="4" fill="#dbeafe"/><rect x="12" y="62" width="196" height="80" rx="4" fill="none" stroke="#93c5fd" stroke-width="2"/>
+        <path d="M4 66 L110 24 L216 66 Z" fill="#bfdbfe" stroke="#93c5fd" stroke-width="2"/>
+        <rect x="92" y="96" width="36" height="46" rx="3" fill="#93c5fd"/>
+        <g fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"><rect x="26" y="78" width="22" height="18" rx="2"/><rect x="56" y="78" width="22" height="18" rx="2"/><rect x="142" y="78" width="22" height="18" rx="2"/><rect x="172" y="78" width="22" height="18" rx="2"/><rect x="26" y="108" width="22" height="18" rx="2"/><rect x="56" y="108" width="22" height="18" rx="2"/><rect x="142" y="108" width="22" height="18" rx="2"/><rect x="172" y="108" width="22" height="18" rx="2"/><circle cx="110" cy="52" r="9"/></g>
+        <line x1="110" y1="4" x2="110" y2="26" stroke="#64748b" stroke-width="2"/>
+        <rect x="111" y="4" width="18" height="4" fill="#ef4444"/><rect x="111" y="8" width="18" height="2.5" fill="#fff"/><rect x="111" y="10.5" width="18" height="4" fill="#1d4ed8"/><rect x="111" y="14.5" width="18" height="2.5" fill="#fff"/><rect x="111" y="17" width="18" height="3" fill="#ef4444"/>
+      </svg>
+      <div class="pv-head">
+        <span class="pv-kicker">ระบบประกาศผลการเรียนออนไลน์</span>
+        <h1 class="pv-title" id="pubTitle"><span class="pv-t1">ประกาศผล</span><span class="pv-t2">การเรียน</span></h1>
+        <div class="pv-year" id="pubStatus"><span>📅</span> ผลกลางปี - ผลปลายปี</div>
+      </div>
+      <!-- หมวก ตำรา ใบประกาศ -->
+      <svg class="pv-cap" viewBox="0 0 200 170" aria-hidden="true">
+        <rect x="20" y="118" width="120" height="20" rx="5" fill="#2563eb"/><rect x="26" y="98" width="110" height="20" rx="5" fill="#facc15"/><rect x="16" y="78" width="118" height="20" rx="5" fill="#3b82f6"/>
+        <rect x="20" y="81" width="110" height="3" fill="#fff" opacity=".5"/><rect x="30" y="101" width="100" height="3" fill="#fff" opacity=".5"/>
+        <g transform="rotate(-10 150 105)"><rect x="112" y="62" width="70" height="92" rx="6" fill="#fff" stroke="#bfdbfe" stroke-width="3"/><rect x="124" y="78" width="46" height="5" rx="2" fill="#cbd5e1"/><rect x="124" y="90" width="38" height="5" rx="2" fill="#cbd5e1"/><rect x="124" y="102" width="42" height="5" rx="2" fill="#fcd34d"/><circle cx="160" cy="134" r="11" fill="#fbbf24"/><path d="M154 142 l-3 12 l9 -5 l9 5 l-3 -12z" fill="#2563eb"/></g>
+        <path d="M18 40 L88 14 L158 40 L88 66 Z" fill="#1e3a8a"/><path d="M48 52 v20 q40 18 80 0 v-20 l-40 14z" fill="#1e40af"/><line x1="150" y1="43" x2="150" y2="70" stroke="#facc15" stroke-width="3"/><circle cx="150" cy="73" r="5" fill="#facc15"/>
+        <circle cx="178" cy="62" r="17" fill="#22c55e"/><path d="M170 62 l6 6 l11 -12" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
   </header>
 
-  <main class="pub-main">
+  <main class="pub-main pv-main">
     <section id="pubSearch">
-      <div class="pub-card pub-search">
+      <div class="pv-card">
+        <div class="pv-card-h">🔍 ตรวจสอบผลการเรียน</div>
         <div class="pub-ann" id="pubAnn" hidden></div>
-        <h2>ตรวจสอบผลการเรียน</h2>
-        <p>กรอกเลขประจำตัวนักเรียน เพื่อดูผลการเรียนกลางปีและปลายปี</p>
+        <p class="pv-desc">กรอกเลขประจำตัวนักเรียน เพื่อดูผลการเรียนกลางปีและปลายปี</p>
         <form id="pubForm" autocomplete="off">
           <div class="pub-fields" id="pubFields">
-            <div class="pub-field">
-              <label for="pubId">เลขประจำตัวนักเรียน</label>
-              <input id="pubId" inputmode="numeric" maxlength="20" placeholder="เช่น 6099" autofocus>
+            <div class="pub-field pv-field">
+              <label for="pubId" class="pv-sr">เลขประจำตัวนักเรียน</label>
+              <span class="pv-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.2" fill="#2563eb"/><path d="M3.5 21c.8-4.6 4.3-7 8.5-7s7.7 2.4 8.5 7z" fill="#2563eb"/></svg></span>
+              <input id="pubId" inputmode="numeric" maxlength="20" placeholder="เลขประจำตัวนักเรียน" autofocus>
             </div>
-            <div class="pub-field" id="pubNidRow" hidden>
-              <label for="pubNid">เลขบัตรประชาชน 4 ตัวท้าย</label>
-              <input id="pubNid" inputmode="numeric" maxlength="4" placeholder="••••">
+            <div class="pub-field pv-field" id="pubNidRow" hidden>
+              <label for="pubNid" class="pv-sr">เลขบัตรประชาชน 4 ตัวท้าย</label>
+              <span class="pv-ic" aria-hidden="true">🪪</span>
+              <input id="pubNid" inputmode="numeric" maxlength="4" placeholder="เลขบัตรประชาชน 4 ตัวท้าย">
             </div>
           </div>
-          <button class="pub-btn wide" type="submit">ดูผลการเรียน</button>
+          <button class="pub-btn wide pv-go" type="submit"><span>🔍</span> ดูผลการเรียน <i aria-hidden="true">›</i></button>
           <div class="pub-err" id="pubErr" hidden></div>
         </form>
       </div>
-      <div class="pub-help">
-        <div><span class="ic">📘</span><b>ผลกลางปี</b>คะแนนเก็บและคะแนนสอบภาคเรียนที่ 1 (ยังไม่มีเกรด)</div>
-        <div><span class="ic">🎓</span><b>ผลปลายปี</b>คะแนนรวมทั้งปี ระดับผลการเรียน (เกรด) และผลการเลื่อนชั้น</div>
-        <div><span class="ic">❓</span><b>ไม่พบข้อมูล?</b>ตรวจเลขประจำตัวอีกครั้ง หรือติดต่อครูประจำชั้น</div>
+      <div class="pv-feats">
+        <div><span class="f1">⚡</span><b>รวดเร็ว</b><small>ดูผลได้ทันที</small></div>
+        <div><span class="f2">🛡️</span><b>ปลอดภัย</b><small>ข้อมูลเป็นส่วนตัว</small></div>
+        <div><span class="f3">📱</span><b>ใช้งานง่าย</b><small>ได้ทุกอุปกรณ์</small></div>
+        <div><span class="f4">❤️</span><b>สะดวก</b><small>ทุกที่ ทุกเวลา</small></div>
       </div>
     </section>
     <section id="pubResult" hidden></section>
-    <p class="pub-foot">ข้อมูลผลการเรียนเป็นข้อมูลส่วนบุคคล กรุณาไม่เผยแพร่ต่อ</p>
   </main>
+
+  <footer class="pv-foot">
+    <svg class="pv-wave" viewBox="0 0 1200 90" preserveAspectRatio="none" aria-hidden="true"><path d="M0 60 Q300 0 600 40 T1200 30 V90 H0Z" fill="#facc15"/><path d="M0 72 Q300 18 600 56 T1200 46 V90 H0Z" fill="#1e3a8a"/></svg>
+    <div class="pv-fin">
+      <div class="pv-fs"><span></span><b id="pubSchool">โรงเรียนวัดทุ่งแฝก</b><span></span></div>
+      <small>สำนักงานเขตพื้นที่การศึกษาประถมศึกษาสุพรรณบุรี เขต 3</small>
+      <small class="pv-priv">ข้อมูลผลการเรียนเป็นข้อมูลส่วนบุคคล กรุณาไม่เผยแพร่ต่อ</small>
+    </div>
+  </footer>
   <?!= include('JsPinPad') ?>
   <?!= include('JsPublic') ?>
   <script>
     (function () {
-      if (document.getElementById('pubNidRow').hidden === false) document.getElementById('pubFields').classList.add('two');
-      var obs = new MutationObserver(function () { document.getElementById('pubFields').classList.toggle('two', !document.getElementById('pubNidRow').hidden); });
-      obs.observe(document.getElementById('pubNidRow'), { attributes: true });
+      var row = document.getElementById('pubNidRow'), fields = document.getElementById('pubFields');
+      new MutationObserver(function () { fields.classList.toggle('two', !row.hidden); }).observe(row, { attributes: true });
       PP5Public.boot();
     })();
   </script>

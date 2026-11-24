@@ -1,0 +1,107 @@
+/*
+ * ประวัติผลการเรียนย้อนหลังรายคน (ครู/แอดมิน)
+ *   - ค้นด้วยเลขประจำตัว → เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน
+ *   - ปีที่ไม่มีผลในระบบ (นักเรียนย้ายมา) เพิ่ม "ผลการเรียนจากโรงเรียนอื่น" ได้
+ *   PP5History.mount(el, { store, toast, id })
+ */
+(function () {
+  'use strict';
+  function esc(v) { return v == null ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var SUBJ = ['ภาษาไทย', 'คณิตศาสตร์', 'วิทยาศาสตร์และเทคโนโลยี', 'สังคมศึกษา ศาสนา และวัฒนธรรม', 'ประวัติศาสตร์', 'สุขศึกษาและพลศึกษา', 'ศิลปะ', 'การงานอาชีพ', 'ภาษาอังกฤษ'];
+  var GRADES = ['', '4', '3.5', '3', '2.5', '2', '1.5', '1', '0', 'ร', 'มส', 'ผ', 'มผ'];
+
+  function mount(el, o) {
+    var st = { id: o.id || '', data: null, edit: null, busy: false };
+    function draw() {
+      var h = '<div class="hs"><form class="hs-q" autocomplete="off"><input class="hs-id" inputmode="numeric" placeholder="เลขประจำตัวนักเรียน" value="' + esc(st.id) + '">' +
+        '<button class="btn pri" type="submit">ดูประวัติ</button></form>';
+      if (st.busy) h += '<p class="sub">กำลังโหลด...</p>';
+      else if (st.data && st.data.notFound) h += '<p class="note">ไม่พบนักเรียนเลขประจำตัว ' + esc(st.id) + ' ในระบบหรือทะเบียนรายชื่อ</p>';
+      else if (st.data) {
+        var d = st.data;
+        h += '<div class="hs-who"><b>' + esc(d.name) + '</b> <span>เลขประจำตัว ' + esc(d.id) + '</span></div><div class="hs-tl">' +
+          d.years.map(function (y) {
+            var badge = y.external ? '<span class="badge info">ผลจากโรงเรียนอื่น · ' + esc(y.external.school || '') + '</span>'
+              : y.missing ? '<span class="badge warn">ไม่มีผลจากโรงเรียนนี้ (ไม่ได้เรียนที่นี่)</span>'
+                : y.pending ? '<span class="badge warn">รอครูบันทึกคะแนน</span>'
+                  : '<span class="badge ok">✓ มีผลในระบบ' + (y.final ? ' · GPA ' + (y.final.gpa != null ? y.final.gpa : '–') : y.mid ? ' · กลางปี' : '') + '</span>';
+            var acts = y.missing ? '<button class="btn" data-hadd="' + y.year + '" data-lv="' + (y.level || '') + '">➕ เพิ่มผลจากโรงเรียนอื่น</button>'
+              : y.external ? '<button class="btn" data-hadd="' + y.year + '" data-lv="' + (y.level || '') + '">แก้ไข</button><button class="btn danger" data-hdel="' + y.year + '">ลบ</button>' : '';
+            var row = '<div class="hs-y' + (y.missing ? ' miss' : '') + '"><div class="hs-yt"><b>ปีการศึกษา ' + esc(y.year) + '</b><span>' + esc(y.level ? 'ป.' + y.level : '') + (y.className && !y.missing ? ' · ' + esc(y.className) : '') + '</span></div>' + badge + '<div class="hs-ya">' + acts + '</div></div>';
+            if (st.edit && +st.edit.year === +y.year) row += form(st.edit);
+            return row;
+          }).join('') + '</div>' +
+          '<div class="slot-acts" style="margin-top:8px"><button class="btn ghost" data-hadd="other">➕ เพิ่มผลปีอื่น (นอกช่วง)</button></div>' +
+          (st.edit && st.edit.year === 'other' ? form(st.edit) : '');
+      }
+      el.innerHTML = h + '</div>';
+    }
+    function form(e) {
+      var x = e.v || {};
+      var subs = x.subjects && x.subjects.length ? x.subjects : SUBJ.map(function (n) { return { name: n, credit: '', grade: '' }; });
+      return '<form class="hs-f card" data-hform="1">' +
+        '<div class="hs-fg"><label>ปีการศึกษา<input name="year" inputmode="numeric" value="' + esc(e.year === 'other' ? '' : e.year) + '"' + (e.year === 'other' ? '' : ' readonly') + '></label>' +
+        '<label>ชั้น<input name="level" inputmode="numeric" value="' + esc(x.level || e.level || '') + '" placeholder="เช่น 3"></label>' +
+        '<label class="w2">โรงเรียนเดิม<input name="school" value="' + esc(x.school || '') + '" placeholder="เช่น โรงเรียนบ้าน…" required></label>' +
+        '<label>ผลการเรียนเฉลี่ย (GPA)<input name="gpa" inputmode="decimal" value="' + esc(x.gpa == null ? '' : x.gpa) + '"></label>' +
+        '<label>ผลการตัดสิน<select name="result">' + ['', 'เลื่อนชั้น', 'ไม่เลื่อนชั้น', 'จบหลักสูตร'].map(function (r) { return '<option' + (x.result === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') + '</select></label>' +
+        '<label class="w2">หมายเหตุ<input name="note" value="' + esc(x.note || '') + '" placeholder="เช่น ย้ายเข้าเมื่อ ..."></label></div>' +
+        '<div class="hs-subs"><div class="hs-sh"><b>ผลรายวิชา</b> <small>(ไม่บังคับ — กรอกเฉพาะที่มี)</small></div>' +
+        subs.map(function (s, i) {
+          return '<div class="hs-s"><input name="sn' + i + '" value="' + esc(s.name) + '" placeholder="ชื่อวิชา"><input name="sc' + i + '" inputmode="decimal" value="' + esc(s.credit == null ? '' : s.credit) + '" placeholder="หน่วยกิต">' +
+            '<select name="sg' + i + '">' + GRADES.map(function (g) { return '<option' + (String(s.grade) === g ? ' selected' : '') + ' value="' + g + '">' + (g || 'เกรด') + '</option>'; }).join('') + '</select></div>';
+        }).join('') + '<input type="hidden" name="n" value="' + subs.length + '"><button type="button" class="btn ghost" data-hmore="1">+ เพิ่มวิชา</button></div>' +
+        '<div class="slot-acts"><button class="btn pri" type="submit">💾 บันทึกผลจากโรงเรียนอื่น</button><button class="btn" type="button" data-hcancel="1">ยกเลิก</button></div></form>';
+    }
+    function collect(f) {
+      var g = function (n) { var x = f.elements[n]; return x ? String(x.value).trim() : ''; };
+      var n = +g('n'), subs = [];
+      for (var i = 0; i < n; i++) { var nm = g('sn' + i); if (nm && (g('sg' + i) || g('sc' + i))) subs.push({ name: nm, credit: g('sc' + i) === '' ? null : +g('sc' + i), grade: g('sg' + i) }); }
+      var lv = +g('level');
+      return { year: +g('year'), v: { school: g('school'), level: lv || null, className: lv ? 'ประถมศึกษาปีที่ ' + lv : '', gpa: g('gpa') === '' ? null : +g('gpa'), result: g('result'), note: g('note'), subjects: subs } };
+    }
+    async function load() {
+      if (!st.id) return;
+      st.busy = true; st.edit = null; draw();
+      try { st.data = await o.store.studentHistory(st.id); } catch (e) { o.toast('โหลดประวัติไม่สำเร็จ: ' + e.message, 'err'); st.data = null; }
+      st.busy = false; draw();
+    }
+    el.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      if (e.target.classList.contains('hs-q')) { st.id = e.target.querySelector('.hs-id').value.replace(/\s+/g, ''); load(); return; }
+      if (e.target.dataset.hform) {
+        var c = collect(e.target);
+        if (!(c.year > 2500)) { o.toast('กรุณาใส่ปีการศึกษา (พ.ศ.)', 'err'); return; }
+        if (!c.v.school) { o.toast('กรุณาใส่ชื่อโรงเรียนเดิม', 'err'); return; }
+        try { await o.store.saveExternal(st.id, c.year, c.v); o.toast('บันทึกผลการเรียนปี ' + c.year + ' จาก' + c.v.school + ' แล้ว', 'ok'); load(); }
+        catch (er) { o.toast('บันทึกไม่สำเร็จ: ' + er.message, 'err'); }
+      }
+    });
+    el.addEventListener('click', async function (e) {
+      var a = e.target.closest('[data-hadd]'), d = e.target.closest('[data-hdel]');
+      if (a) {
+        var yr = a.dataset.hadd, y = st.data.years.filter(function (x) { return String(x.year) === yr; })[0];
+        st.edit = { year: yr === 'other' ? 'other' : +yr, level: a.dataset.lv, v: y && y.external ? y.external : null }; draw(); return;
+      }
+      if (d && confirm('ลบผลการเรียนจากโรงเรียนอื่นของปี ' + d.dataset.hdel + '?')) {
+        try { await o.store.saveExternal(st.id, +d.dataset.hdel, null); o.toast('ลบแล้ว', 'info'); load(); } catch (er) { o.toast(er.message, 'err'); }
+        return;
+      }
+      if (e.target.closest('[data-hcancel]')) { st.edit = null; draw(); return; }
+      if (e.target.closest('[data-hmore]')) {
+        var f = e.target.closest('form'), c = collect(f);
+        c.v.subjects.push({ name: '', credit: null, grade: '' });
+        var keep = { year: st.edit.year, level: st.edit.level, v: c.v };
+        // เก็บแถวที่ยังไม่มีเกรดไว้ด้วย
+        var n = +f.elements.n.value; keep.v.subjects = [];
+        for (var i = 0; i < n; i++) keep.v.subjects.push({ name: f.elements['sn' + i].value, credit: f.elements['sc' + i].value, grade: f.elements['sg' + i].value });
+        keep.v.subjects.push({ name: '', credit: '', grade: '' });
+        st.edit = keep; draw();
+      }
+    });
+    draw();
+    if (st.id) load();
+    return { show: function (id) { st.id = id; load(); } };
+  }
+  window.PP5History = { mount: mount };
+})();

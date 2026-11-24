@@ -119,38 +119,85 @@
   }
 
   // result: { name, id, no, years:[{ year, className, no, school, mid, final }] }
+  // ปีที่นักเรียนไม่ได้เรียนที่โรงเรียนนี้ / ผลจากโรงเรียนอื่น
+  function missingView(y, school) {
+    return '<div class="pub-empty pub-miss"><div class="ic">🏫</div><b>ไม่มีคะแนนจาก' + esc(school || 'โรงเรียนวัดทุ่งแฝก') + '</b>' +
+      'เนื่องจากนักเรียนไม่ได้เรียนที่โรงเรียนนี้ในปีการศึกษา ' + esc(y.year) + (y.level ? ' (ชั้น ป.' + esc(y.level) + ')' : '') +
+      '<small>หากมีผลการเรียนจากโรงเรียนเดิม ครูหรือแอดมินสามารถเพิ่มเข้าระบบได้</small></div>';
+  }
+  function externalView(y) {
+    var x = y.external || {};
+    var h = '<div class="pub-ext"><span class="pub-ext-tag">ผลการเรียนจากโรงเรียนอื่น</span><b>' + esc(x.school || '') + '</b>' + (x.className ? '<small>' + esc(x.className) + '</small>' : '') + '</div>';
+    h += '<div class="pub-tiles">' + tile('ผลการเรียนเฉลี่ย (GPA)', d(x.gpa == null ? null : +x.gpa, 2), '', 'pub-hl') + tile('ผลการตัดสิน', esc(x.result || '–'), '') + '</div>';
+    if (x.subjects && x.subjects.length) {
+      h += '<div class="pub-sgrid">' + x.subjects.map(function (s) {
+        return '<div class="pub-sc"><div class="pub-sc-n">' + esc(short(s.name)) + '</div><div class="pub-sc-g">' + gradeChip(s.grade === '' ? null : (isFinite(+s.grade) ? +s.grade : s.grade)) + '</div>' + (s.credit != null ? '<div class="pub-sc-s">' + d(+s.credit, 1) + ' นก.</div>' : '') + '</div>';
+      }).join('') + '</div>';
+    }
+    if (x.note) h += '<p class="pub-note">หมายเหตุ: ' + esc(x.note) + '</p>';
+    return h;
+  }
+  function yearState(y, cur) {
+    if (y.missing) return ['miss', 'ไม่ได้เรียนที่นี่'];
+    if (y.external) return ['ext', 'โรงเรียนเดิม'];
+    if (y.pending) return ['wait', 'รอประกาศผล'];
+    if (+y.year === +cur) return ['cur', 'ปีปัจจุบัน'];
+    return ['ok', y.final ? 'ผลปลายปี' : 'ผลกลางปี'];
+  }
+
+  // result: { name, id, years:[{ year, level, className, no, school, mid, final, missing?, external?, pending? }], curYear }
   function renderStudent(el, res, opt) {
     opt = opt || {};
     var years = (res.years || []).slice().sort(function (a, b) { return b.year - a.year; });
-    var st = { y: 0, tab: null };
-    // มุมมองแบบแคบ (เหมาะกับมือถือ): ตารางกลายเป็นการ์ดเรียงลงมา · จำค่าที่เลือกไว้ในเครื่อง
+    var cur = res.curYear || (years[0] && years[0].year);
+    var st = { y: Math.max(0, years.findIndex(function (x) { return +x.year === +cur; })), tab: null };
     try { VIEW = localStorage.getItem('pp5-view') || 'grid'; } catch (e) { VIEW = 'grid'; }
+    var drawerBox = opt.drawer ? document.getElementById(opt.drawer) : null;
+    function yearList() {
+      return years.map(function (x, i) {
+        var s = yearState(x, cur);
+        return '<button type="button" class="pv-yi ' + s[0] + (i === st.y ? ' on' : '') + '" data-yi="' + i + '"><b>ปีการศึกษา ' + esc(x.year) + '</b><span>' + (x.level ? 'ป.' + esc(x.level) + ' · ' : '') + s[1] + '</span></button>';
+      }).join('');
+    }
     function draw() {
-      var narrow = VIEW === 'table' && window.innerWidth < 640;   // ตารางบนจอแคบ → การ์ดเรียงลงมา
+      var narrow = VIEW === 'table' && window.innerWidth < 640;
       el.classList.toggle('pub-narrow', narrow);
-      document.body.classList.add('pub-has-result');
+      if (opt.page !== false) document.body.classList.add('pub-has-result');
       var y = years[st.y] || {};
       if (!st.tab) st.tab = y.final ? 'final' : 'mid';
-      var h = '<div class="pub-card pub-student"><div class="pub-av">' + esc((res.first || res.name || '?').replace(/^(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '').charAt(0)) + '</div>' +
-        '<div class="pub-who"><div class="nm">' + esc(res.name) + '</div><div class="meta">' + esc(y.className || '') + (y.no ? ' · เลขที่ ' + esc(y.no) : '') + ' · เลขประจำตัว ' + esc(res.id) + '</div>' +
-        (y.school ? '<div class="meta">' + esc(y.school) + '</div>' : '') + '</div>' +
-        (years.length > 1 ? '<select class="pub-year" aria-label="ปีการศึกษา">' + years.map(function (x, i) { return '<option value="' + i + '"' + (i === st.y ? ' selected' : '') + '>ปีการศึกษา ' + esc(x.year) + '</option>'; }).join('') + '</select>' : '<div class="pub-yr">ปีการศึกษา ' + esc(y.year) + '</div>') + '</div>';
-      h += '<div class="pub-seg" role="tablist"><button data-t="mid" class="' + (st.tab === 'mid' ? 'on' : '') + '">ผลกลางปี<small>ภาคเรียนที่ 1 · คะแนน</small></button>' +
-        '<button data-t="final" class="' + (st.tab === 'final' ? 'on' : '') + '">ผลปลายปี<small>ทั้งปี · เกรด</small></button></div>';
-      if (y.pending) h += '<div class="pub-card pub-body"><p class="pub-note" style="margin:0">พบชื่อนักเรียนในทะเบียนแล้ว แต่ครูยังไม่ได้บันทึกคะแนนเข้าระบบ กรุณาตรวจสอบอีกครั้งภายหลัง</p></div>';
-      h += '<div class="pub-card pub-body">' + (st.tab === 'mid' ? midView(y.mid) : finalView(y.final)) + '</div>';
-      if (opt.actions !== false) h += '<div class="pub-actions"><button class="pub-btn ghost" data-p="view">' + (VIEW === 'grid' ? '📋 ดูแบบตาราง' : '🔲 ดูแบบการ์ด') + '</button><button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
-      el.innerHTML = h;
+      var hist = years.length > 1;
+      var h = '<div class="pv-rwrap' + (hist ? ' has-side' : '') + '">';
+      if (hist) h += '<aside class="pv-side"><div class="pv-side-h">📚 ผลการเรียนย้อนหลัง</div>' + yearList() + '</aside>';
+      h += '<div class="pv-rmain">';
+      h += '<div class="pub-card pub-student"><div class="pub-av">' + esc((res.first || res.name || '?').replace(/^(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '').charAt(0)) + '</div>' +
+        '<div class="pub-who"><div class="nm">' + esc(res.name) + '</div><div class="meta">' + esc(y.className || (y.level ? 'ป.' + y.level : '')) + (y.no ? ' · เลขที่ ' + esc(y.no) : '') + ' · เลขประจำตัว ' + esc(res.id) + '</div>' +
+        (y.school && !y.missing ? '<div class="meta">' + esc(y.school) + '</div>' : '') + '</div>' +
+        '<div class="pub-yr">ปีการศึกษา ' + esc(y.year) + (+y.year === +cur ? '<small>ปีปัจจุบัน</small>' : '') + '</div></div>';
+      if (hist) h += '<button type="button" class="pv-histbtn" data-p="hist">📚 ดูผลการเรียนย้อนหลัง (' + years.length + ' ปี) <i>›</i></button>';
+      if (y.missing) h += '<div class="pub-card pub-body">' + missingView(y, y.school) + '</div>';
+      else if (y.external) h += '<div class="pub-card pub-body">' + externalView(y) + '</div>';
+      else {
+        h += '<div class="pub-seg" role="tablist"><button data-t="mid" class="' + (st.tab === 'mid' ? 'on' : '') + '">ผลกลางปี<small>ภาคเรียนที่ 1 · คะแนน</small></button>' +
+          '<button data-t="final" class="' + (st.tab === 'final' ? 'on' : '') + '">ผลปลายปี<small>ทั้งปี · เกรด</small></button></div>';
+        if (y.pending) h += '<div class="pub-card pub-body"><p class="pub-note" style="margin:0">พบชื่อนักเรียนในทะเบียนแล้ว แต่ครูยังไม่ได้บันทึกคะแนนเข้าระบบ กรุณาตรวจสอบอีกครั้งภายหลัง</p></div>';
+        h += '<div class="pub-card pub-body">' + (st.tab === 'mid' ? midView(y.mid) : finalView(y.final)) + '</div>';
+      }
+      if (opt.actions !== false) h += '<div class="pub-actions">' + (y.missing || y.external ? '' : '<button class="pub-btn ghost" data-p="view">' + (VIEW === 'grid' ? '📋 ดูแบบตาราง' : '🔲 ดูแบบการ์ด') + '</button>') + '<button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
+      el.innerHTML = h + '</div></div>';
+      if (drawerBox) { drawerBox.hidden = !hist; drawerBox.innerHTML = hist ? '<div class="pv-dsep">📚 ผลการเรียนย้อนหลัง</div>' + yearList() : ''; }
     }
+    function pick(i) { st.y = i; st.tab = null; draw(); if (opt.closeDrawer) opt.closeDrawer(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     el.onclick = function (e) {
+      var yi = e.target.closest('[data-yi]'); if (yi) { pick(+yi.dataset.yi); return; }
       var t = e.target.closest('[data-t]');
       if (t) { st.tab = t.dataset.t; draw(); return; }
       var p = e.target.closest('[data-p]');
       if (p && p.dataset.p === 'print') window.print();
+      if (p && p.dataset.p === 'hist' && opt.openDrawer) opt.openDrawer();
       if (p && p.dataset.p === 'view') { VIEW = VIEW === 'grid' ? 'table' : 'grid'; try { localStorage.setItem('pp5-view', VIEW); } catch (e2) {} draw(); return; }
       if (p && p.dataset.p === 'back' && opt.onBack) opt.onBack();
     };
-    el.onchange = function (e) { if (e.target.classList.contains('pub-year')) { st.y = +e.target.value; st.tab = null; draw(); } };
+    if (drawerBox) drawerBox.onclick = function (e) { var yi = e.target.closest('[data-yi]'); if (yi) pick(+yi.dataset.yi); };
     draw();
   }
 
@@ -165,8 +212,19 @@
     var $ = function (id) { return document.getElementById(id); };
     var info = {};
     try { info = await call('api_publicInfo'); } catch (e) { info = {}; }
-    if (info.title) { $('pubTitle').textContent = info.title; document.title = info.title; }
+    if (info.title) { if (info.title !== 'ประกาศผลการเรียน') $('pubTitle').textContent = info.title; document.title = info.title; }
     if (info.school) $('pubSchool').textContent = info.school;
+    // เมนู ☰ ด้านซ้าย
+    var dr = $('pubDrawer'), scrim = $('pubScrim');
+    function drawer(open) { if (!dr) return; dr.hidden = !open; scrim.hidden = !open; document.body.classList.toggle('pv-dopen', open); }
+    if ($('pubMenuBtn')) $('pubMenuBtn').addEventListener('click', function () { drawer(true); });
+    if ($('pubDrawerClose')) $('pubDrawerClose').addEventListener('click', function () { drawer(false); });
+    if (scrim) scrim.addEventListener('click', function () { drawer(false); });
+    if (dr) dr.addEventListener('click', function (e) {
+      var g = e.target.closest('[data-go]');
+      if (g) { drawer(false); if (typeof back === 'function' && !$('pubResult').hidden && g.dataset.go === 'search') back(); window.scrollTo({ top: g.dataset.go === 'home' ? 0 : $('pubSearch').offsetTop - 10, behavior: 'smooth' }); }
+      if (e.target.closest('[data-login]')) drawer(false);
+    });
     if (info.logo) { $('pubLogo').src = info.logo; $('pubLogo').hidden = false; }
     if (info.announcement) { $('pubAnn').textContent = info.announcement; $('pubAnn').hidden = false; }
     if (info.verify === 'id+nid4') $('pubNidRow').hidden = false;
@@ -206,12 +264,11 @@
       return;
     }
     var yrs = (info.years || []).filter(function (y) { return y.mid || y.final; });
-    if (yrs.length) $('pubStatus').innerHTML = yrs.map(function (y) {
-      return '<span class="pub-chip">ปี ' + esc(y.year) + ': ' + [y.mid ? 'ผลกลางปี' : '', y.final ? 'ผลปลายปี' : ''].filter(Boolean).join(' · ') + '</span>';
-    }).join('');
+    var cy = yrs.filter(function (y) { return +y.year === +info.curYear; })[0] || yrs[0];
+    if ($('pubStatus')) $('pubStatus').innerHTML = '<span>📅</span> ปี ' + esc(info.curYear || (cy && cy.year) || '') + ' : ' + (cy ? [cy.mid ? 'ผลกลางปี' : '', cy.final ? 'ผลปลายปี' : ''].filter(Boolean).join(' - ') || 'ยังไม่ประกาศผล' : 'ผลกลางปี - ผลปลายปี');
 
     var form = $('pubForm'), out = $('pubResult'), err = $('pubErr');
-    function back() { document.body.classList.remove('pub-has-result'); out.hidden = true; out.innerHTML = ''; $('pubSearch').hidden = false; $('pubId').value = ''; if ($('pubNid')) $('pubNid').value = ''; $('pubId').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+    function back() { document.body.classList.remove('pub-has-result'); if ($('pubDrawerYears')) $('pubDrawerYears').hidden = true; out.hidden = true; out.innerHTML = ''; $('pubSearch').hidden = false; $('pubId').value = ''; if ($('pubNid')) $('pubNid').value = ''; $('pubId').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       var id = $('pubId').value.trim(), nid = $('pubNid') ? $('pubNid').value.trim() : '';
@@ -223,7 +280,7 @@
         var r = await call('api_lookup', [id, nid]);
         if (!r || r.notFound) { err.textContent = info.verify === 'id+nid4' ? 'ไม่พบข้อมูล กรุณาตรวจสอบเลขประจำตัวนักเรียนและเลขบัตรประชาชน 4 ตัวท้าย' : 'ไม่พบข้อมูล กรุณาตรวจสอบเลขประจำตัวนักเรียน'; err.hidden = false; return; }
         $('pubSearch').hidden = true; out.hidden = false;
-        renderStudent(out, r, { onBack: back });
+        renderStudent(out, r, { onBack: back, drawer: 'pubDrawerYears', openDrawer: function () { drawer(true); }, closeDrawer: function () { drawer(false); } });
         out.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (e2) {
         err.textContent = /TRY_LATER/.test(e2.message) ? 'ค้นหาผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่' : /CLOSED/.test(e2.message) ? 'ขณะนี้ปิดระบบประกาศผลชั่วคราว' : 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';

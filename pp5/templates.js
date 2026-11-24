@@ -26,7 +26,8 @@
   }
 
   // ---------- ปพ.5 ครูหนุ่ม ----------
-  async function fillPP5(book, data) {
+  async function fillPP5(book, data, opts) {
+    var keep = !!(opts && opts.update);   // อัปเดตไฟล์เดิมของครู: ไม่ล้างบันทึกรายวัน ไม่ทับช่องที่เป็นสูตร
     var m = data ? data.meta : null, studs = data ? data.students : [];
     if (studs.length > 40) throw new Error('แม่แบบ ปพ.5 รองรับนักเรียนได้สูงสุด 40 คน (ห้องนี้มี ' + studs.length + ' คน)');
     var set = await book.sheet('ตั้งค่า');
@@ -88,18 +89,19 @@
     });
 
     // เวลาเรียน (สรุป) และบันทึกรายวัน (ล้าง เพราะระบบเก็บเฉพาะยอดรวม)
-    for (var t = 1; t <= 2; t++) { var day = await book.sheet('บันทึกมาเรียน_T' + t); if (day) day.clearRange(4, 200, 7, 46); }
+    if (!keep) for (var t = 1; t <= 2; t++) { var day = await book.sheet('บันทึกมาเรียน_T' + t); if (day) day.clearRange(4, 200, 7, 46); }
     var at = await book.sheet('สรุปเวลาเรียน');
-    if (data) { if (data.hours.t1 != null) at.set('G3', data.hours.t1); if (data.hours.t2 != null) at.set('L3', data.hours.t2); }
-    at.clearRange(4, 7, 7, 46); at.clearRange(9, 12, 7, 46);
+    function atSet(addr, v) { if (keep && at.isFormula(addr)) return; at.set(addr, v); }   // ไฟล์ครูที่คิดจากบันทึกรายวัน: คงสูตรไว้
+    if (data) { if (data.hours.t1 != null) atSet('G3', data.hours.t1); if (data.hours.t2 != null) atSet('L3', data.hours.t2); }
+    if (!keep) { at.clearRange(4, 7, 7, 46); at.clearRange(9, 12, 7, 46); }
     studs.forEach(function (s) {
       var r = 6 + s.no, a = s.attendance || {};
       [['t1', 'D'], ['t2', 'I']].forEach(function (p) {
         var x = a[p[0]] || {}, c0 = XF.colNum(p[1]);
         var h = data.hours[p[0]];
         var present = num(x.present) != null ? x.present : (h != null ? h - (num(x.sick) || 0) - (num(x.leave) || 0) - (num(x.absent) || 0) : null);
-        at.set(C(c0) + r, num(x.sick) || 0); at.set(C(c0 + 1) + r, num(x.leave) || 0); at.set(C(c0 + 2) + r, num(x.absent) || 0);
-        if (present != null) at.set(C(c0 + 3) + r, present);
+        atSet(C(c0) + r, num(x.sick) || 0); atSet(C(c0 + 1) + r, num(x.leave) || 0); atSet(C(c0 + 2) + r, num(x.absent) || 0);
+        if (present != null) atSet(C(c0 + 3) + r, present);
       });
     });
 
@@ -359,11 +361,11 @@
   }
 
   /** สร้างไฟล์: kind = 'pp5' | 'pp6', template = ไบต์ของแม่แบบ, data = ข้อมูล (null = แม่แบบเปล่า) */
-  async function build(kind, template, data) {
+  async function build(kind, template, data, opts) {
     var book = await XF.open(template);
     var k = detect(book.order);
     if (k !== kind) throw new Error('แม่แบบไม่ใช่ไฟล์ ' + (kind === 'pp5' ? 'ปพ.5' : 'ปพ.6') + ' รูปแบบต้นฉบับ');
-    if (kind === 'pp5') await fillPP5(book, data); else await fillPP6(book, data);
+    if (kind === 'pp5') await fillPP5(book, data, opts); else await fillPP6(book, data);
     if (data && !book.has('สารบัญ')) await addTOC(book, kind, data);
     return book.output();
   }

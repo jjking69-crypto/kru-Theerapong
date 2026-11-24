@@ -170,7 +170,7 @@
     var prev = document.getElementById('pbPrev');
     if (prev) {
       var s = pub.students.filter(function (x) { return x.id === view.stu; })[0];
-      window.PP5Public.renderStudent(prev, studentView(pub, s), { actions: false });
+      window.PP5Public.renderStudent(prev, studentView(pub, s), { actions: false, page: false });
     }
     el.onclick = onClick; el.onchange = onChange;
   }

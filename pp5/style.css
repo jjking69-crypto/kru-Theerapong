@@ -445,3 +445,28 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .old-year { border-color: #f59e0b !important; background: #fffbeb !important; }
 .old-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fffbeb; border: 1.5px solid #f59e0b; color: #92400e; border-radius: 12px; padding: 8px 12px; margin: 8px 0 0; }
 .old-note .btn { margin-left: auto; }
+
+/* ===== ประวัติผลการเรียนรายคน (ครู/แอดมิน) ===== */
+.hs-card { margin-top: 14px; }
+.hs-q { display: flex; gap: 8px; margin: 6px 0 10px; }
+.hs-q input { flex: 1; max-width: 260px; font-size: 16px; }
+.hs-who { margin: 6px 0; } .hs-who span { color: var(--muted); font-size: 14px; margin-left: 6px; }
+.hs-tl { display: flex; flex-direction: column; gap: 6px; }
+.hs-y { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: #fff; }
+.hs-y.miss { background: #fffbeb; border-color: #fde68a; }
+.hs-yt { min-width: 170px; } .hs-yt b { display: block; } .hs-yt span { font-size: 13px; color: var(--muted); }
+.hs-ya { margin-left: auto; display: flex; gap: 6px; }
+.badge.info { background: #e0f2fe; color: #075985; }
+.hs-f { margin: 4px 0 10px; padding: 12px; background: #f8fafc; }
+.hs-fg { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.hs-fg label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 3px; }
+.hs-fg label.w2 { grid-column: span 2; }
+.hs-subs { margin: 10px 0; display: flex; flex-direction: column; gap: 5px; }
+.hs-s { display: grid; grid-template-columns: 1fr 90px 90px; gap: 6px; }
+@media (max-width: 560px) { .hs-fg label.w2 { grid-column: auto; } }
+.sup-files { display: flex; flex-direction: column; gap: 10px; }
+.sup-fy > a { text-decoration: none; }
+.sup-fc { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 0 10px; }
+.sup-cls { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sup-cls > a { min-width: 60px; text-decoration: none; }
+.sup-cls .chip { text-decoration: none; font-size: 13px; }

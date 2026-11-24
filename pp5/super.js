@@ -8,7 +8,7 @@
     $('toasts').appendChild(t); setTimeout(function () { t.remove(); }, 4200);
   }
   function fmtDate(ms) { if (!ms) return '-'; var d = new Date(ms); return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
-  var S = { entries: [], pub: {}, roster: null, tpl: {}, brand: null, sigs: {} };
+  var S = { entries: [], pub: {}, roster: null, tpl: {}, brand: null, sigs: {}, links: null };
   var SLOT_NAME = { th: 'ไทย', ma: 'คณิต', sci: 'วิทย์', soc: 'สังคม', his: 'ประวัติ', pe: 'สุขศึกษา', art: 'ศิลปะ', work: 'การงาน', eng: 'อังกฤษ', cor: 'ทุจริต' };
 
   function acts() {
@@ -99,14 +99,45 @@
       '<button class="btn" id="supSrc">🔄 อ่านรายการไฟล์ในโฟลเดอร์ต้นฉบับใหม่</button></section>';
   }
 
+  // ปีการศึกษาปัจจุบัน (ระบบคิดจากวันที่ หรือแอดมินกำหนดเอง — รองรับการใช้งานต่อเนื่องหลายปี)
+  function yearCard() {
+    var fixed = DB.curYearFixed;
+    return '<section class="card sup-card"><h2>📅 ปีการศึกษาปัจจุบัน</h2><p class="sub">ระบบเปลี่ยนปีให้เองทุกวันที่ 1 พ.ค. (รองรับการใช้งานต่อไปอีกหลายปี) · ถ้าต้องการเปลี่ยนก่อน/หลังกำหนด ตั้งเองได้</p>' +
+      '<div class="tiles"><div class="tile"><div class="k">ปีปัจจุบันของระบบ</div><div class="v">' + esc(DB.curYear || '-') + '</div><div class="s">' + (fixed ? 'ตั้งเองโดยแอดมิน' : 'อัตโนมัติตามวันที่') + '</div></div></div>' +
+      '<div class="slot-acts"><input id="supYear" inputmode="numeric" placeholder="เช่น 2570" style="width:120px"><button class="btn pri" id="supYearSet">ตั้งปีนี้</button>' + (fixed ? '<button class="btn" id="supYearAuto">กลับเป็นอัตโนมัติ</button>' : '') + '</div></section>';
+  }
+  // ที่เก็บไฟล์ ปพ.5 / ปพ.6 ใน Google Drive (เฉพาะแอดมิน)
+  function driveCard() {
+    var L = S.links, files = {};
+    S.entries.forEach(function (e) { var k = e.year + '|' + e.level + '|' + e.room; (files[k] = files[k] || []).push(e); });
+    return '<section class="card sup-card"><h2>📁 ที่เก็บไฟล์ ปพ.5 / ปพ.6 ใน Google Drive</h2><p class="sub">ไฟล์ทุกห้องที่ครูอัปโหลดหรือระบบสร้างให้ (แสดงเฉพาะหน้าแอดมิน) · ค้นหาด้วยชั้น/ชื่อวิชาได้</p>' +
+      (L ? '<div class="slot-acts"><a class="btn pri" href="' + esc(L.root) + '" target="_blank" rel="noopener">📂 เปิดโฟลเดอร์หลัก</a>' + (L.other || []).map(function (o) { return '<a class="btn" href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc(o.name) + '</a>'; }).join('') + '</div>' : '<p class="sub">กำลังโหลดลิงก์...</p>') +
+      '<input id="supFileQ" placeholder="🔎 ค้นหา เช่น ป.4-2 หรือ คณิต" style="width:100%;margin:10px 0">' +
+      '<div class="sup-files">' + (L ? L.years.map(function (y) {
+        return '<div class="sup-fy"><a href="' + esc(y.url) + '" target="_blank" rel="noopener"><b>📂 ' + esc(y.name) + '</b></a><div class="sup-fc">' + y.classes.map(function (c) {
+          var m = /(\d)-(\d+)/.exec(c.name), yr = (/(\d{4})/.exec(y.name) || [])[1], fs = m ? files[yr + '|' + m[1] + '|' + m[2]] || [] : [];
+          return '<div class="sup-cls" data-q="' + esc((c.name + ' ' + fs.map(function (f) { return f.fileName; }).join(' ')).toLowerCase()) + '"><a href="' + esc(c.url) + '" target="_blank" rel="noopener"><b>' + esc(c.name) + '</b></a> ' +
+            fs.map(function (f) { return f.url ? '<a class="chip" href="' + esc(f.url) + '" target="_blank" rel="noopener" title="' + esc(f.fileName) + '">' + (f.slot === 'pp6' ? '📗 ปพ.6' : '📘 ' + esc(SLOT_NAME[f.slot] || 'เพิ่มเติม')) + '</a>' : ''; }).join('') + '</div>';
+        }).join('') + '</div></div>';
+      }).join('') : '') + '</div></section>';
+  }
+  function histCard() {
+    return '<section class="card sup-card"><h2>📚 ผลการเรียนย้อนหลังรายคน / ผลจากโรงเรียนอื่น</h2><p class="sub">ค้นด้วยเลขประจำตัวนักเรียน เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่นักเรียนยังไม่ได้เรียนที่นี่ (ย้ายมา) เพิ่มผลการเรียนจากโรงเรียนเดิมได้</p><div id="supHist"></div></section>';
+  }
   function pinCard() {
     return '<section class="card sup-card"><h2>🔑 รหัสเข้าใช้</h2><p class="sub">รหัสครู และรหัสผู้ดูแล ตั้งไว้ใน Code.gs (TEACHER_PIN / ADMIN_PIN) · รหัสครูเข้าได้เฉพาะระบบครู · รหัสผู้ดูแลเข้าได้ทั้งสองระบบ</p></section>';
   }
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + brandCard() + overviewCard() + tplCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + pinCard();
+    if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
+    main.oninput = function (e) {
+      if (e.target.id !== 'supFileQ') return;
+      var q = e.target.value.trim().toLowerCase();
+      Array.prototype.forEach.call(main.querySelectorAll('.sup-cls'), function (c) { c.hidden = q && c.dataset.q.indexOf(q) < 0; });
+    };
     main.onchange = async function (e) {
       if (e.target.dataset.flag) return saveFlags();
       if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
@@ -118,6 +149,8 @@
       var up = e.target.closest('[data-up]'), rm = e.target.closest('[data-rm]');
       if (up) { pendingImg = up.dataset.up; $('supImgFile').value = ''; $('supImgFile').click(); return; }
       if (rm && confirm('ลบรูปนี้?')) { saveBrand(imgPatch(rm.dataset.rm, null), 'ลบรูปแล้ว'); return; }
+      if (e.target.id === 'supYearSet') { var y = +$('supYear').value; if (!(y > 2500)) { toast('ใส่ปี พ.ศ. เช่น 2570', 'err'); return; } DB.setCurYear(y).then(function () { DB.curYearFixed = true; toast('ตั้งปีการศึกษาปัจจุบันเป็น ' + y + ' แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
+      if (e.target.id === 'supYearAuto') { DB.setCurYear(0).then(function () { DB.curYearFixed = false; toast('กลับเป็นอัตโนมัติตามวันที่แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
       if (e.target.id === 'supBrandSave') { saveBrand(textPatch(), 'บันทึกชื่อและตำแหน่งแล้ว'); return; }
       if (e.target.id === 'supRosterUp') { $('supRosterFile').value = ''; $('supRosterFile').click(); }
       if (e.target.id === 'supSrc') { DB.clearSourceCache().then(function (n) { toast('อ่านโฟลเดอร์ต้นฉบับใหม่แล้ว พบ ' + n + ' ไฟล์', 'ok'); }, function (er) { toast(er.message, 'err'); }); }
@@ -172,6 +205,7 @@
       S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {};
       render();
       bootDone();
+      DB.folderLinks().then(function (l) { S.links = l; render(); }, function (er) { console.warn('links', er); });
     } catch (e) { bootDone(); $('sup').innerHTML = '<div class="card empty-state"><b>เข้าระบบไม่สำเร็จ</b>' + esc(e.message) + '</div>'; }
   }
   boot();

@@ -84,7 +84,7 @@
       return call('api_ping').then(function (r) {
         self.rootUrl = r && r.rootUrl;
         self.role = r && r.role; self.flags = (r && r.flags) || {}; self.flagDefs = (r && r.flagDefs) || {};
-        self.publicUrl = r && r.publicUrl;
+        self.publicUrl = r && r.publicUrl; self.curYear = r && r.curYear; self.curYearFixed = r && r.curYearFixed;
         var link = document.getElementById('driveLink');
         if (link && self.rootUrl) { link.href = self.rootUrl; link.hidden = false; }
       });
@@ -116,6 +116,11 @@
     },
     templateInfo: function () { return call('api_templateInfo'); },
     setFlags: function (f) { var self = this; return call('api_setFlags', [JSON.stringify(f)]).then(function (r) { self.flags = r; return r; }); },
+    getFile: async function (key) { var t = await call('api_getFile', [key]); return t ? { name: t.name, bytes: b64ToBytes(t.b64) } : null; },
+    studentHistory: function (id) { return call('api_studentHistory', [id]); },
+    saveExternal: function (id, year, v) { return call('api_saveExternal', [id, year, v ? JSON.stringify(v) : null]); },
+    setCurYear: function (y) { var self = this; return call('api_setCurYear', [y || 0]).then(function (r) { self.curYear = r; return r; }); },
+    folderLinks: function () { return call('api_folderLinks'); },
     getLib: function () { return call('api_getLib'); },
     saveLib: function (key, v) { return call('api_saveLib', [key, JSON.stringify(v)]); },
     getBrand: function () { return call('api_getBrand'); },

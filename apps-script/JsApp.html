@@ -305,7 +305,7 @@
 
   // ---------- เลือกข้อมูลของห้องปัจจุบัน ----------
   // ปีการศึกษาปัจจุบัน (ตามวันที่: เปิดภาคเรียน พ.ค.)
-  function curYear() { return thaiYear(); }
+  function curYear() { return DB.curYear || thaiYear(); }
   function years() {
     var ys = {};
     ys[curYear()] = 1;
@@ -531,11 +531,28 @@
     return (kind === 'pp6' ? null : await loadTpl(lvl)) || await loadTpl(kind) ||
       (await loadTpl(Object.keys(tplInfo).filter(function (k) { return k.slice(0, 3) === kind; })[0] || '-'));
   }
-  // คืน { blob, ext, original } — ใช้รูปแบบต้นฉบับเสมอ (มีชีตสารบัญ)
+  // ไฟล์ ปพ.5 เดิมของห้อง/วิชานี้ (ที่ครูอัปโหลดหรือที่ระบบบันทึกไว้) — ใช้เป็นฐานเพื่อให้ข้อมูลใหม่ (เช่น เทอม 2) ทับลงไฟล์เดิม
+  var ownCache = {};
+  async function ownFile(kind, data) {
+    if (kind !== 'pp5' || !data || !data.meta) return null;
+    var key = recKey(data.meta), rec = records.filter(function (r) { return r.key === key; })[0];
+    if (!rec) return null;
+    var ck = key + '@' + rec.uploadedAt;
+    if (ownCache[ck] !== undefined) return ownCache[ck];
+    var bytes = null;
+    try {
+      if (rec.blob) bytes = new Uint8Array(await rec.blob.arrayBuffer());
+      else if (DB.getFile) { var f = await DB.getFile(key); bytes = f && f.bytes; }
+      if (bytes && PP5Templates.detect(XLSX.read(bytes, { type: 'array', bookSheets: true }).SheetNames) !== kind) bytes = null;
+    } catch (e) { console.warn('own file', e); bytes = null; }
+    ownCache[ck] = bytes;
+    return bytes;
+  }
+  // คืน { blob, ext, original } — ใช้รูปแบบต้นฉบับเสมอ (มีชีตสารบัญ) · ถ้ามีไฟล์เดิมของวิชานี้ เขียนทับลงไฟล์เดิม
   async function buildFile(kind, data) {
-    var tpl = await getTemplateBytes(kind, data && data.meta);
+    var own = await ownFile(kind, data), tpl = own || await getTemplateBytes(kind, data && data.meta);
     if (tpl) {
-      var out = await PP5Templates.build(kind, tpl, data);
+      var out = await PP5Templates.build(kind, tpl, data, own ? { update: true } : null);
       var macro = kind === 'pp5';
       return { blob: new Blob([out], { type: macro ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), ext: macro ? '.xlsm' : '.xlsx', original: true };
     }
@@ -757,8 +774,19 @@
     if (state.tab === 'subjects') renderSubjects(cls);
     else if (state.tab === 'summary') renderSummary(cls);
     else if (state.tab === 'report') PP6Report.render(view, reportCtx);
-    else renderStudent(cls);
+    else { renderStudent(cls); appendHistory(); }
     saveUI();
+  }
+
+  // ผลการเรียนย้อนหลัง/จากโรงเรียนอื่นของนักเรียนที่เลือก (รุ่น Apps Script)
+  function appendHistory() {
+    if (!DB.studentHistory || !window.PP5History) return;
+    var sid = String(state.student || '').indexOf('id:') === 0 ? String(state.student).slice(3) : '';
+    var card = document.createElement('div');
+    card.className = 'card hs-card';
+    card.innerHTML = '<h3>📚 ผลการเรียนย้อนหลังทุกปี / เพิ่มผลจากโรงเรียนอื่น</h3><p class="sub">ดูว่านักเรียนมีผลในปีไหนบ้าง ตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่ย้ายมาจากโรงเรียนอื่นเพิ่มผลการเรียนได้</p><div class="hs-mount"></div>';
+    view.appendChild(card);
+    PP5History.mount(card.querySelector('.hs-mount'), { store: DB, toast: toast, id: sid });
   }
 
   // ---------- แบนเนอร์บอกส่วนที่กำลังทำ ----------

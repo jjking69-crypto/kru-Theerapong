@@ -147,7 +147,7 @@ function writeText_(folder, name, id, text) {
 function api_ping(pin) {
   var role = checkPin_(pin);
   var root = rootFolder_();
-  return { ok: true, rootUrl: root.getUrl(), role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_() };
+  return { ok: true, rootUrl: role === 'admin' ? root.getUrl() : null, role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_(), curYear: curYear_(), curYearFixed: !!props_().getProperty('CUR_YEAR') };
 }
 /** จำนวนหลักของรหัส (ให้แป้นกดแสดงจุดครบ) — ไม่บอกตัวรหัส */
 function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length }; }

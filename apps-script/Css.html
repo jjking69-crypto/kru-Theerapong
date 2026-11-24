@@ -447,6 +447,31 @@ body.dragging::after { content: "วางไฟล์ที่นี่เพ�
 .old-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #fffbeb; border: 1.5px solid #f59e0b; color: #92400e; border-radius: 12px; padding: 8px 12px; margin: 8px 0 0; }
 .old-note .btn { margin-left: auto; }
 
+/* ===== ประวัติผลการเรียนรายคน (ครู/แอดมิน) ===== */
+.hs-card { margin-top: 14px; }
+.hs-q { display: flex; gap: 8px; margin: 6px 0 10px; }
+.hs-q input { flex: 1; max-width: 260px; font-size: 16px; }
+.hs-who { margin: 6px 0; } .hs-who span { color: var(--muted); font-size: 14px; margin-left: 6px; }
+.hs-tl { display: flex; flex-direction: column; gap: 6px; }
+.hs-y { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: #fff; }
+.hs-y.miss { background: #fffbeb; border-color: #fde68a; }
+.hs-yt { min-width: 170px; } .hs-yt b { display: block; } .hs-yt span { font-size: 13px; color: var(--muted); }
+.hs-ya { margin-left: auto; display: flex; gap: 6px; }
+.badge.info { background: #e0f2fe; color: #075985; }
+.hs-f { margin: 4px 0 10px; padding: 12px; background: #f8fafc; }
+.hs-fg { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.hs-fg label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 3px; }
+.hs-fg label.w2 { grid-column: span 2; }
+.hs-subs { margin: 10px 0; display: flex; flex-direction: column; gap: 5px; }
+.hs-s { display: grid; grid-template-columns: 1fr 90px 90px; gap: 6px; }
+@media (max-width: 560px) { .hs-fg label.w2 { grid-column: auto; } }
+.sup-files { display: flex; flex-direction: column; gap: 10px; }
+.sup-fy > a { text-decoration: none; }
+.sup-fc { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 0 10px; }
+.sup-cls { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sup-cls > a { min-width: 60px; text-decoration: none; }
+.sup-cls .chip { text-decoration: none; font-size: 13px; }
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }
@@ -740,6 +765,112 @@ body.pub-has-result .pub-hero { padding-bottom: 62px; }
   .pub-login { position: static !important; margin: 0 0 10px; display: flex; justify-content: flex-end; }
   .pub-login-menu { position: fixed; left: 12px; right: 12px; top: 60px; width: auto; }
 }
+
+/* ======================= หน้าแรกแบบใหม่ (pv2) ======================= */
+.pv2 { --nv: #0f2a7a; --nv2: #1e40af; --bl: #2563eb; --sky: #e8f2ff; --yl: #facc15;
+  background: linear-gradient(180deg, #cfe3ff 0, #e9f3ff 420px, #f3f8ff 100%); display: flex; flex-direction: column; min-height: 100vh; }
+.pv2 .pub-main { flex: 1; width: 100%; }
+.pv-hero { position: relative; overflow: hidden; padding: calc(14px + env(safe-area-inset-top)) 16px 34px;
+  background: radial-gradient(700px 300px at 80% 10%, #ffffffaa, transparent 60%), radial-gradient(600px 260px at 10% 30%, #ffffff88, transparent 60%), linear-gradient(180deg, #a8ccff, #d7e9ff 70%, #e9f3ff); }
+.pv-hero::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(#ffffff99 1.5px, transparent 1.5px); background-size: 18px 18px; mask-image: radial-gradient(260px 160px at 88% 18%, #000, transparent); pointer-events: none; }
+.pv-cloud { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 130px; pointer-events: none; }
+.pv-top { position: relative; z-index: 3; max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+.pv-burger { justify-self: start; width: 54px; height: 54px; border-radius: 50%; border: 0; background: linear-gradient(145deg, var(--nv2), var(--nv)); box-shadow: 0 8px 18px -6px #0f2a7a99; display: grid; align-content: center; justify-items: center; gap: 5px; cursor: pointer; }
+.pv-burger span { display: block; width: 22px; height: 3px; border-radius: 3px; background: #fff; }
+.pv-logo { width: 96px; height: 96px; object-fit: contain; filter: drop-shadow(0 8px 16px #0f2a7a55); grid-column: 2; }
+.pv2 .pub-login { position: relative !important; top: auto; right: auto; justify-self: end; grid-column: 3; z-index: 5 !important; }
+.pv2 .pub-login-btn { background: #fff; color: var(--nv); border-radius: 999px; padding: 11px 18px; font: 700 16px "Prompt", sans-serif; box-shadow: 0 8px 22px -8px #0f2a7a88; display: flex; align-items: center; gap: 6px; }
+.pv-lock { font-size: 18px; }
+.pv-stage { position: relative; z-index: 2; max-width: 1080px; margin: 6px auto 0; display: grid; grid-template-columns: 1fr minmax(0, 560px) 1fr; align-items: end; gap: 10px; }
+.pv-school { width: 100%; max-width: 230px; justify-self: end; opacity: .85; }
+.pv-cap { width: 100%; max-width: 210px; justify-self: start; filter: drop-shadow(0 10px 16px #1e3a8a33); }
+.pv-head { text-align: center; }
+.pv-kicker { display: inline-block; background: linear-gradient(145deg, var(--nv2), var(--nv)); color: #fff; font: 600 clamp(14px, 3.4vw, 18px) "Prompt", sans-serif; padding: 8px 22px; border-radius: 999px; box-shadow: 0 8px 18px -8px #0f2a7a; }
+.pv-title { margin: 10px 0 8px; line-height: 1.02; font-family: "Prompt", sans-serif; font-weight: 800; letter-spacing: .5px; }
+.pv-title span { display: block; }
+.pv-t1 { font-size: clamp(44px, 11vw, 76px); color: var(--nv); -webkit-text-stroke: 3px #fff; paint-order: stroke fill; text-shadow: 0 6px 0 #ffffffaa, 0 10px 24px #1e3a8a44; }
+.pv-t2 { font-size: clamp(48px, 12.5vw, 86px); background: linear-gradient(180deg, #fde047, #f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 2.5px var(--nv); filter: drop-shadow(0 4px 0 #fff) drop-shadow(0 10px 18px #1e3a8a55); }
+.pv-title:not(:has(span)) { font-size: clamp(34px, 8vw, 56px); color: var(--nv); }
+.pv-year { display: inline-flex; align-items: center; gap: 8px; background: #ffffffe6; color: var(--nv); font: 600 clamp(14px, 3.4vw, 18px) "Prompt", sans-serif; padding: 8px 20px; border-radius: 999px; box-shadow: 0 6px 16px -8px #1e3a8a66; }
+.pv-main { max-width: 760px; margin: -6px auto 0; padding: 0 16px 24px; position: relative; z-index: 3; }
+.pv-card { position: relative; background: linear-gradient(180deg, #ffffffee, #f5f9ffee); border: 1.5px solid #ffffff; border-radius: 30px; padding: 46px 22px 24px; margin-top: 30px; box-shadow: 0 24px 50px -24px #1e3a8a66, inset 0 0 0 1px #dbeafe; backdrop-filter: blur(6px); }
+.pv-card-h { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: linear-gradient(145deg, var(--bl), var(--nv)); color: #fff; font: 700 clamp(18px, 4.6vw, 26px) "Prompt", sans-serif; padding: 10px 30px; border-radius: 999px; box-shadow: 0 12px 24px -10px #0f2a7a; }
+.pv-desc { color: #334155; font-size: clamp(15px, 3.6vw, 18px); margin: 0 0 14px; padding-bottom: 14px; border-bottom: 1.5px solid #dbeafe; }
+.pv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.pv-field { position: relative; }
+.pv-field .pv-ic { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; display: grid; place-items: center; font-size: 20px; pointer-events: none; }
+.pv-field .pv-ic svg { width: 26px; height: 26px; }
+.pv2 .pv-field input { width: 100%; height: 64px; padding: 0 16px 0 58px; border: 2px solid #c7dbff; border-radius: 18px; background: #fff; font-size: 19px; color: var(--ink); }
+.pv2 .pv-field input:focus { outline: none; border-color: var(--bl); box-shadow: 0 0 0 4px #bfdbfe; }
+.pv2 .pub-fields { display: grid; gap: 10px; }
+.pv2 .pub-fields.two { grid-template-columns: 1fr; }
+.pv2 .pv-go { position: relative; height: 66px; margin-top: 16px; border-radius: 999px; font: 700 clamp(19px, 4.6vw, 24px) "Prompt", sans-serif; background: linear-gradient(180deg, #3b82f6, #1d4ed8 60%, #1e3a8a); box-shadow: 0 16px 28px -12px #1d4ed8, inset 0 2px 0 #ffffff55; border: 0; color: #fff; display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; cursor: pointer; }
+.pv-go i { position: absolute; right: 26px; font-style: normal; font-size: 30px; }
+.pv-feats { display: grid; grid-template-columns: repeat(4, 1fr); background: #ffffffd9; border-radius: 24px; margin-top: 18px; padding: 16px 6px; box-shadow: 0 14px 30px -20px #1e3a8a; }
+.pv-feats > div { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; border-left: 1.5px solid #dbeafe; }
+.pv-feats > div:first-child { border-left: 0; }
+.pv-feats span { font-size: 34px; line-height: 1.1; }
+.pv-feats b { font: 700 clamp(14px, 3.6vw, 18px) "Prompt", sans-serif; color: var(--nv); margin-top: 4px; }
+.pv-feats small { font-size: clamp(11px, 2.8vw, 13.5px); color: #475569; }
+.pv-foot { position: relative; margin-top: 26px; color: #fff; }
+.pv-wave { display: block; width: 100%; height: 70px; }
+.pv-fin { background: #1e3a8a; text-align: center; padding: 4px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 4px; }
+.pv-fs { display: flex; align-items: center; gap: 14px; justify-content: center; }
+.pv-fs b { font: 700 clamp(17px, 4.2vw, 22px) "Prompt", sans-serif; }
+.pv-fs span { height: 1.5px; width: 70px; background: #ffffff88; }
+.pv-fin small { font-size: clamp(12px, 3vw, 15px); opacity: .9; }
+.pv-fin .pv-priv { opacity: .6; font-size: 12px; margin-top: 4px; }
+/* เมนูซ้าย */
+.pv-scrim { position: fixed; inset: 0; background: #0f172a66; z-index: 60; }
+.pv-drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); background: #fff; z-index: 61; padding: 14px 12px calc(16px + env(safe-area-inset-bottom)); overflow-y: auto; box-shadow: 10px 0 40px -10px #0f172a88; animation: pvslide .18s ease-out; display: flex; flex-direction: column; gap: 4px; }
+@keyframes pvslide { from { transform: translateX(-100%); } to { transform: none; } }
+.pv-dh { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 10px; font: 700 20px "Prompt", sans-serif; color: var(--nv); }
+.pv-x { border: 0; background: #eef2ff; width: 40px; height: 40px; border-radius: 50%; font-size: 24px; cursor: pointer; color: var(--nv); }
+.pv-di { text-align: left; border: 0; background: none; border-radius: 12px; padding: 12px 12px; font: 600 16px "Sarabun", sans-serif; color: #0f172a; cursor: pointer; }
+.pv-di:hover { background: #eef4ff; }
+.pv-dsep { font: 600 13px "Sarabun", sans-serif; color: #64748b; padding: 12px 12px 4px; border-top: 1px solid #e2e8f0; margin-top: 6px; }
+.pv-dsec { display: flex; flex-direction: column; gap: 4px; }
+/* ผลการเรียน + แถบปีย้อนหลังด้านซ้าย */
+body.pub-has-result.pv2 .pv-stage { display: none; }
+body.pub-has-result.pv2 .pv-hero { padding-bottom: 18px; }
+body.pub-has-result.pv2 .pv-logo { width: 64px; height: 64px; }
+body.pub-has-result.pv2 .pv-main { max-width: 1080px; margin-top: 10px; }
+.pv-rwrap.has-side { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.pv-side { position: sticky; top: 12px; background: #fff; border-radius: 20px; padding: 10px; box-shadow: 0 14px 30px -22px #1e3a8a; display: flex; flex-direction: column; gap: 6px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.pv-side-h { font: 700 16px "Prompt", sans-serif; color: var(--nv, #0f2a7a); padding: 4px 6px 6px; }
+.pv-yi { text-align: left; border: 1.5px solid #e2e8f0; background: #fff; border-radius: 14px; padding: 9px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; font-family: "Sarabun", sans-serif; }
+.pv-yi b { font: 600 15.5px "Prompt", sans-serif; color: #0f172a; }
+.pv-yi span { font-size: 13px; color: #64748b; }
+.pv-yi.cur span { color: #1d4ed8; font-weight: 600; }
+.pv-yi.miss { background: #f8fafc; } .pv-yi.miss span { color: #b45309; }
+.pv-yi.ext span { color: #0369a1; }
+.pv-yi.on { border-color: #2563eb; background: #eff6ff; box-shadow: inset 4px 0 0 #2563eb; }
+.pv-histbtn { display: none; width: 100%; margin: 0 0 12px; border: 0; border-radius: 16px; padding: 12px 16px; background: #fff; color: #1e3a8a; font: 700 16px "Prompt", sans-serif; text-align: left; box-shadow: 0 10px 24px -18px #1e3a8a; cursor: pointer; position: relative; }
+.pv-histbtn i { position: absolute; right: 16px; font-style: normal; font-size: 22px; top: 50%; transform: translateY(-50%); }
+.pub-yr small { display: block; font-size: 11.5px; color: #1d4ed8; font-weight: 600; }
+.pub-miss small { display: block; margin-top: 8px; font-size: 13px; color: #64748b; }
+.pub-ext { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-bottom: 10px; }
+.pub-ext-tag { background: #e0f2fe; color: #075985; font-size: 12.5px; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+.pub-ext b { font: 700 19px "Prompt", sans-serif; }
+@media (max-width: 900px) {
+  .pv-rwrap.has-side { display: block; }
+  .pv-side { display: none; }
+  .pv-histbtn { display: block; }
+}
+@media (max-width: 640px) {
+  .pv-stage { grid-template-columns: 1fr; }
+  .pv-school { position: absolute; left: -24px; top: -6px; width: 130px; opacity: .55; z-index: -1; }
+  .pv-cap { position: absolute; right: -18px; top: 120px; width: 130px; z-index: -1; opacity: .95; }
+  .pv-head { text-align: left; padding: 0 0 0 4px; }
+  .pv-kicker { font-size: 14px; }
+  .pv-burger { width: 46px; height: 46px; }
+  .pv-logo { width: 76px; height: 76px; }
+  .pv2 .pub-login-btn { padding: 9px 13px; font-size: 14.5px; }
+  .pv-card { padding: 42px 16px 20px; border-radius: 26px; }
+  .pv-feats span { font-size: 28px; }
+  .pv2 .pub-login-menu { position: fixed; left: 12px; right: 12px; top: 72px; width: auto; }
+}
+@media print { .pv-hero, .pv-foot, .pv-side, .pv-histbtn, .pv-drawer, .pv-scrim { display: none !important; } .pv-rwrap.has-side { display: block; } }
 
 [hidden]{display:none!important}
 </style>
