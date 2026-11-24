@@ -250,7 +250,7 @@
   // ---------- ครูรายบุคคล (ชื่อ + รหัสเบอร์โทร 4 ตัวท้าย) ----------
   function normName(n) { return String(n || '').replace(/^\s*(น\.ส\.|นส\.)\s*/, 'นางสาว').replace(/^\s*(นาย|นางสาว|นาง)\s+/, '$1').replace(/\s+/g, ' ').trim(); }
   function sameName(a, b) { return window.PP5Teachers ? PP5Teachers.same(a, b) : normName(a) === normName(b); }
-  // อ่านรายชื่อที่วางมา (เช่น "1. นายรัฐวิศว์ สอนโยธา / อีเมล / 0836286679") → [{ name, pin }] เก็บเฉพาะ 4 ตัวท้ายของเบอร์
+  // อ่านรายชื่อที่วางมา (เช่น "1. ชื่อ-สกุล / อีเมล / เบอร์โทร 10 หลัก") → [{ name, pin }] เก็บเฉพาะ 4 ตัวท้ายของเบอร์
   function parseKru(text) {
     var out = [], cur = null;
     String(text || '').split(/\r?\n/).forEach(function (line) {
