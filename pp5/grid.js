@@ -30,8 +30,11 @@
    * opts: { cols:[{key,label,sub,w,type:'num'|'text'|'select'|'ro',options,max,min,get(row),set(row,v),dec,fill,cls,group}],
    *         rows:[...], onChange(row, col), rowLabel(row,i) }
    */
+  // จำตำแหน่งเลื่อนของแต่ละตาราง (กันเด้งกลับซ้ายเมื่อหน้าจอวาดใหม่ / แท็บเล็ตเลื่อนเองตอนแตะช่อง)
+  var MEM = {};
   function Grid(el, opts) {
     this.el = el; this.o = opts;
+    this.key = opts.cols.map(function (c) { return (c.group || '') + c.label; }).join('|');
     this.render();
     this.bind();
   }
@@ -61,7 +64,11 @@
       h += '</tr>';
     });
     h += '</tbody></table></div>';
+    var old = this.el.querySelector('.g-wrap'), mem = MEM[this.key];
+    var keepL = old ? old.scrollLeft : mem ? mem.l : 0, keepT = old ? old.scrollTop : mem ? mem.t : 0;
     this.el.innerHTML = h;
+    var wrap = this.el.querySelector('.g-wrap');
+    if (wrap && (keepL || keepT)) { wrap.scrollLeft = keepL; wrap.scrollTop = keepT; }
     function head(c, ci) {
       var t = esc(c.label) + (c.sub ? '<small>' + esc(c.sub) + '</small>' : '');
       if (c.fill && c.type === 'select') {
@@ -101,12 +108,49 @@
     if (c.set) c.set(row, v); else row[c.key] = v;
     return true;
   };
+  // เลื่อนตารางเท่าที่จำเป็นให้เห็นช่อง (ไม่ให้เบราว์เซอร์เลื่อนเอง)
+  Grid.prototype.reveal = function (el) {
+    var wrap = this.el.querySelector('.g-wrap');
+    if (!wrap || !el) return;
+    var wr = wrap.getBoundingClientRect(), r = el.getBoundingClientRect();
+    var rh = wrap.querySelector('tbody .g-rh'), stick = rh ? rh.getBoundingClientRect().width : 0;
+    if (r.left < wr.left + stick) wrap.scrollLeft -= (wr.left + stick - r.left) + 8;
+    else if (r.right > wr.right) wrap.scrollLeft += (r.right - wr.right) + 8;
+    var head = wrap.querySelector('thead'), hh = head ? head.getBoundingClientRect().height : 0;
+    if (r.top < wr.top + hh) wrap.scrollTop -= (wr.top + hh - r.top) + 4;
+    else if (r.bottom > wr.bottom) wrap.scrollTop += (r.bottom - wr.bottom) + 4;
+  };
   Grid.prototype.focus = function (r, ci) {
     var el = this.el.querySelector('[data-r="' + r + '"][data-c="' + ci + '"]');
-    if (el && el.tagName !== 'TD') { el.focus(); if (el.select) el.select(); }
+    if (el && el.tagName !== 'TD') {
+      try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+      this.reveal(el);
+      if (el.select) el.select();
+    }
   };
   Grid.prototype.bind = function () {
     var self = this, o = this.o;
+    // กันแท็บเล็ต/มือถือเลื่อนตารางกลับซ้ายเองตอนแตะช่อง: จำตำแหน่งก่อนแตะ แล้วคืนค่าถ้าช่องนั้นมองเห็นอยู่แล้ว
+    var anchor = null;
+    function wrapEl() { return self.el.querySelector('.g-wrap'); }
+    this.el.addEventListener('scroll', function (e) {
+      if (e.target.classList && e.target.classList.contains('g-wrap')) MEM[self.key] = { l: e.target.scrollLeft, t: e.target.scrollTop };
+    }, true);
+    function mark() { var w = wrapEl(); if (w) anchor = { l: w.scrollLeft, t: w.scrollTop }; }
+    this.el.addEventListener('pointerdown', mark, true);
+    this.el.addEventListener('touchstart', mark, { capture: true, passive: true });
+    this.el.addEventListener('focusin', function (e) {
+      var w = wrapEl(), t = e.target;
+      if (!w || !anchor || t.dataset.r == null) return;
+      var a = anchor; anchor = null;
+      function fix() {
+        if (Math.abs(w.scrollLeft - a.l) < 2 && Math.abs(w.scrollTop - a.t) < 2) return;
+        var cur = w.scrollLeft, wr = w.getBoundingClientRect(), r = t.getBoundingClientRect();
+        var left = r.left - wr.left + cur;   // ตำแหน่งช่องในตาราง
+        if (left + r.width > a.l && left < a.l + w.clientWidth) { w.scrollLeft = a.l; w.scrollTop = a.t; }   // ช่องที่แตะมองเห็นอยู่แล้ว → คืนตำแหน่งเดิม
+      }
+      requestAnimationFrame(fix); setTimeout(fix, 60); setTimeout(fix, 350);
+    });
     function changed(t) {
       var r = +t.dataset.r, ci = +t.dataset.c, c = o.cols[ci];
       var ok = self.setCell(r, ci, t.value);

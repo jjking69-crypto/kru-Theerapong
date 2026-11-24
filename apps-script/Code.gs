@@ -149,6 +149,8 @@ function api_ping(pin) {
   var root = rootFolder_();
   return { ok: true, rootUrl: root.getUrl(), role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_() };
 }
+/** จำนวนหลักของรหัส (ให้แป้นกดแสดงจุดครบ) — ไม่บอกตัวรหัส */
+function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length }; }
 /** ตรวจรหัสจากแป้นตัวเลข (หน้าแรก/หลังบ้าน) */
 function api_checkPin(pin) {
   try { return { role: checkPin_(pin) }; } catch (e) { return { role: null, locked: /LOCKED/.test(e.message) }; }

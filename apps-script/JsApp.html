@@ -175,7 +175,7 @@
     files = Array.prototype.filter.call(files, function (f) { return /\.(xlsm|xlsx|xls)$/i.test(f.name); });
     if (!files.length) { toast('กรุณาเลือกไฟล์ Excel (.xlsm / .xlsx)', 'err'); return; }
     if (typeof XLSX === 'undefined') { toast('ยังโหลดตัวอ่านไฟล์ Excel ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ต) กรุณารีเฟรชหน้าแล้วลองใหม่', 'err'); return; }
-    var last = null, ok = 0, changedClasses = {};
+    var last = null, ok = 0, changedClasses = {}, yearOk = {}, oldYears = {};
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
       setBusy('กำลังอ่านไฟล์ ' + (i + 1) + '/' + files.length + ' : ' + f.name);
@@ -187,6 +187,24 @@
         var isPP6 = PP6Parser.isPP6(wb);
         var data = isPP6 ? PP5Model.fillPP6(PP6Parser.parse(wb, u8), false) : PP5Model.fillPP5(PP5Parser.parseWorkbook(wb), false);
         var meta = data.meta;
+        // ---- ตรวจปีการศึกษา: ไฟล์ต้องเป็นปีปัจจุบัน ถ้าไม่ใช่ต้องยืนยันก่อน (กันข้อมูลปีเก่าปนปีปัจจุบัน) ----
+        var cy = curYear();
+        if (!meta.year) {
+          setBusy('');
+          if (!confirm('⚠️ ไม่พบปีการศึกษาในไฟล์ "' + f.name + '"\n\nกด ตกลง = ใช้เป็นข้อมูลปีการศึกษาปัจจุบัน ' + cy + '\nกด ยกเลิก = ไม่นำเข้าไฟล์นี้')) { toast('ข้ามไฟล์ ' + f.name + ' (ไม่มีปีการศึกษา)', 'info'); continue; }
+          meta.year = cy;
+        } else if (+meta.year !== cy && !yearOk[meta.year]) {
+          setBusy('');
+          var older = +meta.year < cy;
+          if (!confirm('⚠️ ปีการศึกษาไม่ตรง!\n\nไฟล์ "' + f.name + '"\nเป็นข้อมูลปีการศึกษา ' + meta.year + (older ? ' (ปีเก่า)' : '') + '\nแต่ปีการศึกษาปัจจุบันคือ ' + cy +
+            '\n\nกด ตกลง = นำเข้าเป็นข้อมูลปี ' + meta.year + ' (เก็บแยกไว้ ไม่ปนกับปี ' + cy + ' และไม่ใช้รายชื่อนักเรียนปี ' + cy + ')' +
+            '\nกด ยกเลิก = ไม่นำเข้า (ถ้าไฟล์นี้ควรเป็นปี ' + cy + ' ให้แก้ปีการศึกษาในชีต "ตั้งค่า" ของไฟล์ก่อน)')) {
+            toast('ไม่ได้นำเข้า ' + f.name + ' (ปีการศึกษา ' + meta.year + ' ไม่ตรงกับปีปัจจุบัน ' + cy + ')', 'err');
+            continue;
+          }
+          yearOk[meta.year] = true;
+        }
+        if (+meta.year !== cy) oldYears[meta.year] = 1;
         var slot = isPP6 ? 'pp6' : slotOf(meta);
         var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
         var existed = records.filter(function (r) { return r.key === key; })[0];
@@ -228,7 +246,9 @@
     }
     setBusy('');
     Object.keys(changedClasses).forEach(function (k) { afterChange(changedClasses[k]); });
-    if (last) {
+    var oy = Object.keys(oldYears);
+    if (oy.length) toast('ข้อมูลปีการศึกษา ' + oy.join(', ') + ' เก็บแยกไว้แล้ว (ไม่ปนกับปีปัจจุบัน ' + curYear() + ') · ดูได้โดยเลือกปีการศึกษาด้านบน', 'info');
+    if (last && (+last.year === curYear() || +last.year === +state.year)) {
       state.year = last.year; state.level = last.level; state.room = last.room;
       if (ok > 0 && state.tab === 'student') state.student = null;
       saveUI();
@@ -246,6 +266,7 @@
       var data = await PP5Roster.parseDocx(bytes);
       setBusy('');
       var newDate = data.date ? data.date.display : (data.dateText || 'ไม่ระบุวันที่');
+      if (data.year && +data.year !== curYear() && !confirm('⚠️ ทะเบียนรายชื่อนี้เป็นปีการศึกษา ' + data.year + ' แต่ปีการศึกษาปัจจุบันคือ ' + curYear() + '\n\nรายชื่อในทะเบียนจะใช้เป็นข้อมูลหลักของปี ' + data.year + ' เท่านั้น\nต้องการนำเข้าต่อหรือไม่?')) return;
       if (roster && roster.data) {
         var oldDate = roster.data.date ? roster.data.date.display : (roster.data.dateText || '-');
         if (!confirm('อัปเดตทะเบียนรายชื่อ\nเดิม: ข้อมูลวันที่ ' + oldDate + ' (' + roster.data.total + ' คน)\nใหม่: ข้อมูลวันที่ ' + newDate + ' (' + data.total + ' คน)\n\nต้องการใช้ไฟล์ใหม่หรือไม่?')) return;
@@ -283,8 +304,11 @@
   }
 
   // ---------- เลือกข้อมูลของห้องปัจจุบัน ----------
+  // ปีการศึกษาปัจจุบัน (ตามวันที่: เปิดภาคเรียน พ.ค.)
+  function curYear() { return thaiYear(); }
   function years() {
     var ys = {};
+    ys[curYear()] = 1;
     records.forEach(function (r) { ys[r.year] = 1; });
     if (roster && roster.data && roster.data.year) ys[roster.data.year] = 1;
     var list = Object.keys(ys).map(Number).sort(function (a, b) { return b - a; });
@@ -663,7 +687,8 @@
   function renderPicker() {
     var ys = years();
     if (state.year == null || ys.indexOf(state.year) < 0) state.year = ys[0];
-    $('yearSel').innerHTML = ys.map(function (y) { return '<option value="' + y + '"' + (y === state.year ? ' selected' : '') + '>' + y + '</option>'; }).join('');
+    $('yearSel').innerHTML = ys.map(function (y) { return '<option value="' + y + '"' + (y === state.year ? ' selected' : '') + '>' + y + (y === curYear() ? ' (ปีปัจจุบัน)' : y < curYear() ? ' (ปีเก่า)' : '') + '</option>'; }).join('');
+    $('yearSel').classList.toggle('old-year', state.year !== curYear());
 
     // ชั้น/ห้อง รวมเป็นรายการเดียว (ห้องจากทะเบียนรายชื่อและไฟล์ที่มี)
     var opts = '';
@@ -756,7 +781,8 @@
     } else b = BANNERS[state.tab] || BANNERS.subjects;
     if (state.tab === 'subjects') { var n = classRecords().length; extra = '<div class="bx">มีข้อมูล<b>' + n + ' วิชา</b></div>'; }
     else if (state.tab === 'report') { var p6 = pp6Record(); extra = '<div class="bx">' + (p6 ? (p6.virtual ? 'สร้างจาก ปพ.5' : 'ไฟล์ที่อัปโหลด') + '<b>' + p6.data.students.length + ' คน</b>' : 'ยังไม่มีข้อมูล') + '</div>'; }
-    el.innerHTML = '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div><div class="bk">' + esc(b.k) + '</div>' +
+    var oldNote = state.year !== curYear() ? '<div class="old-note">📦 กำลังดูข้อมูล<b>ปีการศึกษา ' + esc(state.year) + '</b> ' + (state.year < curYear() ? '(ปีเก่า)' : '') + ' — ไม่ใช่ปีปัจจุบัน (' + curYear() + ') <button class="btn" data-goyear="' + curYear() + '">กลับไปปี ' + curYear() + '</button></div>' : '';
+    el.innerHTML = oldNote + '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div><div class="bk">' + esc(b.k) + '</div>' +
       '<div class="bt">' + esc(b.t) + ' · ชั้น ' + esc(cls) + '</div><div class="bs">ปีการศึกษา ' + esc(state.year || '') + ' · ' + esc(b.s) + '</div></div>' + extra + '</div>';
   }
 
@@ -1182,6 +1208,12 @@
     state.level = +p[0]; state.room = +p[1]; state.student = null;
     render();
   });
+  $('banner').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-goyear]');
+    if (b && leaveEditor()) { state.year = +b.dataset.goyear; state.student = null; render(); }
+  });
+  // หน้าจอโหลดตอนเปิดระบบ
+  function bootDone() { var bl = document.getElementById('bootLoader'); if (bl) { bl.classList.add('done'); setTimeout(function () { bl.remove(); }, 400); } }
   $('classChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-cls]');
     if (!b || !leaveEditor()) return;
@@ -1301,6 +1333,7 @@
     try {
       await DB.open();
       renderTopActs();
+      var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดรายวิชาและรายชื่อนักเรียน...';
       records = await DB.all();
       if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
       if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
@@ -1316,11 +1349,12 @@
         toast('เชื่อมต่อที่เก็บข้อมูลไม่สำเร็จ: ' + (e && e.message ? e.message : e), 'err');
       }
     }
-    if (records.length && !records.some(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room; })) {
-      var r0 = records[0];
-      state.year = r0.year; state.level = r0.level; state.room = r0.room;
-    }
+    // เปิดระบบทุกครั้งเริ่มที่ปีการศึกษาปัจจุบัน (ไม่ค้างที่ปีเก่า)
+    state.year = curYear();
+    var cur = records.filter(function (r) { return r.year === state.year; });
+    if (cur.length && !cur.some(function (r) { return r.level === state.level && r.room === state.room; })) { state.level = cur[0].level; state.room = cur[0].room; }
     render();
+    bootDone();
   })();
 })();
 

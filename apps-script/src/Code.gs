@@ -149,6 +149,8 @@ function api_ping(pin) {
   var root = rootFolder_();
   return { ok: true, rootUrl: root.getUrl(), role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_() };
 }
+/** จำนวนหลักของรหัส (ให้แป้นกดแสดงจุดครบ) — ไม่บอกตัวรหัส */
+function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length }; }
 /** ตรวจรหัสจากแป้นตัวเลข (หน้าแรก/หลังบ้าน) */
 function api_checkPin(pin) {
   try { return { role: checkPin_(pin) }; } catch (e) { return { role: null, locked: /LOCKED/.test(e.message) }; }
@@ -471,7 +473,7 @@ function api_savePublicCfg(pin, cfgJson) {
 // ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
 function api_publicInfo() {
   var fl = flags_();
-  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_() };
+  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo() };
   var cfg = getCfg_(), idx = readIndex_(), years = {};
   Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
   var u = webUrl_();
@@ -479,7 +481,7 @@ function api_publicInfo() {
     title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
     years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
     logo: readText_(props_().getProperty('PUB_LOGO_ID')),
-    adminUrl: adminUrl_(), superUrl: superUrl_()
+    adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo()
   };
 }
 function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }

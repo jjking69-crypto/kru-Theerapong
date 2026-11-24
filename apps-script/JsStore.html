@@ -24,12 +24,19 @@
     });
   }
   // ขอรหัสด้วยแป้นตัวเลขบนจอ (ครู 8 หลัก / ผู้ดูแลระบบหลัก)
-  var asking = null;
+  var asking = null, pinLen = null;
+  function getPinLen() {
+    if (pinLen) return Promise.resolve(pinLen);
+    return new Promise(function (res) {
+      google.script.run.withSuccessHandler(function (r) { pinLen = r || {}; res(pinLen); }).withFailureHandler(function () { res({}); }).api_pinInfo();
+    });
+  }
   function askPin(msg) {
     if (asking) return asking;
-    asking = window.PP5PinPad.ask({
+    asking = getPinLen().then(function (pl) { return window.PP5PinPad.ask({
+      digits: (window.PP5_NEED_ADMIN ? pl.admin : pl.teacher) || 0,
       home: window.PP5_HOME || '',
-      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบสำหรับครู', sub: msg || 'กรอกรหัสผ่าน แล้วกด ตกลง', length: 12, autoSubmit: false,
+      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบสำหรับครู', sub: msg || '', length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {
           google.script.run.withSuccessHandler(function (r) {
@@ -39,7 +46,13 @@
             .withFailureHandler(function () { res('เชื่อมต่อไม่สำเร็จ ลองใหม่'); }).api_checkPin(p);
         });
       }
-    }).then(function (p) { asking = null; if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน'); setPin(p); return p; });
+    }); }).then(function (p) {
+      asking = null;
+      if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน');
+      setPin(p);
+      var bl = document.getElementById('bootText'); if (bl) bl.textContent = 'รหัสถูกต้อง กำลังเปิดระบบ...';
+      return p;
+    });
     return asking;
   }
   function call(fn, args, tries) {

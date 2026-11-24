@@ -26,6 +26,12 @@
     '.pp-k.ok:disabled{background:#cbd5e1}' +
     '.pp-home{display:block;margin-top:4px;color:#1b3fae;font:600 15px Sarabun,sans-serif;text-decoration:none}' +
     '.pp-cancel{margin-top:14px;background:none;border:0;color:#64748b;font:15px Sarabun,sans-serif;cursor:pointer;padding:6px 14px}' +
+    '.pp-load,.boot{position:fixed;inset:0;z-index:9000;display:grid;place-items:center;background:linear-gradient(135deg,#1b3fae,#3b82f6);color:#fff;transition:opacity .35s;font-family:Sarabun,sans-serif}' +
+    '.pp-load.done,.boot.done{opacity:0;pointer-events:none}' +
+    '.pp-load-box{text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}' +
+    '.pp-load-box b{font:600 20px Prompt,Sarabun,sans-serif}.pp-load-box small{opacity:.8}' +
+    '.pp-spin{width:58px;height:58px;border-radius:50%;border:6px solid #ffffff44;border-top-color:#fff;animation:ppspin .8s linear infinite}' +
+    '@keyframes ppspin{to{transform:rotate(360deg)}}' +
     '@media (max-width:360px){.pp-k{width:62px;height:62px;font-size:24px}}';
 
   function injectCss() {
@@ -37,13 +43,13 @@
   function ask(o) {
     o = o || {};
     injectCss();
-    var maxLen = o.length || 8;
+    var digits = o.digits || 0, maxLen = digits || o.length || 8;   // digits = จำนวนหลักตายตัว (แสดงจุดครบ และกดครบแล้วตรวจเอง)
     return new Promise(function (resolve) {
       var val = '', busy = false;
       var bg = document.createElement('div');
       bg.className = 'pinpad-bg';
       bg.innerHTML = '<div class="pinpad" role="dialog" aria-modal="true" aria-label="กรอกรหัส">' +
-        '<h3>' + (o.title || 'กรอกรหัสผ่าน') + '</h3><p class="pp-sub">' + (o.sub || 'กดตัวเลขบนแป้น') + '</p>' +
+        '<h3>' + (o.title || 'กรอกรหัสผ่าน') + '</h3><p class="pp-sub">' + (o.sub || (digits ? 'กดรหัส ' + digits + ' หลัก' : 'กดตัวเลขบนแป้น')) + '</p>' +
         '<div class="pp-dots"></div><div class="pp-grid">' +
         [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (n) { return '<button type="button" class="pp-k" data-k="' + n + '">' + n + '</button>'; }).join('') +
         '<button type="button" class="pp-k fn" data-k="del" aria-label="ลบ">⌫</button><button type="button" class="pp-k" data-k="0">0</button>' +
@@ -53,7 +59,7 @@
       document.body.appendChild(bg);
       var dots = bg.querySelector('.pp-dots'), sub = bg.querySelector('.pp-sub'), okBtn = bg.querySelector('[data-k=ok]');
       function draw() {
-        var n = Math.max(val.length, Math.min(maxLen, 6)), h = '';
+        var n = digits || Math.max(val.length, Math.min(maxLen, 6)), h = '';
         for (var i = 0; i < n; i++) h += '<i class="' + (i < val.length ? 'on' : '') + '"></i>';
         dots.innerHTML = h; okBtn.disabled = !val.length || busy;
       }
@@ -77,10 +83,10 @@
         if (busy) return;
         if (k === 'del') val = val.slice(0, -1);
         else if (k === 'ok') return submit();
-        else if (val.length < maxLen + 4) val += k;
-        sub.classList.remove('err'); sub.textContent = o.sub || 'กดตัวเลขบนแป้น';
+        else if (val.length < (digits || maxLen + 4)) val += k;
+        sub.classList.remove('err'); sub.textContent = o.sub || (digits ? 'กดรหัส ' + digits + ' หลัก' : 'กดตัวเลขบนแป้น');
         draw();
-        if (o.autoSubmit !== false && o.length && val.length === o.length) submit();
+        if (digits ? val.length === digits : (o.autoSubmit !== false && o.length && val.length === o.length)) submit();
       }
       function onKey(e) {
         if (/^[0-9]$/.test(e.key)) press(e.key);
@@ -99,7 +105,15 @@
       draw();
     });
   }
-  root.PP5PinPad = { ask: ask };
+  // หน้าจอโหลด (ใช้ตอนเข้าระบบ/เปิดหน้า)
+  function loading(text) {
+    injectCss();
+    var el = document.getElementById('pp5Loading');
+    if (!el) { el = document.createElement('div'); el.id = 'pp5Loading'; el.className = 'pp-load'; el.innerHTML = '<div class="pp-load-box"><div class="pp-spin"></div><b></b><small>กรุณารอสักครู่</small></div>'; document.body.appendChild(el); }
+    el.querySelector('b').textContent = text || 'กำลังโหลด...';
+    return { set: function (t) { el.querySelector('b').textContent = t; }, done: function () { el.classList.add('done'); setTimeout(function () { el.remove(); }, 350); } };
+  }
+  root.PP5PinPad = { ask: ask, loading: loading };
 })(typeof self !== 'undefined' ? self : this);
 
 </script>

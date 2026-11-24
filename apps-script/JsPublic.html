@@ -177,7 +177,8 @@
       if (!window.PP5PinPad) { if (url) window.open(url, '_top'); return; }
       PP5PinPad.ask({
         title: want === 'admin' ? '🛡 เข้าสู่ระบบแอดมิน' : '👩‍🏫 เข้าสู่ระบบครู',
-        sub: want === 'admin' ? 'กรอกรหัสผู้ดูแลระบบ แล้วกด ตกลง' : 'กรอกรหัสครู แล้วกด ตกลง', length: 12, autoSubmit: false,
+        digits: (info.pinLen && info.pinLen[want]) || 0,
+        sub: want === 'admin' ? 'กดรหัสผู้ดูแลระบบ' + (info.pinLen && info.pinLen.admin ? ' ' + info.pinLen.admin + ' หลัก' : '') : 'กดรหัสครู' + (info.pinLen && info.pinLen.teacher ? ' ' + info.pinLen.teacher + ' หลัก' : ''), length: 12, autoSubmit: false,
         check: function (p) {
           return call('api_checkPin', [p]).then(function (r) {
             var role = r && r.role;
@@ -189,6 +190,7 @@
       }).then(function (p) {
         if (p == null) return;
         try { localStorage.setItem(want === 'admin' ? 'pp5-admin-pin' : 'pp5-pin', p); } catch (e) {}
+        if (PP5PinPad.loading) PP5PinPad.loading(want === 'admin' ? 'กำลังเปิดระบบแอดมิน...' : 'กำลังเปิดระบบครู...');
         if (url) window.open(url, '_top');
       });
     }

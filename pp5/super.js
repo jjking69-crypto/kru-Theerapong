@@ -160,16 +160,19 @@
     } catch (e) { toast('อ่านไฟล์ไม่ได้: ' + e.message, 'err'); }
   }
 
+  function bootDone() { var bl = document.getElementById('bootLoader'); if (bl) { bl.classList.add('done'); setTimeout(function () { bl.remove(); }, 400); } }
   async function boot() {
     try {
       await DB.open();
-      if (DB.role !== 'admin') { $('sup').innerHTML = '<div class="card empty-state"><b>หน้านี้สำหรับผู้ดูแลระบบหลักเท่านั้น</b></div>'; return; }
+      if (DB.role !== 'admin') { bootDone(); $('sup').innerHTML = '<div class="card empty-state"><b>หน้านี้สำหรับผู้ดูแลระบบหลักเท่านั้น</b></div>'; return; }
       acts();
+      var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดข้อมูลทุกห้อง...';
       var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; }),
         DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; })]);
       S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {};
       render();
-    } catch (e) { $('sup').innerHTML = '<div class="card empty-state"><b>เข้าระบบไม่สำเร็จ</b>' + esc(e.message) + '</div>'; }
+      bootDone();
+    } catch (e) { bootDone(); $('sup').innerHTML = '<div class="card empty-state"><b>เข้าระบบไม่สำเร็จ</b>' + esc(e.message) + '</div>'; }
   }
   boot();
 })();

@@ -171,7 +171,7 @@ function api_savePublicCfg(pin, cfgJson) {
 // ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
 function api_publicInfo() {
   var fl = flags_();
-  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_() };
+  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo() };
   var cfg = getCfg_(), idx = readIndex_(), years = {};
   Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
   var u = webUrl_();
@@ -179,7 +179,7 @@ function api_publicInfo() {
     title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
     years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
     logo: readText_(props_().getProperty('PUB_LOGO_ID')),
-    adminUrl: adminUrl_(), superUrl: superUrl_()
+    adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo()
   };
 }
 function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }
