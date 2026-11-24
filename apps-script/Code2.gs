@@ -1,3 +1,43 @@
+// ===== ไฟล์ต้นฉบับของโรงเรียน (อ่านอย่างเดียว ไม่สร้าง/แก้ไขอะไรในโฟลเดอร์นี้) =====
+// ใช้เป็นแม่แบบรูปแบบต้นฉบับของแต่ละห้อง/วิชาโดยอัตโนมัติ
+function api_sourceList(pin) {
+  checkPin_(pin);
+  var c = cache_().get('srcList');
+  if (c) return JSON.parse(c);
+  var out = [];
+  function walk(folder, path, depth) {
+    var files = folder.getFiles();
+    while (files.hasNext() && out.length < 400) {
+      var f = files.next(), n = f.getName();
+      if (/\.xls[xm]$/i.test(n)) var up = 0; try { up = f.getLastUpdated().getTime(); } catch (e) {}
+        out.push({ id: f.getId(), name: n, path: path, size: f.getSize(), updated: up });
+    }
+    if (depth > 4) return;
+    var subs = folder.getFolders();
+    while (subs.hasNext()) { var s = subs.next(); walk(s, path ? path + '/' + s.getName() : s.getName(), depth + 1); }
+  }
+  var okAny = false;
+  SOURCE_FOLDER_IDS.forEach(function (fid) {
+    try { var f = DriveApp.getFolderById(fid); walk(f, f.getName(), 0); okAny = true; } catch (e) { /* เปิดโฟลเดอร์นี้ไม่ได้ ข้ามไป */ }
+  });
+  if (!okAny) throw new Error('เปิดโฟลเดอร์ไฟล์ต้นฉบับไม่ได้ กรุณาตรวจสิทธิ์การเข้าถึง');
+  // ไฟล์ปีล่าสุดมาก่อน (ใช้ตัวชี้วัดชุดใหม่ที่สุด)
+  out.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
+  try { cache_().put('srcList', JSON.stringify(out), 21600); } catch (e) {}
+  return out;
+}
+function api_clearSourceCache(pin) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  try { cache_().remove('srcList'); } catch (e) {}
+  return api_sourceList(pin).length;
+}
+function api_sourceFile(pin, id) {
+  checkPin_(pin);
+  var list = api_sourceList(pin), hit = list.filter(function (x) { return x.id === id; })[0];
+  if (!hit) throw new Error('ไม่พบไฟล์นี้ในโฟลเดอร์ต้นฉบับ');
+  return { name: hit.name, b64: Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) };
+}
+
 // ===== โลโก้โรงเรียน + ลายเซ็น ผอ./รอง ผอ. (ผู้ดูแลตั้งครั้งเดียว ใช้ทุกห้อง) และลายเซ็นครู =====
 var IMG_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/;
 function sigFolder_() { return subFolder_(rootFolder_(), SIG_FOLDER_NAME); }
@@ -70,7 +110,7 @@ function api_saveLib(pin, key, json) {
 
 // ===== ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) — เก็บทุกฉบับไว้เป็นประวัติ ใช้ฉบับล่าสุด =====
 function api_saveRoster(pin, b64, fileName, dataJson, dateText) {
-  need_(pin, 'allowRoster');
+  noKru_(need_(pin, 'allowRoster'));
   return withLock_(function () {
     var folder = subFolder_(rootFolder_(), ROSTER_FOLDER_NAME);
     var name = (dateText ? 'ข้อมูล ' + safeName_(dateText) + ' - ' : '') + safeName_(fileName);
@@ -115,7 +155,8 @@ function saveIndex_(idx) {
 
 /** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
 function api_publish(pin, key, pubJson) {
-  need_(pin, 'allowPublish');
+  var kp = String(key).split('|');
+  needScope_(pin, 'allowPublish', kp[1], kp[2], 'pp6');
   return withLock_(function () {
     var pub = JSON.parse(pubJson);
     if (pub.logo) {
@@ -138,7 +179,8 @@ function api_publish(pin, key, pubJson) {
   });
 }
 function api_unpublish(pin, key) {
-  need_(pin, 'allowPublish');
+  var kp = String(key).split('|');
+  needScope_(pin, 'allowPublish', kp[1], kp[2], 'pp6');
   return withLock_(function () {
     var idx = readIndex_(), old = idx.classes[key];
     if (!old) return true;
@@ -161,7 +203,7 @@ function api_getPublicCfg(pin) {
   return cfg;
 }
 function api_savePublicCfg(pin, cfgJson) {
-  need_(pin, 'allowPublish');
+  noKru_(need_(pin, 'allowPublish'));
   var cfg = JSON.parse(cfgJson);
   delete cfg.url;
   props_().setProperty('PUBLIC_CFG', JSON.stringify(cfg));
@@ -229,7 +271,7 @@ function timeline_(id, o) {
     if (o.publicView && cfg.verify === 'id+nid4') { if (!s.nid4 || o.code !== String(s.nid4)) return; verified = true; }
     who = who || s;
     var lv = +String(key).split('|')[1] || pub.level;
-    years.push({ year: +pub.year, level: lv, className: pub.className, no: s.no, school: pub.school, mid: yc.mid ? s.mid : null, final: yc.final ? s.final : null });
+    years.push({ year: +pub.year, level: lv, className: pub.className, no: s.no, school: pub.school, mid: yc.mid ? s.mid : null, final: yc.final ? s.final : null, updatedAt: meta.updatedAt || null });
   });
   var rs = rosterStudent_(id);
   if (rs && o.publicView && cfg.verify === 'id+nid4') { if (rs.s.nid4 && o.code === String(rs.s.nid4)) verified = true; else if (!years.length) rs = null; }
@@ -287,55 +329,4 @@ function api_setCurYear(pin, year) {
   if (year && !(year > 2500 && year < 2700)) throw new Error('ปีไม่ถูกต้อง');
   if (year) props_().setProperty('CUR_YEAR', String(year)); else props_().deleteProperty('CUR_YEAR');
   return curYear_();
-}
-
-// ===== ที่เก็บไฟล์ใน Drive (แสดงเฉพาะหน้าแอดมิน) =====
-function api_folderLinks(pin) {
-  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
-  var root = rootFolder_(), out = { root: root.getUrl(), years: [], other: [] };
-  var it = root.getFolders();
-  while (it.hasNext()) {
-    var f = it.next(), n = f.getName();
-    if (/^ปีการศึกษา /.test(n)) {
-      var y = { name: n, url: f.getUrl(), classes: [] }, ci = f.getFolders();
-      while (ci.hasNext()) { var cf = ci.next(); y.classes.push({ name: cf.getName(), url: cf.getUrl() }); }
-      y.classes.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
-      out.years.push(y);
-    } else out.other.push({ name: n, url: f.getUrl() });
-  }
-  out.years.sort(function (a, b) { return a.name < b.name ? 1 : -1; });
-  return out;
-}
-/** ไฟล์ Excel เดิมของห้อง/วิชา (ใช้เป็นฐานเมื่อกรอกในระบบแล้วดาวน์โหลด — ข้อมูลใหม่ทับลงไฟล์เดิม) */
-function api_getFile(pin, key) {
-  checkPin_(pin);
-  var e = getEntry_(key);
-  if (!e || !e.fileId) return null;
-  try { var f = DriveApp.getFileById(e.fileId); return { name: f.getName(), b64: Utilities.base64Encode(f.getBlob().getBytes()) }; } catch (er) { return null; }
-}
-
-function rosterStudent_(id) {
-  var c = cache_(), t = c.get('rosterIdx');
-  if (!t) {
-    var v = props_().getProperty('ROSTER');
-    if (!v) return null;
-    var d = JSON.parse(readText_(JSON.parse(v).dataId) || '{}'), m = {};
-    (d.classes || []).forEach(function (cl) {
-      (cl.students || []).forEach(function (s) {
-        if (s.id) m[s.id] = { s: { no: s.no, prefix: s.prefix, first: s.first, last: s.last, nid4: s.nid4 }, c: { year: cl.year || d.year, level: cl.level, room: cl.room, stage: cl.stage } };
-      });
-    });
-    t = JSON.stringify(m);
-    try { c.put('rosterIdx', t, 600); } catch (e) {}
-  }
-  return JSON.parse(t)[id] || null;
-}
-
-/** เรียกครั้งแรกจากหน้าแก้ไขสคริปต์ เพื่ออนุญาตสิทธิ์ และตรวจโฟลเดอร์หลัก */
-function setup() {
-  var f = rootFolder_();
-  subFolder_(f, DATA_FOLDER_NAME);
-  subFolder_(f, PUB_FOLDER_NAME);
-  subFolder_(f, PDF_FOLDER_NAME);
-  Logger.log('พร้อมใช้งาน โฟลเดอร์หลัก: ' + f.getName() + ' ' + f.getUrl());
 }

@@ -29,7 +29,10 @@
   });
   ['1/1', '1/2', '2/1', '3/1', '3/2', '4/1', '4/2', '5/1', '6/1'].forEach(function (c) { set(c, ['pe'], ['chan']); set(c, ['art'], ['kuli']); });
 
-  function norm(s) { return String(s || '').replace(/\s+/g, '').replace(/^(นาย|นางสาว|นาง|ครู)/, ''); }
+  function norm(s) { return String(s || '').replace(/\s+/g, '').replace(/^ครู/, '').replace(/^(น\.ส\.|นส\.|นาย|นางสาว|นาง)/, ''); }
+  function surname(s) { var p = String(s || '').trim().split(/\s+/); return p.length > 1 ? p[p.length - 1] : ''; }
+  // ชื่อเดียวกันไหม (ไม่สนคำนำหน้า · ถ้าชื่อสะกดต่างกันเล็กน้อย ใช้นามสกุลช่วย)
+  function same(a, b) { var x = norm(a), y = norm(b); if (!x || !y) return false; if (x === y) return true; var sa = surname(a), sb = surname(b); return sa.length > 2 && sa === sb; }
   // ผู้บริหาร (ฟิกไว้ในใบรายงาน ปพ.6 ทุกห้อง) — ตามไฟล์ ปพ.6 ต้นฉบับของโรงเรียน · ผู้ดูแลเปลี่ยนได้ในระบบแอดมิน
   var BRAND = {
     school: 'โรงเรียนวัดทุ่งแฝก',
@@ -44,6 +47,16 @@
       var m = MAP[level + '/' + room];
       if (!m || !m[slot]) { var k = Object.keys(MAP).filter(function (c) { return c.split('/')[0] === String(level) && MAP[c][slot]; })[0]; m = k ? MAP[k] : null; }
       return m && m[slot] ? m[slot].map(function (k) { return T[k]; }) : [];
+    },
+    same: same,
+    // วิชาที่ครูคนนี้สอนตามตารางสอน (เฉพาะครูหลักของวิชา) → ['4/2|th', ...]
+    subsOf: function (name, classes) {
+      var out = [], slots = ['th', 'ma', 'sci', 'soc', 'his', 'pe', 'art', 'work', 'eng', 'cor'];
+      (classes || []).forEach(function (c) {
+        var p = String(c).split('/');
+        slots.forEach(function (sl) { var t = api.forClass(+p[0], +p[1], sl)[0]; if (t && same(t, name)) out.push(c + '|' + sl); });
+      });
+      return out;
     },
     // แปลงชื่อสั้น (เช่น "ชาญวิทย์ รุ่งเรือง" จากรายชื่อนักเรียน) เป็นชื่อเต็มพร้อมคำนำหน้า
     fullName: function (name) {

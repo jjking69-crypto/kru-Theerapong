@@ -243,12 +243,76 @@
     return '<section class="card sup-card"><h2>📚 ผลการเรียนย้อนหลังรายคน / ผลจากโรงเรียนอื่น</h2><p class="sub">ค้นด้วยเลขประจำตัวนักเรียน เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่นักเรียนยังไม่ได้เรียนที่นี่ (ย้ายมา) เพิ่มผลการเรียนจากโรงเรียนเดิมได้</p><div id="supHist"></div></section>';
   }
   function pinCard() {
-    return '<section class="card sup-card"><h2>🔑 รหัสเข้าใช้</h2><p class="sub">รหัสครู และรหัสผู้ดูแล ตั้งไว้ใน Code.gs (TEACHER_PIN / ADMIN_PIN) · รหัสครูเข้าได้เฉพาะระบบครู · รหัสผู้ดูแลเข้าได้ทั้งสองระบบ</p></section>';
+    return '<section class="card sup-card"><h2>🔑 รหัสเข้าใช้</h2><p class="sub">รหัสระบบโรงเรียน (แก้ได้ทุกชั้นทุกวิชา) รหัสผู้อำนวยการ และรหัสแอดมิน ตั้งไว้ใน Code.gs (TEACHER_PIN / DIRECTOR_PIN / ADMIN_PIN) · รหัสครูรายบุคคลตั้งที่การ์ด "ครูรายบุคคล" ด้านบน</p></section>';
+  }
+
+  // ---------- ครูรายบุคคล (ชื่อ + รหัสเบอร์โทร 4 ตัวท้าย) ----------
+  function normName(n) { return String(n || '').replace(/^\s*(น\.ส\.|นส\.)\s*/, 'นางสาว').replace(/^\s*(นาย|นางสาว|นาง)\s+/, '$1').replace(/\s+/g, ' ').trim(); }
+  function sameName(a, b) { return window.PP5Teachers ? PP5Teachers.same(a, b) : normName(a) === normName(b); }
+  // อ่านรายชื่อที่วางมา (เช่น "1. นายรัฐวิศว์ สอนโยธา / อีเมล / 0836286679") → [{ name, pin }] เก็บเฉพาะ 4 ตัวท้ายของเบอร์
+  function parseKru(text) {
+    var out = [], cur = null;
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      var t = line.trim(); if (!t) return;
+      var m = t.match(/^\d{1,3}\s*[.)]\s*(.+)$/);
+      if (m && !/@/.test(m[1]) && !/^[\d\s\-]+$/.test(m[1])) { cur = { name: normName(m[1]), pin: '' }; out.push(cur); return; }
+      var d = t.replace(/[\s\-]/g, '');
+      if (cur && !cur.pin && /^0\d{8,9}$/.test(d)) cur.pin = d.slice(-4);
+    });
+    return out;
+  }
+  function kruCard() {
+    var L = S.kru || [];
+    return '<section class="card sup-card" id="supKru"><h2>👩‍🏫 ครูรายบุคคล <small class="muted">(' + L.length + ' คน)</small></h2>' +
+      '<p class="sub">ครูแต่ละคนเข้าระบบด้วย <b>เบอร์โทร 4 ตัวท้าย</b> แล้วทำได้เฉพาะวิชา/ห้องที่ตัวเองสอน (ตั้งตามตารางสอนให้อัตโนมัติเมื่อเข้าครั้งแรก ครูเพิ่ม/ลดเองได้) · ปพ.6 ครูเลือกห้องประจำชั้นเอง · ระบบเก็บแค่ชื่อและรหัส 4 หลัก ไม่เก็บอีเมล/เบอร์เต็ม</p>' +
+      '<div class="tbl-wrap"><table class="kru-tbl"><thead><tr><th>#</th><th class="l">ชื่อครู</th><th>รหัส (4 หลัก)</th><th>วิชาที่สอน</th><th>ปพ.6 ประจำชั้น</th><th></th></tr></thead><tbody>' +
+      L.map(function (k, i) {
+        return '<tr><td>' + (i + 1) + '</td><td class="l"><input data-kn="' + i + '" value="' + esc(k.name) + '"></td><td><input class="kru-pin" data-kp="' + i + '" value="' + esc(k.pin) + '" inputmode="numeric" maxlength="4"></td>' +
+          '<td>' + (k.subs ? k.subs.length + ' วิชา' : '<span class="muted">ตั้งตามตารางสอนเมื่อเข้าครั้งแรก</span>') + '</td><td>' + ((k.pp6 || []).map(function (c) { return 'ป.' + esc(c); }).join(', ') || '-') + '</td>' +
+          '<td><button class="btn" data-kreset="' + i + '" title="ให้ระบบตั้งวิชาตามตารางสอนใหม่ตอนครูเข้าครั้งถัดไป">↺</button> <button class="btn danger" data-kdel="' + i + '">ลบ</button></td></tr>';
+      }).join('') + (L.length ? '' : '<tr><td colspan="6">ยังไม่มีครู — วางรายชื่อด้านล่าง หรือกด "+ เพิ่มครู"</td></tr>') + '</tbody></table></div>' +
+      '<div class="slot-acts"><button class="btn" id="supKruAdd">+ เพิ่มครู</button><button class="btn pri" id="supKruSave">💾 บันทึกรายชื่อครู</button></div>' +
+      '<details class="kru-imp"' + (L.length ? '' : ' open') + '><summary>📋 วางรายชื่อครูทีเดียว (ชื่อ + เบอร์โทร)</summary>' +
+      '<p class="sub">วางข้อความรายชื่อแบบ "1. ชื่อ-สกุล" ตามด้วยอีเมล/เบอร์โทรในบรรทัดถัดไป ระบบจะดึงชื่อและ 4 ตัวท้ายของเบอร์โทรให้ (อีเมลไม่ถูกเก็บ) · ชื่อที่มีอยู่แล้วจะอัปเดตรหัส</p>' +
+      '<textarea id="supKruTxt" rows="7" placeholder="1. นายสมชาย ใจดี&#10;somchai@gmail.com&#10;0812345678"></textarea>' +
+      '<div class="slot-acts"><button class="btn pri" id="supKruParse">อ่านรายชื่อ</button></div></details></section>';
+  }
+  function kruFromForm() {
+    return (S.kru || []).map(function (k, i) {
+      var n = document.querySelector('[data-kn="' + i + '"]'), p = document.querySelector('[data-kp="' + i + '"]');
+      return Object.assign({}, k, { name: n ? normName(n.value) : k.name, pin: p ? p.value.trim() : k.pin });
+    });
+  }
+  async function kruSave(list, msg) {
+    try { S.kru = await DB.kruSave(list); toast(msg || 'บันทึกรายชื่อครูแล้ว', 'ok'); render(); var c = $('supKru'); if (c) c.scrollIntoView({ block: 'start' }); }
+    catch (e) { toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'); }
+  }
+  function kruClick(e) {
+    var t = e.target;
+    if (t.id === 'supKruAdd') { S.kru = kruFromForm().concat([{ name: '', pin: '', subs: null, pp6: [] }]); render(); var c = $('supKru'); if (c) { c.scrollIntoView({ block: 'start' }); var ins = c.querySelectorAll('[data-kn]'); if (ins.length) ins[ins.length - 1].focus(); } return true; }
+    if (t.id === 'supKruSave') { kruSave(kruFromForm().filter(function (k) { return k.name; })); return true; }
+    if (t.dataset && t.dataset.kdel != null) { var L = kruFromForm(), k = L[+t.dataset.kdel]; if (confirm('ลบครู ' + (k.name || '') + ' ออกจากระบบ? (ไฟล์ที่ครูทำไว้ยังอยู่)')) { L.splice(+t.dataset.kdel, 1); kruSave(L, 'ลบแล้ว'); } return true; }
+    if (t.dataset && t.dataset.kreset != null) { var L2 = kruFromForm(); L2[+t.dataset.kreset].subs = null; kruSave(L2, 'จะตั้งวิชาตามตารางสอนใหม่เมื่อครูเข้าระบบครั้งถัดไป'); return true; }
+    if (t.id === 'supKruParse') {
+      var got = parseKru($('supKruTxt').value);
+      if (!got.length) { toast('ไม่พบรายชื่อ — ใช้รูปแบบ "1. ชื่อ-สกุล" แล้วตามด้วยเบอร์โทร', 'err'); return true; }
+      var L3 = kruFromForm(), add = 0, upd = 0, miss = [];
+      got.forEach(function (g) {
+        if (!g.pin) miss.push(g.name);
+        var old = L3.filter(function (k) { return sameName(k.name, g.name); })[0];
+        if (old) { if (g.pin) { old.pin = g.pin; upd++; } }
+        else { L3.push({ name: g.name, pin: g.pin, subs: null, pp6: [] }); add++; }
+      });
+      if (miss.length) { S.kru = L3; render(); toast('ไม่พบเบอร์โทรของ: ' + miss.join(', ') + ' — ใส่รหัสในตารางแล้วกดบันทึก', 'err'); return true; }
+      kruSave(L3, 'เพิ่มครู ' + add + ' คน · อัปเดตรหัส ' + upd + ' คน');
+      return true;
+    }
+    return false;
   }
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
@@ -263,6 +327,7 @@
       if (e.target.id === 'supImpFile' && e.target.files.length) { var fl = Array.prototype.slice.call(e.target.files); e.target.value = ''; return importFiles(fl); }
     };
     main.onclick = function (e) {
+      if (kruClick(e)) return;
       var b = e.target.closest('[data-fl]');
       if (b) { Array.prototype.forEach.call(main.querySelectorAll('[data-flag]'), function (c) { c.checked = b.dataset.fl === 'all1'; }); saveFlags(); return; }
       var up = e.target.closest('[data-up]'), rm = e.target.closest('[data-rm]');
@@ -328,8 +393,8 @@
       acts();
       var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดข้อมูลทุกห้อง...';
       var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; }),
-        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; }), DB.getLib().catch(function () { return {}; })]);
-      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {}; S.lib = r[6] || {};
+        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; }), DB.getLib().catch(function () { return {}; }), DB.kruList ? DB.kruList().catch(function () { return []; }) : []]);
+      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {}; S.lib = r[6] || {}; S.kru = r[7] || [];
       render();
       bootDone();
       DB.folderLinks().then(function (l) { S.links = l; render(); }, function (er) { console.warn('links', er); });

@@ -71,6 +71,7 @@ function roleOf_(pin) {
   if (ADMIN_PIN && pin === String(ADMIN_PIN)) return 'admin';
   if (TEACHER_PIN && pin === String(TEACHER_PIN)) return 'teacher';
   if (DIRECTOR_PIN && pin === String(DIRECTOR_PIN)) return 'director';
+  if (kruOf_(pin)) return 'kru';
   if (!TEACHER_PIN && !ADMIN_PIN) return 'admin';
   return null;
 }
@@ -91,6 +92,65 @@ function need_(pin, flag) {
   if (role === 'director') throw new Error('ผู้อำนวยการดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้');
   if (role !== 'admin' && flag && !flags_()[flag]) throw new Error('ปิดใช้งาน: ' + FLAG_DEFS[flag] + ' (ผู้ดูแลระบบปิดไว้)');
   return role;
+}
+// ===== ครูรายบุคคล (รหัส = เบอร์โทร 4 ตัวท้าย) — ทำได้เฉพาะวิชา/ห้องที่ตัวเองสอน =====
+// รายชื่อครูและรหัสเก็บใน Script Properties (ตั้งที่ระบบแอดมิน) ไม่เขียนไว้ในโค้ด
+var KRU_CORE = ['th', 'ma', 'sci', 'soc', 'his', 'pe', 'art', 'work', 'eng', 'cor'];
+function kruList_() { try { var v = JSON.parse(props_().getProperty('KRU') || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function kruOf_(pin) {
+  pin = String(pin || '');
+  if (!/^\d{4,6}$/.test(pin)) return null;
+  return kruList_().filter(function (k) { return String(k.pin) === pin; })[0] || null;
+}
+function kruCan_(k, level, room, slot) {
+  if (!k) return false;
+  var c = level + '/' + room, subs = k.subs || [];
+  if (slot === 'pp6') return (k.pp6 || []).indexOf(c) >= 0;
+  return subs.indexOf(c + '|' + slot) >= 0 || (KRU_CORE.indexOf(String(slot)) < 0 && subs.indexOf(c + '|+') >= 0);
+}
+/** need_ + ครูรายบุคคลต้องเป็นวิชา/ห้องของตัวเอง */
+function needScope_(pin, flag, level, room, slot) {
+  var role = need_(pin, flag);
+  if (role === 'kru' && !kruCan_(kruOf_(pin), level, room, slot))
+    throw new Error(slot === 'pp6' ? 'ห้องนี้ไม่ใช่ห้องประจำชั้น (ปพ.6) ของคุณ — กด "วิชาที่ฉันสอน" เพื่อเพิ่ม' : 'วิชา/ห้องนี้ไม่อยู่ในรายการที่คุณสอน — กด "วิชาที่ฉันสอน" เพื่อเพิ่ม');
+  return role;
+}
+function noKru_(role) { if (role === 'kru') throw new Error('ส่วนนี้ใช้ได้เฉพาะระบบโรงเรียน/แอดมิน'); return role; }
+function kruPublic_(k) { return k ? { id: k.id, name: k.name, subs: k.subs || null, pp6: k.pp6 || [] } : null; }
+/** ครูแก้รายการวิชา/ห้องที่ตัวเองสอน และห้องประจำชั้น (ปพ.6) */
+function api_saveMe(pin, json) {
+  if (checkPin_(pin) !== 'kru') throw new Error('สำหรับครูรายบุคคลเท่านั้น');
+  var v = JSON.parse(json || '{}');
+  var okSub = function (x) { return /^[1-6]\/\d{1,2}\|[A-Za-z0-9_+\-]{1,40}$/.test(x); }, okCls = function (x) { return /^[1-6]\/\d{1,2}$/.test(x); };
+  return withLock_(function () {
+    var list = kruList_(), me = kruOf_(pin);
+    list.forEach(function (k) {
+      if (k.id !== me.id) return;
+      if (Array.isArray(v.subs)) k.subs = v.subs.filter(okSub).slice(0, 300);
+      if (Array.isArray(v.pp6)) k.pp6 = v.pp6.filter(okCls).slice(0, 30);
+      me = k;
+    });
+    props_().setProperty('KRU', JSON.stringify(list));
+    return kruPublic_(me);
+  });
+}
+/** แอดมิน: รายชื่อครูและรหัส */
+function api_kruList(pin) { if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก'); return kruList_(); }
+function api_kruSave(pin, json) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  var v = JSON.parse(json || '[]'), seen = {}, out = [];
+  var fixed = [TEACHER_PIN, ADMIN_PIN, DIRECTOR_PIN].map(String);
+  v.forEach(function (k, i) {
+    var name = String(k.name || '').trim().slice(0, 80), p = String(k.pin || '').trim();
+    if (!name) return;
+    if (!/^\d{4}$/.test(p)) throw new Error('รหัสของ ' + name + ' ต้องเป็นตัวเลข 4 หลัก');
+    if (fixed.indexOf(p) >= 0) throw new Error('รหัสของ ' + name + ' ซ้ำกับรหัสระบบ (ผอ./ระบบโรงเรียน/แอดมิน)');
+    if (seen[p]) throw new Error('รหัส ' + p + ' ซ้ำกัน: ' + seen[p] + ' และ ' + name);
+    seen[p] = name;
+    out.push({ id: String(k.id || ('k' + Date.now().toString(36) + i)), name: name, pin: p, subs: Array.isArray(k.subs) ? k.subs : null, pp6: Array.isArray(k.pp6) ? k.pp6 : [] });
+  });
+  props_().setProperty('KRU', JSON.stringify(out));
+  return out;
 }
 function props_() { return PropertiesService.getScriptProperties(); }
 function cache_() { return CacheService.getScriptCache(); }
@@ -153,10 +213,10 @@ function writeText_(folder, name, id, text) {
 function api_ping(pin) {
   var role = checkPin_(pin);
   var root = rootFolder_();
-  return { ok: true, rootUrl: role === 'admin' ? root.getUrl() : null, role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_(), curYear: curYear_(), curYearFixed: !!props_().getProperty('CUR_YEAR') };
+  return { ok: true, rootUrl: role === 'admin' ? root.getUrl() : null, role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_(), curYear: curYear_(), curYearFixed: !!props_().getProperty('CUR_YEAR'), me: role === 'kru' ? kruPublic_(kruOf_(pin)) : null };
 }
 /** จำนวนหลักของรหัส (ให้แป้นกดแสดงจุดครบ) — ไม่บอกตัวรหัส */
-function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length, director: String(DIRECTOR_PIN || '').length }; }
+function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length, director: String(DIRECTOR_PIN || '').length, kru: 4 }; }
 /** ตรวจรหัสจากแป้นตัวเลข (หน้าแรก/หลังบ้าน) */
 function api_checkPin(pin) {
   try { return { role: checkPin_(pin) }; } catch (e) { return { role: null, locked: /LOCKED/.test(e.message) }; }
@@ -173,8 +233,8 @@ function api_list(pin) { checkPin_(pin); return allEntries_(); }
 
 /** บันทึกไฟล์ (อัปโหลด หรือที่ระบบสร้างจากการกรอกในระบบ) */
 function api_save(pin, entry, fileB64, dataJson) {
-  need_(pin, entry && entry.origName === '(กรอกในระบบ)' ? 'allowEdit' : 'allowUpload');
   if (!entry || !entry.key) throw new Error('ข้อมูลไม่ครบ');
+  needScope_(pin, entry.origName === '(กรอกในระบบ)' ? 'allowEdit' : 'allowUpload', entry.level, entry.room, entry.slot);
   return withLock_(function () {
     var old = getEntry_(entry.key);
     var file = null;
@@ -211,6 +271,7 @@ function api_saveSettings(pin, key, settingsJson) {
   return withLock_(function () {
     var e = getEntry_(key);
     if (!e) throw new Error('ไม่พบไฟล์นี้ในระบบ');
+    needScope_(pin, null, e.level, e.room, e.slot);
     e.settings = settingsJson ? JSON.parse(settingsJson) : null;
     putEntry_(e);
     return true;
@@ -220,13 +281,14 @@ function api_delete(pin, key) {
   need_(pin, 'allowDelete');
   return withLock_(function () {
     var e = getEntry_(key);
+    if (e) needScope_(pin, 'allowDelete', e.level, e.room, e.slot);
     if (e) { trashById_(e.fileId); trashById_(e.dataId); }
     props_().deleteProperty(PROP_PREFIX + key);
     return true;
   });
 }
 function api_clear(pin) {
-  need_(pin, 'allowDelete');
+  noKru_(need_(pin, 'allowDelete'));
   return withLock_(function () {
     allEntries_().forEach(function (e) { trashById_(e.fileId); trashById_(e.dataId); props_().deleteProperty(PROP_PREFIX + e.key); });
     return true;
@@ -260,7 +322,7 @@ function api_getTemplate(pin, kind) {
   try { return { name: t.name, b64: Utilities.base64Encode(DriveApp.getFileById(t.fileId).getBlob().getBytes()) }; } catch (e) { return null; }
 }
 function api_saveTemplate(pin, kind, b64, name) {
-  checkPin_(pin);
+  noKru_(need_(pin, null));
   if (!TPL_KEY_RE.test(String(kind))) throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
   return withLock_(function () {
     var old = tplInfo_()[kind];
@@ -271,44 +333,4 @@ function api_saveTemplate(pin, kind, b64, name) {
     props_().setProperty('tpl:' + kind, JSON.stringify({ fileId: file.getId(), name: String(name || '').slice(0, 200), savedAt: Date.now() }));
     return true;
   });
-}
-
-// ===== ไฟล์ต้นฉบับของโรงเรียน (อ่านอย่างเดียว ไม่สร้าง/แก้ไขอะไรในโฟลเดอร์นี้) =====
-// ใช้เป็นแม่แบบรูปแบบต้นฉบับของแต่ละห้อง/วิชาโดยอัตโนมัติ
-function api_sourceList(pin) {
-  checkPin_(pin);
-  var c = cache_().get('srcList');
-  if (c) return JSON.parse(c);
-  var out = [];
-  function walk(folder, path, depth) {
-    var files = folder.getFiles();
-    while (files.hasNext() && out.length < 400) {
-      var f = files.next(), n = f.getName();
-      if (/\.xls[xm]$/i.test(n)) var up = 0; try { up = f.getLastUpdated().getTime(); } catch (e) {}
-        out.push({ id: f.getId(), name: n, path: path, size: f.getSize(), updated: up });
-    }
-    if (depth > 4) return;
-    var subs = folder.getFolders();
-    while (subs.hasNext()) { var s = subs.next(); walk(s, path ? path + '/' + s.getName() : s.getName(), depth + 1); }
-  }
-  var okAny = false;
-  SOURCE_FOLDER_IDS.forEach(function (fid) {
-    try { var f = DriveApp.getFolderById(fid); walk(f, f.getName(), 0); okAny = true; } catch (e) { /* เปิดโฟลเดอร์นี้ไม่ได้ ข้ามไป */ }
-  });
-  if (!okAny) throw new Error('เปิดโฟลเดอร์ไฟล์ต้นฉบับไม่ได้ กรุณาตรวจสิทธิ์การเข้าถึง');
-  // ไฟล์ปีล่าสุดมาก่อน (ใช้ตัวชี้วัดชุดใหม่ที่สุด)
-  out.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
-  try { cache_().put('srcList', JSON.stringify(out), 21600); } catch (e) {}
-  return out;
-}
-function api_clearSourceCache(pin) {
-  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
-  try { cache_().remove('srcList'); } catch (e) {}
-  return api_sourceList(pin).length;
-}
-function api_sourceFile(pin, id) {
-  checkPin_(pin);
-  var list = api_sourceList(pin), hit = list.filter(function (x) { return x.id === id; })[0];
-  if (!hit) throw new Error('ไม่พบไฟล์นี้ในโฟลเดอร์ต้นฉบับ');
-  return { name: hit.name, b64: Utilities.base64Encode(DriveApp.getFileById(id).getBlob().getBytes()) };
 }

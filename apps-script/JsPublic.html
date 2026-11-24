@@ -45,12 +45,62 @@
         '<div class="pub-sc-s">' + (s.total != null ? 'รวม ' + d(s.total) + '/100' : 'รวม –') + (s.credit ? ' · ' + d(s.credit, 1) + ' นก.' : '') + '</div></div>';
     }).join('') + '</div>';
   }
+  // ---------- การ์ดแบบใหม่ (ตามแบบหน้าผลการเรียน) ----------
+  var ICONS = [[/ภาษาไทย/, '📖'], [/คณิต/, '🔢'], [/วิทย/, '🧪'], [/สังคม/, '🌏'], [/ประวัติ/, '📜'], [/สุขศึกษา|พลศึกษา/, '💓'], [/ศิลป/, '🎨'], [/การงาน/, '🛠️'], [/อังกฤษ/, '🇬🇧'], [/ทุจริต/, '🛡️'], [/พลเมือง|หน้าที่/, '🏛️'], [/คอมพิวเตอร์|วิทยาการคำนวณ/, '💻'], [/ดนตรี/, '🎵'], [/จีน/, '🏮']];
+  function icon(n) { for (var i = 0; i < ICONS.length; i++) if (ICONS[i][0].test(n || '')) return ICONS[i][1]; return '📘'; }
+  function gcls(g) { var n = parseFloat(g); if (!isFinite(n)) return 'x'; return n >= 3 ? 'a' : n >= 2 ? 'b' : n >= 1 ? 'c' : 'd'; }
+  function fmtG(g) { var n = typeof g === 'number' ? g : parseFloat(g); return isFinite(n) ? (n % 1 ? n.toFixed(1) : String(n)) : esc(g); }
+  function bar(p, cls) { return p == null ? '' : '<span class="v2-bar ' + (cls || '') + '"><i style="width:' + Math.max(0, Math.min(100, p)).toFixed(0) + '%"></i></span>'; }
+  function stat(cls, ic, k, v, sub, deco) { return '<div class="v2-stat ' + cls + '"><span class="v2-si" aria-hidden="true">' + ic + '</span><div class="v2-sm"><div class="k">' + k + '</div><div class="v">' + v + '</div>' + (sub || '') + '</div>' + (deco ? '<span class="v2-deco" aria-hidden="true">' + deco + '</span>' : '') + '</div>'; }
+  function finalStats(f) {
+    var pr = f.promote === true ? (f.grad ? 'จบหลักสูตร' : 'ได้เลื่อนชั้น') : f.promote === false ? (f.grad ? 'ยังไม่จบหลักสูตร' : 'ยังไม่ผ่านเกณฑ์') : 'รอสรุปผล';
+    return '<div class="v2-stats">' +
+      stat('gpa', '📈', 'ผลการเรียนเฉลี่ย (GPA)', d(f.gpa, 2), f.credits ? '<span class="v2-chip">📅 จาก ' + esc(f.credits) + ' หน่วยกิต</span>' : '', '🏆') +
+      stat('pct', '📋', 'คะแนนเฉลี่ยร้อยละ', f.pct == null ? d(null) : d(f.pct, 2) + '<small>%</small>', bar(f.pct, 'g')) +
+      stat('att', '🏆', 'เวลาเรียน', f.attPct == null ? d(null) : d(f.attPct, 1) + '<small>%</small>', '<div class="s">' + (f.attPct == null ? '' : f.attPct >= 80 ? 'ผ่านเกณฑ์ 80%' : 'ไม่ถึงเกณฑ์ 80%') + '</div>' + bar(f.attPct, 'p')) +
+      stat('res ' + (f.promote === true ? 'ok' : f.promote === false ? 'bad' : ''), f.promote === false ? '✖' : '✔', 'ผลการตัดสิน', esc(pr), f.promote === true ? '<div class="s"><span class="v2-ck">✔</span> ผ่านเกณฑ์ทุกด้าน</div>' : '') + '</div>';
+  }
+  function finalCards(f) {
+    return '<div class="v2-subs">' + f.subjects.map(function (s) {
+      var has = s.grade != null && s.grade !== '';
+      return '<div class="v2-sub' + (s.basic === false ? ' extra' : '') + '"><span class="v2-ic" aria-hidden="true">' + icon(s.name) + '</span><div class="v2-sb">' +
+        '<div class="v2-sn" title="' + esc(s.name) + '">' + esc(short(s.name)) + '</div>' +
+        '<div class="v2-g g-' + (has ? gcls(s.grade) : 'n') + '">เกรด <b>' + (has ? fmtG(s.grade) : '–') + '</b></div>' +
+        '<div class="v2-cr" title="' + (s.total != null ? 'คะแนนรวม ' + esc(s.total) + '/100' : '') + '">📘 หน่วยกิต ' + (s.credit != null ? d(s.credit, 1) : '–') + '</div></div></div>';
+    }).join('') + '</div>';
+  }
+  function midStats(mid) {
+    var tot = 0, max = 0, n = 0;
+    mid.subjects.forEach(function (s) { var t = s.total != null ? s.total : (s.collect != null || s.exam != null ? (s.collect || 0) + (s.exam || 0) : null); if (t != null) { tot += t; max += mid.max; n++; } });
+    var avg = max ? tot / max * 100 : null, at = mid.attendance || {};
+    return '<div class="v2-stats three">' +
+      stat('gpa', '📝', 'คะแนนรวมภาคเรียนที่ 1', d(tot) + '<small>/' + max + '</small>', '<span class="v2-chip">📅 จาก ' + n + ' วิชา</span>', '⭐') +
+      stat('pct', '📋', 'คิดเป็นร้อยละ', avg == null ? d(null) : d(avg, 1) + '<small>%</small>', bar(avg, 'g')) +
+      stat('att', '🏆', 'เวลาเรียน', at.pct == null ? d(null) : d(at.pct, 1) + '<small>%</small>', '<div class="s">' + (at.total ? 'มาเรียน ' + d(at.present) + ' จาก ' + d(at.total) + ' ชม.' : '') + '</div>' + bar(at.pct, 'p')) + '</div>';
+  }
+  function midCards(mid) {
+    return '<div class="v2-subs">' + mid.subjects.map(function (s) {
+      var tot = s.total != null ? s.total : (s.collect != null || s.exam != null ? (s.collect || 0) + (s.exam || 0) : null);
+      var p = tot == null ? null : tot / mid.max * 100, c = p == null ? 'n' : p >= 80 ? 'a' : p >= 60 ? 'b' : 'c';
+      return '<div class="v2-sub"><span class="v2-ic" aria-hidden="true">' + icon(s.name) + '</span><div class="v2-sb">' +
+        '<div class="v2-sn" title="' + esc(s.name) + '">' + esc(short(s.name)) + '</div>' +
+        '<div class="v2-g g-' + c + '"><b>' + d(tot) + '</b>/' + mid.max + (p == null ? '' : ' · ' + (p >= 80 ? 'ดีมาก' : p >= 60 ? 'ดี' : 'พัฒนา')) + '</div>' +
+        '<div class="v2-cr">เก็บ ' + d(s.collect) + ' · สอบ ' + d(s.exam) + '</div></div></div>';
+    }).join('') + '</div>';
+  }
+  function secBar(t, date) { return '<div class="v2-sec"><span class="v2-sec-ic" aria-hidden="true">📖</span><b>' + t + '</b>' + (date ? '<span class="v2-date">📅 ข้อมูลล่าสุด : ' + esc(date) + '</span>' : '') + '</div>'; }
+  function thDate(ms) { if (!ms) return ''; try { return new Date(ms).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return ''; } }
+
   function tile(k, v, s, cls) { return '<div class="pub-tile ' + (cls || '') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div><div class="s">' + (s || '') + '</div></div>'; }
 
   function midView(mid) {
     if (!mid) return '<div class="pub-empty"><div class="ic">🕒</div><b>ยังไม่ประกาศผลกลางปี</b>กรุณาติดตามประกาศจากโรงเรียน</div>';
     var h = mid.partial ? '<p class="pub-note">บางวิชาครูยังกรอกคะแนนไม่ครบ (แสดงเป็น –)</p>' : '';
     var tot = 0, max = 0;
+    if (mid.source === 'pp6' && VIEW === 'grid') {
+      return h + midStats(mid) + secBar('รายงานผลการเรียนรายวิชา · ภาคเรียนที่ 1', thDate(midView.date)) + midCards(mid) +
+        '<p class="pub-legend">ภาคเรียนที่ 1 เต็ม ' + mid.max + ' (คะแนนเก็บ + คะแนนสอบ) · <span class="pub-lv pub-lv-a">ดีมาก</span> 40 ขึ้นไป · <span class="pub-lv pub-lv-b">ดี</span> 30–39 · <span class="pub-lv pub-lv-c">พัฒนา</span> ต่ำกว่า 30</p>';
+    }
     if (mid.source === 'pp6') {
       mid.subjects.forEach(function (s) { if (s.total != null) { tot += s.total; max += mid.max; } });
       var avg = max ? tot / max * 100 : null;
@@ -93,6 +143,10 @@
 
   function finalView(f) {
     if (!f) return '<div class="pub-empty"><div class="ic">🎓</div><b>ยังไม่ประกาศผลปลายปี</b>ผลการเรียนปลายปีพร้อมระดับผลการเรียนจะแสดงเมื่อโรงเรียนประกาศผล</div>';
+    if (VIEW === 'grid') {
+      return finalStats(f) + (f.partial ? '<p class="pub-note">ผลบางวิชายังไม่ครบ (แสดงเป็น –) ระดับผลการเรียนเฉลี่ยและผลการตัดสินจะแสดงเมื่อครบทุกวิชา</p>' : '') +
+        secBar('รายงานผลการเรียนรายวิชา', thDate(finalView.date)) + finalCards(f) + evalsHtml(f);
+    }
     var pr = f.promote === true ? (f.grad ? 'จบหลักสูตร' : 'ได้เลื่อนชั้น') : f.promote === false ? (f.grad ? 'ยังไม่จบหลักสูตร' : 'ยังไม่ผ่านเกณฑ์') : 'รอสรุปผล';
     var h = '<div class="pub-tiles">' +
       tile('ผลการเรียนเฉลี่ย (GPA)', d(f.gpa, 2), f.credits ? 'จาก ' + f.credits + ' หน่วยกิต' : '', 'pub-hl') +
@@ -100,7 +154,6 @@
       tile('เวลาเรียน', f.attPct != null ? d(f.attPct, 1) + '<small>%</small>' : d(null), f.attPct == null ? '' : f.attPct >= 80 ? 'ผ่านเกณฑ์ 80%' : 'ไม่ถึงเกณฑ์ 80%') +
       tile('ผลการตัดสิน', pr, f.promote === true ? '✓ ' + 'ผ่านเกณฑ์ทุกด้าน' : '', f.promote === true ? 'pub-ok' : f.promote === false ? 'pub-bad' : '') + '</div>';
     if (f.partial) h += '<p class="pub-note">ผลบางวิชายังไม่ครบ (แสดงเป็น –) ระดับผลการเรียนเฉลี่ยและผลการตัดสินจะแสดงเมื่อครบทุกวิชา</p>';
-    if (VIEW === 'grid') { h += finalGrid(f); return h + evalsHtml(f); }
     var showTerms = f.subjects.some(function (s) { return s.t1 != null || s.t2 != null; });
     var showCE = !showTerms && f.subjects.some(function (s) { return s.collect != null || s.exam != null; });
     var ncol = 4 + (showTerms || showCE ? 2 : 0);
@@ -157,7 +210,7 @@
     function yearList() {
       return years.map(function (x, i) {
         var s = yearState(x, cur);
-        return '<button type="button" class="pv-yi ' + s[0] + (i === st.y ? ' on' : '') + '" data-yi="' + i + '"><b>ปีการศึกษา ' + esc(x.year) + '</b><span>' + (x.level ? 'ป.' + esc(x.level) + ' · ' : '') + s[1] + '</span></button>';
+        return '<button type="button" class="pv-yi ' + s[0] + (i === st.y ? ' on' : '') + '" data-yi="' + i + '"><small>ปีการศึกษา</small><b>' + esc(x.year) + '</b><span>' + (x.level ? 'ป.' + esc(x.level) + ' · ' : '') + s[1] + '</span></button>';
       }).join('');
     }
     function draw() {
@@ -167,14 +220,15 @@
       var y = years[st.y] || {};
       if (!st.tab) st.tab = y.final ? 'final' : 'mid';
       var hist = years.length > 1;
-      var h = '<div class="pv-rwrap' + (hist ? ' has-side' : '') + '">';
-      if (hist) h += '<aside class="pv-side"><div class="pv-side-h">📚 ผลการเรียนย้อนหลัง</div>' + yearList() + '</aside>';
+      midView.date = finalView.date = thDate(y.updatedAt) ? y.updatedAt : null;
+      var h = '<div class="pv-rwrap has-side v2">';
+      h += '<aside class="pv-side">' + (opt.onBack ? '<button type="button" class="pv-home" data-p="back"><span>🏠</span>หน้าหลัก</button>' : '') +
+        '<div class="pv-side-h">📖 ปีการศึกษา</div>' + yearList() + '</aside>';
       h += '<div class="pv-rmain">';
-      h += '<div class="pub-card pub-student"><div class="pub-av">' + esc((res.first || res.name || '?').replace(/^(เด็กชาย|เด็กหญิง|นาย|นางสาว|นาง)/, '').charAt(0)) + '</div>' +
-        '<div class="pub-who"><div class="nm">' + esc(res.name) + '</div><div class="meta">' + esc(y.className || (y.level ? 'ป.' + y.level : '')) + (y.no ? ' · เลขที่ ' + esc(y.no) : '') + ' · เลขประจำตัว ' + esc(res.id) + '</div>' +
-        (y.school && !y.missing ? '<div class="meta">' + esc(y.school) + '</div>' : '') + '</div>' +
-        '<div class="pub-yr">ปีการศึกษา ' + esc(y.year) + (+y.year === +cur ? '<small>ปีปัจจุบัน</small>' : '') + '</div></div>';
-      if (hist) h += '<button type="button" class="pv-histbtn" data-p="hist">📚 ดูผลการเรียนย้อนหลัง (' + years.length + ' ปี) <i>›</i></button>';
+      var first = (res.first || res.name || '?').replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|นาง)/, '');
+      h += '<div class="v2-top"><div class="v2-wel"><span class="v2-mega" aria-hidden="true">📣</span><div class="v2-wt"><b>สวัสดี ' + esc(first.split(/\s+/)[0]) + ' 👋</b><span class="nm">' + esc(res.name) + '</span>' +
+        '<small>' + esc(y.className || (y.level ? 'ป.' + y.level : '')) + (y.no ? ' · เลขที่ ' + esc(y.no) : '') + ' · เลขประจำตัว ' + esc(res.id) + (y.school && !y.missing ? ' · ' + esc(y.school) : '') + '</small></div></div>' +
+        '<label class="v2-ysel"><span aria-hidden="true">📅</span><select data-ysel="1" aria-label="ปีการศึกษา">' + years.map(function (x, i) { return '<option value="' + i + '"' + (i === st.y ? ' selected' : '') + '>ปีการศึกษา ' + esc(x.year) + (+x.year === +cur ? ' (ปัจจุบัน)' : '') + '</option>'; }).join('') + '</select></label></div>';
       if (y.missing) h += '<div class="pub-card pub-body">' + missingView(y, y.school) + '</div>';
       else if (y.external) h += '<div class="pub-card pub-body">' + externalView(y) + '</div>';
       else {
@@ -184,10 +238,11 @@
         h += '<div class="pub-card pub-body">' + (st.tab === 'mid' ? midView(y.mid) : finalView(y.final)) + '</div>';
       }
       if (opt.actions !== false) h += '<div class="pub-actions">' + (y.missing || y.external ? '' : '<button class="pub-btn ghost" data-p="view">' + (VIEW === 'grid' ? '📋 ดูแบบตาราง' : '🔲 ดูแบบการ์ด') + '</button>') + '<button class="pub-btn ghost" data-p="print">🖨 พิมพ์ / บันทึก PDF</button>' + (opt.onBack ? '<button class="pub-btn ghost" data-p="back">ค้นหาคนอื่น</button>' : '') + '</div>';
-      el.innerHTML = h + '</div></div>';
+      el.innerHTML = h + '<div class="v2-foot" aria-hidden="true">เรียนดี มีความสุข <span>😊</span></div></div></div>';
       if (drawerBox) { drawerBox.hidden = !hist; drawerBox.innerHTML = hist ? '<div class="pv-dsep">📚 ผลการเรียนย้อนหลัง</div>' + yearList() : ''; }
     }
     function pick(i) { st.y = i; st.tab = null; draw(); if (opt.closeDrawer) opt.closeDrawer(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    el.onchange = function (e) { if (e.target.dataset.ysel) pick(+e.target.value); };
     el.onclick = function (e) {
       var yi = e.target.closest('[data-yi]'); if (yi) { pick(+yi.dataset.yi); return; }
       var t = e.target.closest('[data-t]');
@@ -214,7 +269,7 @@
     var info = {};
     try { info = await call('api_publicInfo'); } catch (e) { info = {}; }
     if (info.title) { if (info.title !== 'ประกาศผลการเรียน') $('pubTitle').textContent = info.title; document.title = info.title; }
-    if (info.school) $('pubSchool').textContent = info.school;
+    if (info.school) { $('pubSchool').textContent = info.school; if ($('pubTopSchool')) $('pubTopSchool').textContent = info.school; }
     // เมนู ☰ ด้านซ้าย
     var dr = $('pubDrawer'), scrim = $('pubScrim');
     function drawer(open) { if (!dr) return; dr.hidden = !open; scrim.hidden = !open; document.body.classList.toggle('pv-dopen', open); }
@@ -231,7 +286,8 @@
     if (info.verify === 'id+nid4') $('pubNidRow').hidden = false;
     // มุมขวาบน: แท็บ "ครู" และ "แอดมิน" แยกกัน แต่ละแท็บรับเฉพาะรหัสของตัวเอง
     var LOGIN = {
-      teacher: { t: '👩‍🏫 เข้าสู่ระบบครู', who: 'ครู', load: 'กำลังเปิดระบบครู...' },
+      kru: { t: '👩‍🏫 เข้าสู่ระบบครู', who: 'ครู (เบอร์โทร 4 ตัวท้าย)', load: 'กำลังเปิดระบบครู...' },
+      teacher: { t: '🏫 เข้าสู่ระบบโรงเรียน', who: 'ระบบโรงเรียน', load: 'กำลังเปิดระบบโรงเรียน...' },
       admin: { t: '🛡 เข้าสู่ระบบแอดมิน', who: 'ผู้ดูแลระบบ', load: 'กำลังเปิดระบบแอดมิน...' },
       director: { t: '👔 เข้าสู่ระบบผู้อำนวยการ', who: 'ผู้อำนวยการ', load: 'กำลังเปิดระบบผู้อำนวยการ...' }
     };
@@ -248,7 +304,8 @@
             if (!role) return r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง';
             if (want === 'admin' && role !== 'admin') return 'รหัสนี้ไม่ใช่รหัสผู้ดูแลระบบ';
             if (want === 'director' && role !== 'director') return 'รหัสนี้ไม่ใช่รหัสผู้อำนวยการ';
-            if (want === 'teacher' && role === 'director') return 'รหัสนี้เป็นของผู้อำนวยการ กรุณาเลือก "ผู้อำนวยการ"';
+            if (want === 'kru' && role !== 'kru') return role === 'teacher' ? 'รหัสนี้เป็นรหัสระบบโรงเรียน กรุณาเลือก "ระบบโรงเรียน"' : role === 'director' ? 'รหัสนี้เป็นของผู้อำนวยการ กรุณาเลือก "ผู้อำนวยการ"' : 'ไม่พบครูที่ใช้รหัสนี้ (เบอร์โทร 4 ตัวท้าย) — แจ้งแอดมินให้เพิ่มชื่อ';
+            if (want === 'teacher' && role !== 'teacher') return role === 'kru' ? 'รหัสนี้เป็นรหัสครูรายบุคคล กรุณาเลือก "ครู"' : role === 'director' ? 'รหัสนี้เป็นของผู้อำนวยการ กรุณาเลือก "ผู้อำนวยการ"' : 'รหัสนี้ไม่ใช่รหัสระบบโรงเรียน';
             return true;
           });
         }

@@ -34,9 +34,9 @@
   function askPin(msg) {
     if (asking) return asking;
     asking = getPinLen().then(function (pl) { return window.PP5PinPad.ask({
-      digits: (window.PP5_NEED_ADMIN ? pl.admin : pl.teacher) || 0,
+      digits: (window.PP5_NEED_ADMIN ? pl.admin : 0) || 0,   // หน้าครู: รหัสครู 4 หลัก / ระบบโรงเรียน 8 หลัก / ผอ. → กดแล้วกดตกลง
       home: window.PP5_HOME || '',
-      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบสำหรับครู', sub: msg || '', length: 12, autoSubmit: false,
+      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบ', sub: msg || 'ครู: เบอร์โทร 4 ตัวท้าย · ระบบโรงเรียน / ผู้อำนวยการ: รหัสของระบบ', length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {
           google.script.run.withSuccessHandler(function (r) {
@@ -91,6 +91,7 @@
         self.rootUrl = r && r.rootUrl;
         self.role = r && r.role; self.flags = (r && r.flags) || {}; self.flagDefs = (r && r.flagDefs) || {};
         self.publicUrl = r && r.publicUrl; self.curYear = r && r.curYear; self.curYearFixed = r && r.curYearFixed;
+        self.me = (r && r.me) || null;   // ครูรายบุคคล: { name, subs, pp6 }
         var link = document.getElementById('driveLink');
         if (link && self.rootUrl) { link.href = self.rootUrl; link.hidden = false; }
       });
@@ -128,6 +129,9 @@
     setCurYear: function (y) { var self = this; return call('api_setCurYear', [y || 0]).then(function (r) { self.curYear = r; return r; }); },
     folderLinks: function () { return call('api_folderLinks'); },
     getLib: function () { return call('api_getLib'); },
+    saveMe: function (v) { var self = this; return call('api_saveMe', [JSON.stringify(v)]).then(function (r) { self.me = r; return r; }); },
+    kruList: function () { return call('api_kruList'); },
+    kruSave: function (list) { return call('api_kruSave', [JSON.stringify(list)]); },
     saveLib: function (key, v) { return call('api_saveLib', [key, JSON.stringify(v)]); },
     getBrand: function () { return call('api_getBrand'); },
     saveBrand: function (b) { return call('api_saveBrand', [JSON.stringify(b)]); },
