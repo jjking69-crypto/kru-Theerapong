@@ -841,7 +841,7 @@
 
     var fl = DB.flags || {}, off = DB.role !== 'admin' ? Object.keys(DB.flagDefs || {}).filter(function (k) { return fl[k] === false && /^allow/.test(k); }) : [];
     var html = howTo('pp5') + (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') +
-      '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา · กด <b>กรอกคะแนน</b> เพื่อกรอกในระบบ หรือ <b>⬇ Excel</b> เพื่อโหลดไฟล์รูปแบบต้นฉบับไปกรอกในคอม แล้วอัปโหลดกลับ</p><div class="slots">';
+      '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา</p><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
       var ic = '<div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>';
