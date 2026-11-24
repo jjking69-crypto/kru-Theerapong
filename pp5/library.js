@@ -7,7 +7,18 @@
   var api = {
     LIB: LIB,
     get: function (level, slot) { var e = LIB[level + '|' + slot]; return e ? JSON.parse(JSON.stringify(e)) : null; },
-    keys: function () { return Object.keys(LIB); }
+    keys: function () { return Object.keys(LIB); },
+    // ช่องวิชาจากข้อมูลวิชาในไฟล์ ปพ.5 (รหัส/ชื่อวิชา)
+    slotOf: function (m) {
+      var sub = (m && m.subject) || '', code = (m && m.code) || '';
+      if (/ทุจริต/.test(sub)) return 'cor';
+      if (/ประวัติ/.test(sub)) return 'his';
+      var L = { 'ท': 'th', 'ค': 'ma', 'ว': 'sci', 'พ': 'pe', 'ศ': 'art', 'ง': 'work', 'อ': 'eng' };
+      var mm = code.match(/^([ก-ฮ])\d(\d)(\d)/);
+      if (mm && mm[3] !== '1') return null;            // รายวิชาเพิ่มเติม
+      if (/สังคม/.test(sub) || (mm && mm[1] === 'ส')) return 'soc';
+      return mm ? L[mm[1]] || null : null;
+    }
   };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.PP5Library = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -122,6 +122,51 @@
         }).join('') + '</div></div>';
       }).join('') : '') + '</div></section>';
   }
+  // คลังตัวชี้วัด: ชั้นไหน/วิชาไหนมีแล้ว + ดึงจากโฟลเดอร์ต้นฉบับทั้งหมดในครั้งเดียว
+  var SLOTS = [['th', 'ไทย'], ['ma', 'คณิต'], ['sci', 'วิทย์'], ['soc', 'สังคม'], ['his', 'ประวัติ'], ['pe', 'สุขศึกษา'], ['art', 'ศิลปะ'], ['work', 'การงาน'], ['eng', 'อังกฤษ'], ['cor', 'ทุจริต']];
+  function libEntry(l, s) { var k = l + '|' + s; return (S.lib && S.lib[k]) ? { e: S.lib[k], src: 'file' } : (window.PP5Library && PP5Library.get(l, s) ? { e: PP5Library.get(l, s), src: 'built' } : null); }
+  function libCard() {
+    var miss = 0, rows = '';
+    for (var l = 1; l <= 6; l++) {
+      rows += '<tr><th>ป.' + l + '</th>' + SLOTS.map(function (sl) {
+        var x = libEntry(l, sl[0]);
+        if (!x) { miss++; return '<td class="lib-no">✗</td>'; }
+        return '<td class="lib-ok" title="' + esc((x.e.subject || '') + ' · ' + (x.src === 'file' ? 'จากไฟล์ ' + (x.e.from || '') : 'คลังในระบบ')) + '">✓<small>' + x.e.indicators.length + '</small></td>';
+      }).join('') + '</tr>';
+    }
+    return '<section class="card sup-card"><h2>📚 คลังตัวชี้วัด</h2><p class="sub">✓ = มีตัวชี้วัดแล้ว (ตัวเลข = จำนวนตัวชี้วัด) · ✗ = ยังไม่มี · ครูกด "กรอกคะแนน" วิชาที่มีแล้ว ระบบใส่ตัวชี้วัดให้เอง · ยังไม่มี <b>' + miss + '</b> จาก 60</p>' +
+      '<div class="tbl-wrap"><table class="lib-tbl"><thead><tr><th></th>' + SLOTS.map(function (s) { return '<th>' + s[1] + '</th>'; }).join('') + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="slot-acts" style="margin-top:10px"><button class="btn pri" id="supLibScan">🔄 ดึงตัวชี้วัดจากโฟลเดอร์ต้นฉบับทั้งหมด</button><span class="sub" id="supLibMsg"></span></div></section>';
+  }
+  async function scanLib() {
+    var msg = $('supLibMsg'), btn = $('supLibScan');
+    btn.disabled = true;
+    try {
+      msg.textContent = 'กำลังอ่านรายการไฟล์...';
+      await DB.clearSourceCache();
+      var list = (await DB.sourceList()).filter(function (x) { return /\.xlsm$/i.test(x.name) || /ปพ\.?5/.test(x.path + x.name); });
+      var added = 0, seen = 0;
+      for (var i = 0; i < list.length; i++) {
+        msg.textContent = 'อ่านไฟล์ ' + (i + 1) + '/' + list.length + ' : ' + list[i].name;
+        try {
+          var f = await DB.sourceFile(list[i].id);
+          var d = PP5Parser.parseWorkbook(XLSX.read(f.bytes, { type: 'array' }));
+          var lv = +d.meta.level, sl = PP5Library.slotOf(d.meta);
+          if (!lv || !sl) continue;
+          seen++;
+          var inds = (d.indicators || []).filter(function (x) { return x.text || x.code; });
+          if (!inds.length || (S.lib && S.lib[lv + '|' + sl])) continue;
+          var m = d.meta, e = { code: m.code, subject: m.subject, type: m.type, group: m.group, hours: m.hours, credit: m.credit, maxCollect: m.maxCollect, maxFinal: m.maxFinal,
+            indicators: inds.map(function (x) { return { idx: x.idx, term: x.term, std: x.std, code: x.code, text: x.text, max: x.max }; }),
+            standards: (d.standards || []).filter(function (x) { return x.text; }), from: f.name, at: Date.now() };
+          await DB.saveLib(lv + '|' + sl, e);
+          S.lib = S.lib || {}; S.lib[lv + '|' + sl] = e; added++;
+        } catch (er) { console.warn('scan', list[i].name, er); }
+      }
+      toast('อ่านไฟล์ ปพ.5 ' + seen + ' ไฟล์ · เพิ่มตัวชี้วัดใหม่ ' + added + ' วิชา', added ? 'ok' : 'info');
+      render();
+    } catch (e) { toast('ดึงไม่สำเร็จ: ' + e.message, 'err'); btn.disabled = false; msg.textContent = ''; }
+  }
   function histCard() {
     return '<section class="card sup-card"><h2>📚 ผลการเรียนย้อนหลังรายคน / ผลจากโรงเรียนอื่น</h2><p class="sub">ค้นด้วยเลขประจำตัวนักเรียน เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่นักเรียนยังไม่ได้เรียนที่นี่ (ย้ายมา) เพิ่มผลการเรียนจากโรงเรียนเดิมได้</p><div id="supHist"></div></section>';
   }
@@ -131,7 +176,7 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
@@ -150,6 +195,7 @@
       var up = e.target.closest('[data-up]'), rm = e.target.closest('[data-rm]');
       if (up) { pendingImg = up.dataset.up; $('supImgFile').value = ''; $('supImgFile').click(); return; }
       if (rm && confirm('ลบรูปนี้?')) { saveBrand(imgPatch(rm.dataset.rm, null), 'ลบรูปแล้ว'); return; }
+      if (e.target.id === 'supLibScan') { scanLib(); return; }
       if (e.target.id === 'supYearSet') { var y = +$('supYear').value; if (!(y > 2500)) { toast('ใส่ปี พ.ศ. เช่น 2570', 'err'); return; } DB.setCurYear(y).then(function () { DB.curYearFixed = true; toast('ตั้งปีการศึกษาปัจจุบันเป็น ' + y + ' แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
       if (e.target.id === 'supYearAuto') { DB.setCurYear(0).then(function () { DB.curYearFixed = false; toast('กลับเป็นอัตโนมัติตามวันที่แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
       if (e.target.id === 'supBrandSave') { saveBrand(textPatch(), 'บันทึกชื่อและตำแหน่งแล้ว'); return; }
@@ -202,8 +248,8 @@
       acts();
       var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดข้อมูลทุกห้อง...';
       var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; }),
-        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; })]);
-      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {};
+        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; }), DB.getLib().catch(function () { return {}; })]);
+      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {}; S.lib = r[6] || {};
       render();
       bootDone();
       DB.folderLinks().then(function (l) { S.links = l; render(); }, function (er) { console.warn('links', er); });

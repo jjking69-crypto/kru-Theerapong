@@ -298,4 +298,12 @@ body.pub-has-result.pv2 .pv-main { max-width: 1080px; margin-top: 10px; }
   .pv2 .pub-login-menu { position: fixed; left: 12px; right: 12px; top: 72px; width: auto; }
 }
 @media print { .pv-hero, .pv-foot, .pv-side, .pv-histbtn, .pv-drawer, .pv-scrim { display: none !important; } .pv-rwrap.has-side { display: block; } }
+
+/* รองรับทุกเบราว์เซอร์ */
+.pub-page { color-scheme: light only; }
+.pv-hero::before, .pub-hero::after { top: 0; right: 0; bottom: 0; left: 0; -webkit-mask-image: radial-gradient(260px 160px at 88% 18%, #000, transparent); }
+.pv-card { -webkit-backdrop-filter: blur(6px); }
+.pv-scrim { top: 0; right: 0; bottom: 0; left: 0; }
+.pv-t2 { -webkit-text-fill-color: transparent; }
+@media (pointer: coarse) { .pub-page input, .pub-page select { font-size: 16px; } }
 </style>

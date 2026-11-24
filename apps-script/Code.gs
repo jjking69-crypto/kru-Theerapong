@@ -15,6 +15,8 @@ var ADMIN_PIN = '555666';
 var ROOT_FOLDER_ID = '1HcYvW2C0e-sDZZ-fX7OpRIApfz6YiHSY';
 // โฟลเดอร์ไฟล์ต้นฉบับ ปพ.5 / ปพ.6 ปีที่แล้ว: ระบบ "อ่านอย่างเดียว" เพื่อใช้เป็นแม่แบบของแต่ละห้อง/วิชา
 var SOURCE_FOLDER_ID = '16yXoxARn6S6KbfJalxv8i5Lk04arN8ZG';
+// โฟลเดอร์ต้นฉบับเพิ่มเติม (อ่านอย่างเดียว) เช่น โฟลเดอร์ส่ง ปพ.5 ของครูแต่ละปี — ระบบดึงตัวชี้วัด/แม่แบบจากไฟล์ในนี้ด้วย
+var SOURCE_FOLDER_IDS = [SOURCE_FOLDER_ID, '1s-ekHBDg_BvrfXOJ7owVmclT0nnMJ9Yb'];
 // ชื่อบนแท็บเบราว์เซอร์ของหน้าหลังบ้าน
 var ADMIN_TITLE = 'หลังบ้าน ปพ.5 / ปพ.6';
 
@@ -278,13 +280,20 @@ function api_sourceList(pin) {
     var files = folder.getFiles();
     while (files.hasNext() && out.length < 400) {
       var f = files.next(), n = f.getName();
-      if (/\.xls[xm]$/i.test(n)) out.push({ id: f.getId(), name: n, path: path, size: f.getSize() });
+      if (/\.xls[xm]$/i.test(n)) var up = 0; try { up = f.getLastUpdated().getTime(); } catch (e) {}
+        out.push({ id: f.getId(), name: n, path: path, size: f.getSize(), updated: up });
     }
     if (depth > 4) return;
     var subs = folder.getFolders();
     while (subs.hasNext()) { var s = subs.next(); walk(s, path ? path + '/' + s.getName() : s.getName(), depth + 1); }
   }
-  try { walk(DriveApp.getFolderById(SOURCE_FOLDER_ID), '', 0); } catch (e) { throw new Error('เปิดโฟลเดอร์ไฟล์ต้นฉบับไม่ได้ (SOURCE_FOLDER_ID) กรุณาตรวจสิทธิ์การเข้าถึง'); }
+  var okAny = false;
+  SOURCE_FOLDER_IDS.forEach(function (fid) {
+    try { var f = DriveApp.getFolderById(fid); walk(f, f.getName(), 0); okAny = true; } catch (e) { /* เปิดโฟลเดอร์นี้ไม่ได้ ข้ามไป */ }
+  });
+  if (!okAny) throw new Error('เปิดโฟลเดอร์ไฟล์ต้นฉบับไม่ได้ กรุณาตรวจสิทธิ์การเข้าถึง');
+  // ไฟล์ปีล่าสุดมาก่อน (ใช้ตัวชี้วัดชุดใหม่ที่สุด)
+  out.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
   try { cache_().put('srcList', JSON.stringify(out), 21600); } catch (e) {}
   return out;
 }

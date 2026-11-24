@@ -2,6 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
+  <meta name="color-scheme" content="light only">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>วิเคราะห์ผล ปพ.5 / ปพ.6</title>
   <meta name="description" content="อัปโหลดไฟล์ ปพ.5 แต่ละวิชา แล้วดูคะแนนตามตัวชี้วัดและเกรดรายบุคคล">
@@ -20,22 +21,33 @@
   <header class="top">
     <div class="top-in">
       <a class="home" href="../" title="กลับหน้าแอปห้องเรียน">‹</a>
+      <img id="topLogo" class="top-logo" alt="ตราโรงเรียน" hidden>
       <div class="brand">
         <h1>ระบบ ปพ.5 / ปพ.6 โรงเรียนวัดทุ่งแฝก</h1>
         <p id="schoolLine">อัปโหลดไฟล์ ปพ.5 ของแต่ละวิชา แล้วดูผลรายบุคคล</p>
       </div>
       <div class="top-acts" id="topActs"></div>
     </div>
+      <svg class="top-scene" viewBox="0 0 520 150" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
+        <g opacity=".95"><circle cx="40" cy="118" r="22" fill="#4ade80"/><circle cx="62" cy="108" r="26" fill="#22c55e"/><rect x="56" y="118" width="6" height="26" fill="#a16207"/>
+        <rect x="96" y="70" width="170" height="74" rx="3" fill="#fde2e4"/><path d="M90 74 L181 40 L272 74 Z" fill="#fca5a5"/><rect x="166" y="104" width="30" height="40" fill="#93c5fd"/>
+        <g fill="#bfdbfe"><rect x="108" y="84" width="20" height="14"/><rect x="134" y="84" width="20" height="14"/><rect x="206" y="84" width="20" height="14"/><rect x="232" y="84" width="20" height="14"/><rect x="108" y="110" width="20" height="14"/><rect x="134" y="110" width="20" height="14"/><rect x="206" y="110" width="20" height="14"/><rect x="232" y="110" width="20" height="14"/></g>
+        <line x1="181" y1="10" x2="181" y2="42" stroke="#64748b" stroke-width="2"/><rect x="182" y="10" width="20" height="4" fill="#ef4444"/><rect x="182" y="14" width="20" height="3" fill="#fff"/><rect x="182" y="17" width="20" height="5" fill="#1d4ed8"/><rect x="182" y="22" width="20" height="3" fill="#fff"/><rect x="182" y="25" width="20" height="4" fill="#ef4444"/>
+        <rect x="290" y="84" width="150" height="60" rx="3" fill="#e0f2fe"/><path d="M284 88 L365 58 L446 88 Z" fill="#7dd3fc"/><g fill="#bae6fd"><rect x="302" y="98" width="18" height="14"/><rect x="326" y="98" width="18" height="14"/><rect x="386" y="98" width="18" height="14"/><rect x="410" y="98" width="18" height="14"/></g><rect x="352" y="112" width="26" height="32" fill="#7dd3fc"/>
+        <circle cx="470" cy="112" r="24" fill="#22c55e"/><circle cx="496" cy="120" r="20" fill="#4ade80"/><rect x="466" y="120" width="6" height="24" fill="#a16207"/>
+        <rect x="0" y="142" width="520" height="8" fill="#bbf7d0"/></g>
+      </svg>
   </header>
 
   <main class="wrap">
     <section class="picker card">
-      <div class="field">
+      <div class="pk-tab">🎓 เลือกห้องเรียน / ระดับ</div>
+      <div class="field pk-year">
         <label for="yearSel">ปีการศึกษา</label>
-        <select id="yearSel"></select>
+        <div class="pk-ysel"><span aria-hidden="true">📅</span><select id="yearSel"></select></div>
       </div>
       <div class="field grow">
-        <span class="lbl">ชั้นเรียน · กดเลือกห้องได้เลย</span>
+        <span class="lbl pv-sr">ชั้นเรียน · กดเลือกห้องได้เลย</span>
         <select id="classSel" class="big-sel" hidden aria-hidden="true"></select>
         <div class="cls-chips" id="classChips" role="tablist" aria-label="เลือกชั้นเรียน"></div>
       </div>

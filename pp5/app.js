@@ -2,6 +2,16 @@
 (function () {
   'use strict';
 
+  // เบราว์เซอร์รุ่นเก่า (Safari ก่อน 15.4 ฯลฯ) ไม่มี <dialog>.showModal → ทำแบบง่ายแทน
+  (function () {
+    var d = document.getElementById('modal');
+    if (!d || typeof d.showModal === 'function') return;
+    var scrim = null;
+    d.showModal = function () { d.setAttribute('open', ''); d.classList.add('pp-dlg-open'); scrim = document.createElement('div'); scrim.className = 'pp-dlg-scrim'; scrim.onclick = function () { d.close(); }; document.body.appendChild(scrim); };
+    d.close = function () { d.removeAttribute('open'); d.classList.remove('pp-dlg-open'); if (scrim) { scrim.remove(); scrim = null; } };
+  })();
+
+
   // ---------- รายวิชาพื้นฐาน (ช่องอัปโหลด) ----------
   var CORE = [
     { slot: 'th',   letter: 'ท', name: 'ภาษาไทย',                         color: '#d9480f' },
@@ -297,7 +307,7 @@
       return;
     }
     var d = roster.data, dt = d.date ? d.date.display : (d.dateText || 'ไม่ระบุวันที่');
-    el.innerHTML = '<div class="card roster-bar"><div class="rb-t">📋 <b>รายชื่อนักเรียนปีการศึกษา ' + esc(d.year || '') + ' อัปเดตตามข้อมูลวันที่ ' + esc(dt) + '</b>' +
+    el.innerHTML = '<div class="card roster-bar"><span class="rb-ic" aria-hidden="true"><i>✓</i>📄</span><div class="rb-t"><b>รายชื่อนักเรียนปีการศึกษา ' + esc(d.year || '') + ' อัปเดตตามข้อมูลวันที่ ' + esc(dt) + '</b>' +
       '<span>' + d.classes.length + ' ห้อง · ' + d.total + ' คน · ไฟล์ ' + esc(roster.fileName || '') + (d.warnings.length ? ' · <span class="badge warn">ข้อควรตรวจ ' + d.warnings.length + '</span>' : '') + '</span></div>' +
       '<div class="rb-a"><button class="btn" data-rb="view">ดูรายชื่อ</button><button class="btn" data-rb="dl">⬇ ดาวน์โหลดไฟล์</button><button class="btn pri" data-rb="up">อัปโหลดรายชื่อใหม่</button></div></div>';
   }
@@ -719,16 +729,18 @@
     });
     $('classSel').innerHTML = opts;
     // ปุ่มเลือกห้อง: แถวละชั้น กดได้ทันที (จุดเขียว = มีข้อมูลแล้ว)
-    $('classChips').innerHTML = LEVELS.map(function (l) {
+    // จัดเป็น 3 กล่อง: (ป.1, ป.4) (ป.2, ป.5) (ป.3, ป.6)
+    function levelRow(l) {
       var rooms = roomsOf(state.year, l).slice();
       if (l === state.level && rooms.indexOf(state.room) < 0) rooms.push(state.room);
       rooms.sort(function (a, b) { return a - b; });
       return '<div class="cls-row"><span class="cls-lv">ป.' + l + '</span>' + rooms.map(function (r) {
         var n = records.filter(function (x) { return x.year === state.year && x.level === l && x.room === r; }).length;
         var on = l === state.level && r === state.room;
-        return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (n ? '<i>' + n + '</i>' : '') + '</button>';
+        return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (on ? '<em class="ck">✓</em>' : n ? '<i>' + n + '</i>' : '') + '</button>';
       }).join('') + '</div>';
-    }).join('');
+    }
+    $('classChips').innerHTML = [[1, 4], [2, 5], [3, 6]].map(function (g) { return '<div class="cls-box">' + g.map(levelRow).join('') + '</div>'; }).join('');
 
     var withData = records.filter(function (r) { return r.data; });
     var any = classRecords().filter(function (r) { return r.data; })[0] || withData.filter(function (r) { return r.slot !== 'pp6'; })[0];
@@ -806,10 +818,10 @@
       b = ek === 'pp6' ? { c: '#0b7285', i: '✎', k: 'กำลังกรอกข้อมูล ปพ.6', t: 'กรอก/แก้ไข ใบรายงาน ปพ.6', s: 'อย่าลืมกด "บันทึกในระบบ" ก่อนออก' }
         : { c: '#1d5bd8', i: '✎', k: 'กำลังกรอกข้อมูล ปพ.5', t: 'กรอก/แก้ไข ปพ.5 ' + (PP5Editor.title ? PP5Editor.title() : ''), s: 'อย่าลืมกด "บันทึกในระบบ" ก่อนออก' };
     } else b = BANNERS[state.tab] || BANNERS.subjects;
-    if (state.tab === 'subjects') { var n = classRecords().length; extra = '<div class="bx">มีข้อมูล<b>' + n + ' วิชา</b></div>'; }
-    else if (state.tab === 'report') { var p6 = pp6Record(); extra = '<div class="bx">' + (p6 ? (p6.virtual ? 'สร้างจาก ปพ.5' : 'ไฟล์ที่อัปโหลด') + '<b>' + p6.data.students.length + ' คน</b>' : 'ยังไม่มีข้อมูล') + '</div>'; }
+    if (state.tab === 'subjects' || (window.PP5Editor && PP5Editor.active())) { var n = classRecords().length; extra = '<div class="bx"><span class="bx-ic">💾</span><span>ข้อมูลที่กรอกแล้ว<b>' + n + ' วิชา</b></span></div>'; }
+    else if (state.tab === 'report') { var p6 = pp6Record(); extra = '<div class="bx"><span class="bx-ic">📗</span><span>' + (p6 ? (p6.virtual ? 'สร้างจาก ปพ.5' : 'ไฟล์ที่อัปโหลด') + '<b>' + p6.data.students.length + ' คน</b>' : 'ยังไม่มีข้อมูล') + '</span></div>'; }
     var oldNote = state.year !== curYear() ? '<div class="old-note">📦 กำลังดูข้อมูล<b>ปีการศึกษา ' + esc(state.year) + '</b> ' + (state.year < curYear() ? '(ปีเก่า)' : '') + ' — ไม่ใช่ปีปัจจุบัน (' + curYear() + ') <button class="btn" data-goyear="' + curYear() + '">กลับไปปี ' + curYear() + '</button></div>' : '';
-    el.innerHTML = oldNote + '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div><div class="bk">' + esc(b.k) + '</div>' +
+    el.innerHTML = oldNote + '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div class="bm"><div class="bk">' + esc(b.k) + '</div>' +
       '<div class="bt">' + esc(b.t) + ' · ชั้น ' + esc(cls) + '</div><div class="bs">ปีการศึกษา ' + esc(state.year || '') + ' · ' + esc(b.s) + '</div></div>' + extra + '</div>';
   }
 
@@ -1319,10 +1331,10 @@
     if (!el || DB === LocalDB) return;
     var adm = DB.role === 'admin';
     var home = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
-    el.innerHTML = (home ? '<a class="tb home-tb" href="' + esc(home) + '" target="_top">⬅ กลับหน้าแรก</a>' : '') +
-      '<span class="role">' + (adm ? '👑 ผู้ดูแลระบบหลัก' : '👩‍🏫 ระบบครู') + '</span>' +
+    el.innerHTML = (home ? '<a class="tb home-tb" href="' + esc(home) + '" target="_top">🏠 หน้าหลัก</a>' : '') +
+      '<span class="tb role">' + (adm ? '👑 ผู้ดูแลระบบหลัก' : '👤 ระบบครู') + '</span>' +
       (adm && DB.publicUrl ? '<a class="tb" href="' + esc(DB.publicUrl.replace(/\?.*$/, '')) + '?page=super" target="_top" style="text-decoration:none">🛡 ระบบแอดมิน</a>' : '') +
-      '<button class="tb" data-top="logout">ออกจากระบบ</button>';
+      '<button class="tb out-tb" data-top="logout">↪ ออกจากระบบ</button>';
     $('upBtn').hidden = !adm && DB.flags && DB.flags.allowUpload === false;
   }
   function openFlags() {
@@ -1367,6 +1379,7 @@
       if (DB.getLib) { try { learned = (await DB.getLib()) || {}; } catch (le) { learned = {}; } }
       if (DB.getBrand) { try { brand = await DB.getBrand(); sigs = (await DB.getSigs()) || {}; } catch (be) { console.warn('brand', be); } }
       rosterVer++;
+      setTimeout(function () { var lg = effBrand().logo, im = $('topLogo'); if (lg && im) { im.src = lg; im.hidden = false; } }, 0);
     } catch (e) {
       console.error(e);
       if (DB === LocalDB) {

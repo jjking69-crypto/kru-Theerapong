@@ -3,6 +3,7 @@
 <head>
   <base target="_top">
   <meta charset="UTF-8">
+  <meta name="color-scheme" content="light only">
   <meta name="theme-color" content="#7f1d1d">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,6 +24,7 @@
   <main class="wrap" id="sup"><div class="card empty-state"><b>กำลังโหลด...</b></div></main>
   <div id="toasts" aria-live="polite"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script>window.PP5_PIN_KEY = 'pp5-admin-pin'; window.PP5_NEED_ADMIN = true; window.PP5_HOME = <?!= JSON.stringify(homeUrl || '') ?>;</script>
   <?!= include('JsPinPad') ?>
   <?!= include('JsStore') ?>
@@ -30,6 +32,8 @@
   <?!= include('JsImg') ?>
   <?!= include('JsTeachers') ?>
   <?!= include('JsHistory') ?>
+  <?!= include('JsParser') ?>
+  <?!= include('JsLibrary') ?>
   <?!= include('JsSuper') ?>
 </body>
 </html>
