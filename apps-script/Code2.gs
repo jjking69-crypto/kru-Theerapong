@@ -57,7 +57,7 @@ function api_saveSig(pin, name, dataUrl) {
 function lib_() { var t = readText_(props_().getProperty('LIB_ID')); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
 function api_getLib(pin) { checkPin_(pin); return lib_(); }
 function api_saveLib(pin, key, json) {
-  checkPin_(pin);
+  if (checkPin_(pin) === 'director') return false;
   if (!/^\d{1,2}\|[A-Za-z0-9_\-]{1,40}$/.test(String(key))) throw new Error('คีย์คลังไม่ถูกต้อง');
   var v = JSON.parse(json || 'null');
   if (!v || !v.indicators || !v.indicators.length || json.length > 200000) throw new Error('ข้อมูลตัวชี้วัดไม่ถูกต้อง');

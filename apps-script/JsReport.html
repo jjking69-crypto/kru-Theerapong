@@ -490,6 +490,16 @@
     }
     return h + '</div></div>';
   }
+  // ปุ่มกดใหญ่พร้อมคำอธิบาย (ปพ.6)
+  function pp6Buttons(rec) {
+    var ro = ctx.readOnly && ctx.readOnly();
+    function b(attr, ic, t, sub, cls) { return '<button class="btn act-b ' + (cls || '') + '" ' + attr + '><span class="ab-ic">' + ic + '</span><span class="ab-t"><b>' + t + '</b><small>' + sub + '</small></span></button>'; }
+    return '<div class="act-grid">' +
+      (ro ? '' : b('data-act="edit" data-key="' + esc(rec.key) + '"', '✏️', 'แก้ไขในระบบ', 'กรอก/แก้คะแนน ปพ.6 บนเว็บ ระบบคิดเกรดให้ทันที', 'pri')) +
+      b('data-rc="dlx"', '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.6 รูปแบบของโรงเรียน ไปพิมพ์หรือเก็บไว้') +
+      (ro ? '' : b('data-rc="replace"', '⇪', 'อัปโหลดไฟล์ ปพ.6', 'ไฟล์ Excel ที่กรอกในคอม ระบบใช้ไฟล์นี้แทนของเดิม')) +
+      b('data-rc="pdf-all"', '🖨', 'PDF ทั้งห้อง', 'ใบรายงานผลทุกคนในไฟล์เดียว') + '</div>';
+  }
   function chkItem(ok, title, text, more) {
     var ic = ok === true ? '✅' : ok === false ? '⚠️' : 'ℹ️';
     return '<div class="chk-it ' + (ok === true ? 'ok' : ok === false ? 'bad' : '') + '"><div class="chk-h">' + ic + ' <b>' + esc(title) + '</b></div><div class="chk-t">' + text + '</div>' +
@@ -525,7 +535,7 @@
         : '<div class="slot-acts"><button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button><button class="btn" data-rc="replace">อัปโหลดใหม่</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>');
     if (!hasT2) h += '<p class="note" style="margin-top:12px">ไฟล์นี้ยังไม่มีคะแนนภาคเรียนที่ 2 (ในไฟล์ Excel เกรดจึงขึ้น #VALUE!) เลือกได้ว่าจะคิดระดับผลการเรียนจากคะแนนภาคเรียนที่ 1 ไปก่อน หรือเว้นว่างไว้จนกว่าจะมีคะแนนครบ</p>';
     h += '</div>';
-    h += (ctx.howTo ? ctx.howTo('pp6') : '') + checkPanel(rec);
+    h += pp6Buttons(rec) + checkPanel(rec);
 
     // ---- พิมพ์ / ดาวน์โหลด: ทั้งห้อง กับ รายคน แยกกันชัดเจน ----
     var cur = d.students.filter(function (s) { return String(s.no) === String(preview.no); })[0] || d.students[0];
@@ -641,6 +651,7 @@
   window.PP6Report = {
     render: render,
     compute: function (rec, c) { ctx = c; return computeAll(rec, settingsOf(rec)); },
+    checkPanel: function (rec, c) { ctx = c; return checkPanel(rec); },
     computeWith: function (rec, c, over) { ctx = c; return computeAll(rec, Object.assign(settingsOf(rec), over || {})); }
   };
 })();

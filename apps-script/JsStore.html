@@ -65,7 +65,12 @@
       throw err;
     });
   }
-  window.PP5_LOGOUT = function () { setPin(''); try { localStorage.removeItem(PIN_KEY); } catch (e) {} location.reload(); };
+  // ออกจากระบบ → กลับหน้าแรกเสมอ · switchOnly = ล้างรหัสแล้วอยู่หน้าเดิม (เพื่อกดรหัสใหม่ตอนสลับระบบ)
+  window.PP5_LOGOUT = function (switchOnly) {
+    setPin(''); try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+    if (!switchOnly && window.PP5_HOME) { window.open(window.PP5_HOME, '_top'); return; }
+    location.reload();
+  };
 
   function blobToB64(blob) {
     return new Promise(function (res, rej) {

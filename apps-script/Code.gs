@@ -11,6 +11,8 @@
 // รหัสผ่านเข้าหลังบ้าน: ครู / ผู้ดูแลระบบหลัก (เปิด-ปิดทุกระบบได้)
 var TEACHER_PIN = '72030101';
 var ADMIN_PIN = '555666';
+// ผู้อำนวยการ: ดู/ติดตามงานได้ทุกห้อง แต่แก้ไขอะไรไม่ได้
+var DIRECTOR_PIN = '9987';
 // โฟลเดอร์หลักใน Google Drive: ระบบจะสร้างไฟล์และโฟลเดอร์ทั้งหมด "ภายในโฟลเดอร์นี้เท่านั้น"
 var ROOT_FOLDER_ID = '1HcYvW2C0e-sDZZ-fX7OpRIApfz6YiHSY';
 // โฟลเดอร์ไฟล์ต้นฉบับ ปพ.5 / ปพ.6 ปีที่แล้ว: ระบบ "อ่านอย่างเดียว" เพื่อใช้เป็นแม่แบบของแต่ละห้อง/วิชา
@@ -68,6 +70,7 @@ function roleOf_(pin) {
   pin = String(pin || '');
   if (ADMIN_PIN && pin === String(ADMIN_PIN)) return 'admin';
   if (TEACHER_PIN && pin === String(TEACHER_PIN)) return 'teacher';
+  if (DIRECTOR_PIN && pin === String(DIRECTOR_PIN)) return 'director';
   if (!TEACHER_PIN && !ADMIN_PIN) return 'admin';
   return null;
 }
@@ -85,6 +88,7 @@ function checkPin_(pin) {
 /** ตรวจรหัส + ระบบนั้นต้องเปิดอยู่ (ผู้ดูแลหลักทำได้เสมอ) */
 function need_(pin, flag) {
   var role = checkPin_(pin);
+  if (role === 'director') throw new Error('ผู้อำนวยการดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้');
   if (role !== 'admin' && flag && !flags_()[flag]) throw new Error('ปิดใช้งาน: ' + FLAG_DEFS[flag] + ' (ผู้ดูแลระบบปิดไว้)');
   return role;
 }
@@ -152,7 +156,7 @@ function api_ping(pin) {
   return { ok: true, rootUrl: role === 'admin' ? root.getUrl() : null, role: role, flags: flags_(), flagDefs: FLAG_DEFS, publicUrl: webUrl_(), curYear: curYear_(), curYearFixed: !!props_().getProperty('CUR_YEAR') };
 }
 /** จำนวนหลักของรหัส (ให้แป้นกดแสดงจุดครบ) — ไม่บอกตัวรหัส */
-function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length }; }
+function api_pinInfo() { return { teacher: String(TEACHER_PIN || '').length, admin: String(ADMIN_PIN || '').length, director: String(DIRECTOR_PIN || '').length }; }
 /** ตรวจรหัสจากแป้นตัวเลข (หน้าแรก/หลังบ้าน) */
 function api_checkPin(pin) {
   try { return { role: checkPin_(pin) }; } catch (e) { return { role: null, locked: /LOCKED/.test(e.message) }; }
@@ -203,7 +207,7 @@ function api_getData(pin, keys) {
   return out;
 }
 function api_saveSettings(pin, key, settingsJson) {
-  checkPin_(pin);
+  need_(pin, null);
   return withLock_(function () {
     var e = getEntry_(key);
     if (!e) throw new Error('ไม่พบไฟล์นี้ในระบบ');

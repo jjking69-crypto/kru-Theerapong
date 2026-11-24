@@ -173,22 +173,24 @@
     var byYear = {};
     S.entries.filter(function (e) { return e.slot === 'pp6'; }).forEach(function (e) { (byYear[e.year] = byYear[e.year] || []).push('ป.' + e.level + '/' + e.room); });
     var yrs = Object.keys(byYear).sort().reverse();
-    return '<section class="card sup-card imp-card"><h2>📥 นำเข้า ปพ.6 ย้อนหลัง</h2>' +
-      '<p class="sub">ใส่ผลการเรียนปีเก่า (เช่น ปี 2560–2568) ให้นักเรียนดูย้อนหลังได้ถึง ป.1 · เลือกไฟล์ ปพ.6 ได้ทีละหลายไฟล์ ระบบอ่านปี/ชั้น/ห้องจากในไฟล์ เก็บแยกตามปี และขึ้นหน้าประกาศผลให้เอง</p>' +
-      '<div class="slot-acts"><button class="btn pri imp-btn" id="supImpBtn">📂 เลือกไฟล์ ปพ.6 ปีเก่า (เลือกได้หลายไฟล์)</button></div>' +
+    return '<section class="card sup-card imp-card"><h2>📤 อัปโหลดไฟล์ ปพ.5 / ปพ.6 · นำเข้าย้อนหลัง</h2>' +
+      '<p class="sub">อัปโหลดไฟล์ ปพ.5 / ปพ.6 ปีปัจจุบัน หรือ ปพ.6 ปีเก่า (2560–2568) ให้นักเรียนดูย้อนหลังได้ถึง ป.1 · เลือกได้ทีละหลายไฟล์ ระบบอ่านปี/ชั้น/ห้อง/วิชาจากในไฟล์ เก็บแยกตามปี และขึ้นหน้าประกาศผลให้เอง · ทะเบียนรายชื่อ (.docx) อัปโหลดที่การ์ด "ทะเบียนรายชื่อนักเรียน"</p>' +
+      '<div class="slot-acts"><button class="btn pri imp-btn" id="supImpBtn">📂 เลือกไฟล์ ปพ.5 / ปพ.6 (เลือกได้หลายไฟล์)</button></div>' +
       '<input type="file" id="supImpFile" accept=".xlsx,.xlsm,.xls" multiple hidden>' +
       (IMP.rows.length ? '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th class="l">ไฟล์</th><th>ปีการศึกษา</th><th>ชั้น</th><th>นักเรียน</th><th class="l">ผล</th></tr></thead><tbody>' +
         IMP.rows.map(function (r) { return '<tr><td class="l">' + esc(r.name) + '</td><td>' + esc(r.year || '-') + '</td><td>' + esc(r.cls || '-') + '</td><td>' + esc(r.n == null ? '-' : r.n) + '</td><td class="l ' + (r.ok ? 'imp-ok' : r.busy ? '' : 'imp-bad') + '">' + esc(r.msg) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
       '<h3 class="sup-h3" style="margin-top:14px">ปพ.6 ที่มีในระบบแล้ว</h3>' +
       (yrs.length ? '<div class="imp-years">' + yrs.map(function (y) { return '<div><b>ปี ' + esc(y) + '</b> ' + byYear[y].sort().map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '</div>'; }).join('') + '</div>' : '<p class="sub">ยังไม่มี</p>') + '</section>';
   }
-  function impCtx(rec) {
+  function impCtx(rec, all) {
+    all = all || [rec];
     var cls = { year: rec.year, level: rec.level, room: rec.room };
-    var rc = { esc: esc, toast: toast, classRecords: function () { return []; }, pp6Record: function () { return rec; }, brand: function () { return null; }, sig: function () { return null; } };
-    return { esc: esc, toast: toast, store: function () { return DB; }, classInfo: function () { return cls; }, classRecords: function () { return []; }, pp6Record: function () { return rec; },
+    var p5 = all.filter(function (x) { return x.slot !== 'pp6'; }), p6 = all.filter(function (x) { return x.slot === 'pp6'; })[0] || null;
+    var rc = { esc: esc, toast: toast, classRecords: function () { return p5; }, pp6Record: function () { return p6; }, brand: function () { return null; }, sig: function () { return null; } };
+    return { esc: esc, toast: toast, store: function () { return DB; }, classInfo: function () { return cls; }, classRecords: function () { return p5; }, pp6Record: function () { return p6; },
       className: function () { return 'ป.' + cls.level + '/' + cls.room; }, reportCtx: rc,
       rosterById: function () { return S.roster && S.roster.data && window.PP5Roster ? PP5Roster.byId(S.roster.data) : {}; },   // เลขบัตร 4 ตัวท้ายจากทะเบียน (ยืนยันตัวตนผู้ปกครอง)
-      classRoster: function () { return null; } };
+      classRoster: function () { var c = S.roster && S.roster.data && window.PP5Roster ? PP5Roster.findClass(S.roster.data, cls.year, 'ป', cls.level, cls.room) : null; return c ? c.students : null; } };
   }
   async function importFiles(files) {
     IMP.rows = Array.prototype.map.call(files, function (f) { return { name: f.name, msg: 'รอ...', busy: true }; });
@@ -199,18 +201,27 @@
       try {
         var u8 = new Uint8Array(await f.arrayBuffer());
         var wb = XLSX.read(u8, { type: 'array' });
-        if (!PP6Parser.isPP6(wb)) throw new Error('ไม่ใช่ไฟล์ ปพ.6 (แบบรายงานผลรายบุคคล)');
-        var data = PP5Model.fillPP6(PP6Parser.parse(wb, u8), false), m = data.meta;
+        var is6 = PP6Parser.isPP6(wb), data, m, slot, fname;
+        if (is6) { data = PP5Model.fillPP6(PP6Parser.parse(wb, u8), false); m = data.meta; slot = 'pp6'; fname = (m.levelName || ('ป.' + m.level)) + '-' + m.room + '_ปพ6_รายงานผลรายบุคคล_ปี' + m.year + '.xlsx'; }
+        else {
+          data = PP5Model.fillPP5(PP5Parser.parseWorkbook(wb), false); m = data.meta;
+          slot = PP5Library.slotOf(m) || ('x-' + String(m.code || m.subject || 'วิชา').replace(/\s+/g, ''));
+          fname = (m.levelName || ('ป.' + m.level)) + '-' + m.room + '_' + (m.code || '') + '_' + (m.subject || '') + '_ปี' + m.year + '.xlsm';
+        }
         if (!m.year || !m.level || !m.room) throw new Error('ไม่พบปีการศึกษา/ชั้น/ห้องในไฟล์');
-        row.year = m.year; row.cls = 'ป.' + m.level + '/' + m.room; row.n = data.students.length;
-        var key = m.year + '|' + m.level + '|' + m.room + '|pp6', old = S.entries.filter(function (e) { return e.key === key; })[0];
-        var rec = { key: key, year: m.year, level: m.level, room: m.room, slot: 'pp6', data: data, origName: f.name, size: f.size, uploadedAt: Date.now(),
-          fileName: (m.levelName || ('ป.' + m.level)) + '-' + m.room + '_ปพ6_รายงานผลรายบุคคล_ปี' + m.year + '.xlsx', blob: new Blob([u8], { type: f.type || 'application/octet-stream' }) };
+        row.year = m.year; row.cls = 'ป.' + m.level + '/' + m.room + (is6 ? ' · ปพ.6' : ' · ' + (m.subject || '')); row.n = data.students.length;
+        var key = m.year + '|' + m.level + '|' + m.room + '|' + slot, old = S.entries.filter(function (e) { return e.key === key; })[0];
+        var rec = { key: key, year: m.year, level: m.level, room: m.room, slot: slot, data: data, origName: f.name, size: f.size, uploadedAt: Date.now(),
+          fileName: fname.replace(/[\\/:*?"<>|]+/g, '-'), blob: new Blob([u8], { type: f.type || 'application/octet-stream' }) };
         row.msg = 'กำลังบันทึก...'; render();
         var saved = await DB.put(rec);
         S.entries = S.entries.filter(function (e) { return e.key !== key; }).concat([saved || rec]);
         row.msg = 'กำลังขึ้นหน้าประกาศผล...'; render();
-        var pub = PP5Publish.compileClass(impCtx(rec));
+        // รวมทุกไฟล์ของห้องนี้ (ปพ.5 ทุกวิชา + ปพ.6) แล้วประกาศผลของห้อง
+        var cls = S.entries.filter(function (e) { return e.year === m.year && e.level === m.level && e.room === m.room && e.key !== key; }).map(function (e) { return { key: e.key, slot: e.slot, year: e.year, level: e.level, room: e.room }; });
+        if (cls.length) await DB.ensureData(cls);
+        cls.push(rec);
+        var pub = PP5Publish.compileClass(impCtx(rec, cls.filter(function (x) { return x.data; })));
         if (pub.students.length) await DB.publish(pub.key, pub);
         row.ok = true; row.busy = false; row.msg = (old ? '✓ แทนที่ของเดิม' : '✓ นำเข้าแล้ว') + ' · ประกาศผล ' + pub.students.length + ' คน';
       } catch (e) { row.ok = false; row.busy = false; row.msg = '✗ ' + (e && e.message ? e.message : e); }

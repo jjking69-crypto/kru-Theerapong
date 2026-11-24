@@ -229,30 +229,44 @@
     if (info.announcement) { $('pubAnn').textContent = info.announcement; $('pubAnn').hidden = false; }
     if (info.verify === 'id+nid4') $('pubNidRow').hidden = false;
     // มุมขวาบน: แท็บ "ครู" และ "แอดมิน" แยกกัน แต่ละแท็บรับเฉพาะรหัสของตัวเอง
+    var LOGIN = {
+      teacher: { t: '👩‍🏫 เข้าสู่ระบบครู', who: 'ครู', load: 'กำลังเปิดระบบครู...' },
+      admin: { t: '🛡 เข้าสู่ระบบแอดมิน', who: 'ผู้ดูแลระบบ', load: 'กำลังเปิดระบบแอดมิน...' },
+      director: { t: '👔 เข้าสู่ระบบผู้อำนวยการ', who: 'ผู้อำนวยการ', load: 'กำลังเปิดระบบผู้อำนวยการ...' }
+    };
     function login(want) {
+      var L = LOGIN[want] || LOGIN.teacher, n = info.pinLen && info.pinLen[want];
       var url = want === 'admin' ? (info.superUrl || '') : (info.adminUrl || '');
       if (!window.PP5PinPad) { if (url) window.open(url, '_top'); return; }
       PP5PinPad.ask({
-        title: want === 'admin' ? '🛡 เข้าสู่ระบบแอดมิน' : '👩‍🏫 เข้าสู่ระบบครู',
-        digits: (info.pinLen && info.pinLen[want]) || 0,
-        sub: want === 'admin' ? 'กดรหัสผู้ดูแลระบบ' + (info.pinLen && info.pinLen.admin ? ' ' + info.pinLen.admin + ' หลัก' : '') : 'กดรหัสครู' + (info.pinLen && info.pinLen.teacher ? ' ' + info.pinLen.teacher + ' หลัก' : ''), length: 12, autoSubmit: false,
+        title: L.t, digits: n || 0,
+        sub: 'กดรหัส' + L.who + (n ? ' ' + n + ' หลัก' : ''), length: 12, autoSubmit: false,
         check: function (p) {
           return call('api_checkPin', [p]).then(function (r) {
             var role = r && r.role;
             if (!role) return r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง';
-            if (want === 'admin' && role !== 'admin') return 'รหัสนี้เป็นรหัสครู กรุณาเลือกเข้าสู่ระบบแบบ "ครู"';
+            if (want === 'admin' && role !== 'admin') return 'รหัสนี้ไม่ใช่รหัสผู้ดูแลระบบ';
+            if (want === 'director' && role !== 'director') return 'รหัสนี้ไม่ใช่รหัสผู้อำนวยการ';
+            if (want === 'teacher' && role === 'director') return 'รหัสนี้เป็นของผู้อำนวยการ กรุณาเลือก "ผู้อำนวยการ"';
             return true;
           });
         }
       }).then(function (p) {
         if (p == null) return;
         try { localStorage.setItem(want === 'admin' ? 'pp5-admin-pin' : 'pp5-pin', p); } catch (e) {}
-        if (PP5PinPad.loading) PP5PinPad.loading(want === 'admin' ? 'กำลังเปิดระบบแอดมิน...' : 'กำลังเปิดระบบครู...');
+        if (PP5PinPad.loading) PP5PinPad.loading(L.load);
         if (url) window.open(url, '_top');
       });
     }
     var lb = $('pubLoginBtn'), lm = $('pubLoginMenu');
-    function menu(open) { if (!lm) return; lm.hidden = !open; if (lb) lb.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+    function menu(open) {
+      if (!lm) return;
+      lm.hidden = !open;
+      if (lb) lb.setAttribute('aria-expanded', open ? 'true' : 'false');
+      // วางเมนูแบบลอยอยู่บนสุดเสมอ (กันไปอยู่ด้านหลังเมื่อหน้าแสดงผลนักเรียนแล้ว)
+      if (open && lb && window.innerWidth > 520) { var r = lb.getBoundingClientRect(); lm.style.top = (r.bottom + 8) + 'px'; lm.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; }
+    }
+    window.addEventListener('scroll', function () { if (lm && !lm.hidden) menu(false); }, { passive: true });
     if (lb) lb.addEventListener('click', function (e) { e.stopPropagation(); menu(lm.hidden); });
     document.addEventListener('click', function (e) { if (lm && !lm.hidden && !e.target.closest('.pub-login')) menu(false); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu(false); });
