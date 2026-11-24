@@ -1,3 +1,36 @@
+var TPL_KEY_RE = /^pp[56](\|\d{1,2}(\|[A-Za-z0-9_\-]{1,40})?)?$/;
+function tplInfo_() {
+  var all = props_().getProperties(), out = {};
+  if (all.TPL_INFO) { try { var old = JSON.parse(all.TPL_INFO); Object.keys(old).forEach(function (k) { out[k] = old[k]; }); } catch (e) {} }
+  Object.keys(all).forEach(function (k) { if (k.indexOf('tpl:') === 0) { try { out[k.slice(4)] = JSON.parse(all[k]); } catch (e) {} } });
+  return out;
+}
+function api_templateInfo(pin) {
+  checkPin_(pin);
+  var info = tplInfo_(), out = {};
+  Object.keys(info).forEach(function (k) { out[k] = { name: info[k].name, savedAt: info[k].savedAt }; });
+  return out;
+}
+function api_getTemplate(pin, kind) {
+  checkPin_(pin);
+  var t = tplInfo_()[kind];
+  if (!t) return null;
+  try { return { name: t.name, b64: Utilities.base64Encode(DriveApp.getFileById(t.fileId).getBlob().getBytes()) }; } catch (e) { return null; }
+}
+function api_saveTemplate(pin, kind, b64, name) {
+  noKru_(need_(pin, null));
+  if (!TPL_KEY_RE.test(String(kind))) throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
+  return withLock_(function () {
+    var old = tplInfo_()[kind];
+    var folder = subFolder_(rootFolder_(), TPL_FOLDER_NAME);
+    var ext = kind.indexOf('pp5') === 0 ? '.xlsm' : '.xlsx';
+    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/octet-stream', 'แม่แบบ ' + kind.replace('pp5', 'ปพ.5').replace('pp6', 'ปพ.6').replace(/\|/g, ' ') + ext));
+    if (old && old.fileId) trashById_(old.fileId);
+    props_().setProperty('tpl:' + kind, JSON.stringify({ fileId: file.getId(), name: String(name || '').slice(0, 200), savedAt: Date.now() }));
+    return true;
+  });
+}
+
 // ===== ไฟล์ต้นฉบับของโรงเรียน (อ่านอย่างเดียว ไม่สร้าง/แก้ไขอะไรในโฟลเดอร์นี้) =====
 // ใช้เป็นแม่แบบรูปแบบต้นฉบับของแต่ละห้อง/วิชาโดยอัตโนมัติ
 function api_sourceList(pin) {
@@ -297,36 +330,4 @@ function timeline_(id, o) {
   Object.keys(ext).forEach(function (y) { y = +y; if (!years.some(function (x) { return x.year === y; })) years.push({ year: y, level: ext[y].level, className: ext[y].className || '', school: ext[y].school || '', external: ext[y] }); });
   years.sort(function (a, b) { return b.year - a.year; });
   return { id: id, name: who.name, first: who.first, years: years, curYear: cur };
-}
-
-// ===== ผลการเรียนจากโรงเรียนอื่น (นักเรียนย้ายเข้า) — ครู/แอดมินเพิ่มได้ =====
-function external_() { var t = readText_(props_().getProperty('EXT_ID')); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
-function api_saveExternal(pin, id, year, json) {
-  need_(pin, 'allowEdit');
-  id = String(id || '').replace(/\s+/g, ''); year = +year;
-  if (!id || !(year > 2500 && year < 2700)) throw new Error('ข้อมูลไม่ถูกต้อง');
-  var v = json ? JSON.parse(json) : null;
-  if (v && JSON.stringify(v).length > 20000) throw new Error('ข้อมูลยาวเกินไป');
-  return withLock_(function () {
-    var all = external_(), m = all[id] || {};
-    if (v) { v.savedAt = Date.now(); m[year] = v; } else delete m[year];
-    if (Object.keys(m).length) all[id] = m; else delete all[id];
-    props_().setProperty('EXT_ID', writeText_(subFolder_(rootFolder_(), DATA_FOLDER_NAME), 'external.json', props_().getProperty('EXT_ID'), JSON.stringify(all)));
-    return true;
-  });
-}
-
-// ===== ปีการศึกษาปัจจุบัน: ตามวันที่ (เปิดภาคเรียน พ.ค.) หรือที่แอดมินตั้ง =====
-function curYear_() {
-  var v = +props_().getProperty('CUR_YEAR');
-  if (v > 2500) return v;
-  var now = new Date(), y = +Utilities.formatDate(now, 'Asia/Bangkok', 'yyyy') + 543, m = +Utilities.formatDate(now, 'Asia/Bangkok', 'M');
-  return m < 5 ? y - 1 : y;
-}
-function api_setCurYear(pin, year) {
-  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
-  year = +year;
-  if (year && !(year > 2500 && year < 2700)) throw new Error('ปีไม่ถูกต้อง');
-  if (year) props_().setProperty('CUR_YEAR', String(year)); else props_().deleteProperty('CUR_YEAR');
-  return curYear_();
 }

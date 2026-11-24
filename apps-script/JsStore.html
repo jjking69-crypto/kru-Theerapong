@@ -4,6 +4,7 @@
   'use strict';
 
   // ไลบรารีสร้าง PDF โหลดจาก CDN (Apps Script เก็บไฟล์ใหญ่ไม่สะดวก)
+  window.PP5_PDFLIB = ['https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'];
   window.PP5_LIBS = [
     'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
     'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
@@ -161,6 +162,10 @@
     publicStatus: function () { return call('api_publicStatus'); },
     getPublicCfg: function () { return call('api_getPublicCfg'); },
     savePublicCfg: function (cfg) { return call('api_savePublicCfg', [JSON.stringify(cfg)]); },
+    // PDF รูปแบบไฟล์ Excel ต้นฉบับ (แปลงผ่าน Google Sheets บนเซิร์ฟเวอร์)
+    xpdfStart: async function (blob, name) { return call('api_xpdfStart', [await blobToB64(blob), name]); },
+    xpdfPart: function (id, gid, ranges, portrait) { return call('api_xpdfPart', [id, gid, ranges, portrait]); },
+    xpdfEnd: function (id) { return call('api_xpdfEnd', [id]); },
     saveOutput: async function (blob, name) {
       if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');
       return call('api_saveOutput', [name, await blobToB64(blob), blob.type || 'application/pdf']);

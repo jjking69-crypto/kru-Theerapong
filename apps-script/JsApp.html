@@ -329,6 +329,8 @@
   function years() {
     var ys = {};
     ys[curYear()] = 1;
+    // ปีเก่าย้อนไปถึง 2560 เลือกได้เสมอ (เพิ่ม/อัปเดต ปพ.6 ปีเก่า เช่น นักเรียนย้ายมาจากโรงเรียนอื่น)
+    for (var y0 = 2560; y0 < curYear(); y0++) ys[y0] = 1;
     records.forEach(function (r) { ys[r.year] = 1; });
     if (roster && roster.data && roster.data.year) ys[roster.data.year] = 1;
     var list = Object.keys(ys).map(Number).sort(function (a, b) { return b - a; });
@@ -646,6 +648,8 @@
   // PDF ปพ.5: ดาวน์โหลด + เก็บสำเนาใน Drive (รุ่น Apps Script)
   var pdfCtx = {
     toast: function (m, k) { toast(m, k); },
+    store: DB,
+    build: async function (rec) { return (await buildFile('pp5', rec.data)).blob; },
     brand: function () { return effBrand(); },
     sig: function (name) { var x = sigs[normName(name)]; return x ? x.img : null; },
     save: function (blob, name) {
@@ -973,7 +977,8 @@
         (dist.rest ? '' : '') + '</div>' +
         '<div class="slot-acts act-list">' +
         actBtn('open', '', rec.key, '👁', 'ดูคะแนน', 'คะแนนทุกตัวชี้วัด รวม และเกรด', 'pri') +
-        actBtn('pdf5', '', rec.key, '📄', 'PDF ปพ.5', 'ทั้งเล่ม ทุกหน้า พร้อมพิมพ์') +
+        actBtn('pdf5', '', rec.key, '📄', 'PDF ปพ.5', DB.xpdfStart ? 'รูปแบบไฟล์ Excel ต้นฉบับ ทุกชีต' : 'ทั้งเล่ม ทุกหน้า พร้อมพิมพ์') +
+        (DB.xpdfStart ? actBtn('pdf5b', '', rec.key, '🧾', 'PDF สรุปย่อ', 'ปก ตัวชี้วัด คะแนน สรุปผล (เร็ว)') : '') +
         (readOnly() ? actBtn('download', '', rec.key, '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.5 ของวิชานี้') :
           actBtn('edit', '', rec.key, '✏️', 'แก้ไข/กรอกต่อ', 'กรอกคะแนนเพิ่มบนเว็บ (เช่น เทอม 2)') +
           actBtn('replace', slot, '', '⇪', 'อัปโหลดไฟล์ใหม่', 'ไฟล์ Excel ใหม่ทับไฟล์เดิม') +
@@ -1492,10 +1497,13 @@
       else if (act === 'edit' && rec) PP5Editor.open({ kind: rec.slot === 'pp6' ? 'pp6' : 'pp5', key: rec.key }, editorCtx);
       else if (act === 'replace') pickFor(a.dataset.slot);
       else if (act === 'download' && rec) download(rec);
-      else if (act === 'pdf5' && rec) { if (rec.data) PP5Pdf.subject(rec, pdfCtx); }
+      // รุ่น Apps Script: PDF รูปแบบไฟล์ Excel ต้นฉบับ (ทุกชีต) · รุ่นในเครื่อง: เล่มสรุป
+      else if (act === 'pdf5' && rec) { if (rec.data) { if (DB.xpdfStart) PP5Pdf.excel(rec, pdfCtx); else PP5Pdf.subject(rec, pdfCtx); } }
+      else if (act === 'pdf5b' && rec) { if (rec.data) PP5Pdf.subject(rec, pdfCtx); }
       else if (act === 'pdf5all') {
         var mine = classRecords().filter(function (r) { return r.data && (!isKru() || mySlot(r.level, r.room, r.slot)); });
-        if (mine.length) PP5Pdf.classBook(mine, pdfCtx, 'ปพ.5_ป.' + state.level + '-' + state.room + '_ทุกวิชา_ปี' + state.year);
+        var nm = 'ปพ.5_ป.' + state.level + '-' + state.room + '_ทุกวิชา_ปี' + state.year;
+        if (mine.length) { if (DB.xpdfStart) PP5Pdf.excel(mine, pdfCtx, nm); else PP5Pdf.classBook(mine, pdfCtx, nm); }
       }
       else if (act === 'delete' && rec) {
         removeRecord(rec);
@@ -1679,8 +1687,24 @@
     state.level = null; state.room = null; state.student = null;
     if (DB.role !== 'director' && state.tab === 'track') state.tab = 'subjects';
     await kruFirstSetup();
+    // มาจากระบบแอดมิน "อัปเดต ปพ.6 ปีเก่า": เปิดห้อง/ปีนั้น แล้วเปิดหน้ากรอก ปพ.6 ทันที
+    var go = null;
+    try { go = JSON.parse(localStorage.getItem('pp5-goto') || 'null'); localStorage.removeItem('pp5-goto'); } catch (ge) { go = null; }
+    if (go && go.at > Date.now() - 600000 && go.year && go.level) {
+      state.year = +go.year; state.level = +go.level; state.room = +go.room || 1; state.tab = 'report';
+    } else go = null;
     render();
     bootDone();
+    if (go && go.edit && window.PP5Editor) {
+      var openGo = function () {
+        var p6 = pp6Record();
+        if (p6) PP5Editor.open({ kind: 'pp6', key: p6.key }, editorCtx); else PP5Editor.open({ kind: 'pp6', slot: 'pp6', intent: 'online' }, editorCtx);
+        if (go.section === 'roster') setTimeout(function () { var b = document.querySelector('.ed-steps [data-sec="roster"], .ed-steps [data-step="roster"]'); if (b) b.click(); }, 300);
+        toast('เปิด ปพ.6 ป.' + go.level + '/' + (go.room || 1) + ' ปีการศึกษา ' + go.year + ' · เพิ่มนักเรียนได้ที่ขั้น "นักเรียน" แล้วกรอกคะแนนภาค 1/2 และส่วนอื่น ๆ', 'info');
+      };
+      var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+      if (need.length && DB.ensureData) DB.ensureData(need).then(function () { render(); openGo(); }, openGo); else openGo();
+    }
   })();
 })();
 

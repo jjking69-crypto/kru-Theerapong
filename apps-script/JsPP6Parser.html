@@ -80,7 +80,39 @@
   function round(v, d) { if (v == null) return null; var p = Math.pow(10, d == null ? 2 : d); return Math.round(v * p) / p; }
 
   // ---------- ผลสัมฤทธิ์รายภาค ----------
-  function parseTerm(ws) {
+  // ตารางรหัสวิชาในชีต "ข้อมูลทั้งหมด" (ไฟล์รุ่นเก่าที่ชีตผลสัมฤทธิ์ไม่มีแถวรหัสวิชา)
+  //   แถวหัว = ชื่อวิชา · แถว "ป.N" = รหัสวิชาของชั้นนั้น ในคอลัมน์เดียวกัน
+  function codeTable(ws, level) {
+    var out = { byName: {}, list: [] };
+    if (!ws || !level) return out;
+    var b = bounds(ws);
+    for (var r = 0; r <= Math.min(b.e.r, 60); r++) for (var c = 0; c <= Math.min(b.e.c, 40); c++) {
+      if (norm(cell(ws, r, c)) !== 'ป.' + level) continue;
+      var codes = [];
+      for (var cc = c + 1; cc <= c + 20; cc++) {
+        var v = str(cell(ws, r, cc)).replace(/\s+/g, '');
+        if (!/^[ก-ฮ]\d{5}$/.test(v)) { if (codes.length) break; continue; }
+        codes.push({ c: cc, code: v });
+      }
+      if (codes.length < 5) continue;
+      for (var hr = r - 1; hr >= Math.max(0, r - 12); hr--) {
+        var hit = codes.filter(function (x) { return str(cell(ws, hr, x.c)); }).length;
+        if (hit >= codes.length / 2) { codes.forEach(function (x) { var nm = norm(cell(ws, hr, x.c)); if (nm) out.byName[nm] = x.code; }); break; }
+      }
+      out.list = codes.map(function (x) { return x.code; });
+      return out;
+    }
+    return out;
+  }
+  // รหัสมาตรฐานจากชื่อวิชา (สำรองเมื่อไม่มีตารางรหัส)
+  var STD_CODE = [[/^ภาษาไทย/, 'ท', '101'], [/^คณิต/, 'ค', '101'], [/^วิทยาศาสตร์/, 'ว', '101'], [/^สังคม/, 'ส', '101'], [/^ประวัติ/, 'ส', '102'], [/^สุขศึกษา/, 'พ', '101'], [/^ศิลปะ/, 'ศ', '101'], [/^การงาน/, 'ง', '101'], [/^ภาษาอังกฤษ(พื้นฐาน)?$/, 'อ', '101']];
+  function stdCode(name, level) {
+    var n = norm(name);
+    for (var i = 0; i < STD_CODE.length; i++) if (STD_CODE[i][0].test(n)) return STD_CODE[i][1] + '1' + level + STD_CODE[i][2];
+    return '';
+  }
+
+  function parseTerm(ws, codeFor) {
     var out = { subjects: [], byNo: {}, students: [], info: {} };
     if (!ws) return out;
     var h = header(ws);
@@ -94,7 +126,13 @@
     for (var c = 0; c <= b.e.c; c++) {
       if (norm(cell(ws, hr + 2, c)) === 'เก็บ' && norm(cell(ws, hr + 2, c + 1)) === 'สอบ') {
         var name = cell(ws, hr, c), code = cell(ws, hr + 1, c);
-        if (!code || code === 0 || name === 0) continue;
+        if (code === 0 || name === 0) continue;
+        if (!code) {
+          // ไฟล์รุ่นเก่า (เช่น ปี 2566): ไม่มีแถวรหัสวิชา → หารหัสจากชื่อวิชา
+          if (!name || !codeFor) continue;
+          code = codeFor(str(name), out.subjects.length, out.info);
+          if (!code) continue;
+        }
         out.subjects.push({ name: name ? str(name) : '', code: str(code).replace(/\s+/g, ''), col: c, slot: out.subjects.length });
       }
     }
@@ -414,9 +452,19 @@
   }
 
   function parse(wb, buf) {
-    var t1 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1'));
+    var ct = null, used = {};
+    function codeFor(name, i, info) {
+      var lm = String(info.className || '').match(/(\d+)/), level = lm ? +lm[1] : null;
+      if (!ct) ct = codeTable(sheet(wb, 'ข้อมูลทั้งหมด'), level);
+      var code = ct.byName[norm(name)] || ct.list[i] || stdCode(name, level) || ('X' + (i + 1));
+      if (used[code] && used[code] !== norm(name)) code = code + '-' + (i + 1);   // กันรหัสซ้ำ (คนละวิชา)
+      used[code] = norm(name);
+      return code;
+    }
+    var t1 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 1'), codeFor);
     if (!t1.students.length) throw new Error('ไม่พบรายชื่อนักเรียนในชีต "ผลสัมฤทธิ์ฯ เทอม 1"');
-    var t2 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 2'));
+    used = {};
+    var t2 = parseTerm(sheet(wb, 'ผลสัมฤทธิ์ฯ เทอม 2'), codeFor);
     // ไฟล์ที่ยังไม่เคยคำนวณ: ภาค 2 = คะแนนทั้งปี (ตารางล่างของชีตเทอม 1) - ภาค 1
     var hasT2 = Object.keys(t2.byNo).some(function (no) { var x = t2.byNo[no]; return Object.keys(x).some(function (k) { return x[k] && x[k].total != null; }); });
     if (!hasT2) {

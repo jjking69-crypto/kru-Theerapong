@@ -302,35 +302,44 @@ function api_saveOutput(pin, name, b64, mime) {
 
 // ===== แม่แบบรูปแบบต้นฉบับ (ปพ.5 ครูหนุ่ม / ปพ.6 ของโรงเรียน) =====
 // คีย์แม่แบบ: "pp5|ชั้น|วิชา" / "pp6|ชั้น" (แม่แบบของห้อง/วิชานั้นจากโฟลเดอร์ต้นฉบับ) หรือ "pp5" / "pp6" (ใช้ได้ทุกชั้น)
-var TPL_KEY_RE = /^pp[56](\|\d{1,2}(\|[A-Za-z0-9_\-]{1,40})?)?$/;
-function tplInfo_() {
-  var all = props_().getProperties(), out = {};
-  if (all.TPL_INFO) { try { var old = JSON.parse(all.TPL_INFO); Object.keys(old).forEach(function (k) { out[k] = old[k]; }); } catch (e) {} }
-  Object.keys(all).forEach(function (k) { if (k.indexOf('tpl:') === 0) { try { out[k.slice(4)] = JSON.parse(all[k]); } catch (e) {} } });
-  return out;
-}
-function api_templateInfo(pin) {
+// ===== ปพ.5 เป็น PDF "รูปแบบไฟล์ Excel ต้นฉบับ" (แปลงไฟล์ผ่าน Google Sheets แล้วส่งออกทีละหน้า) =====
+//   ต้องเปิด "บริการ Drive API" ในโปรเจกต์ Apps Script (เมนู บริการ + → Drive API) — ใช้แปลง .xlsm เป็น Google Sheets ชั่วคราว
+var XPDF_FOLDER_NAME = '_ไฟล์ชั่วคราว PDF (ลบได้)';
+function api_xpdfStart(pin, b64, name) {
   checkPin_(pin);
-  var info = tplInfo_(), out = {};
-  Object.keys(info).forEach(function (k) { out[k] = { name: info[k].name, savedAt: info[k].savedAt }; });
-  return out;
+  if (typeof Drive === 'undefined' || !Drive.Files) throw new Error('NEED_DRIVE_API');
+  var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'application/vnd.ms-excel.sheet.macroEnabled.12', safeName_(name || 'pp5.xlsm'));
+  var folder = subFolder_(rootFolder_(), XPDF_FOLDER_NAME);
+  var f = Drive.Files.create({ name: 'ชั่วคราว ' + safeName_(name || 'ปพ.5'), mimeType: 'application/vnd.google-apps.spreadsheet', parents: [folder.getId()] }, blob);
+  var id = f.id || f.getId && f.getId();
+  cache_().put('xpdf:' + id, '1', 3600);
+  var sheets = {};
+  SpreadsheetApp.openById(id).getSheets().forEach(function (sh) { sheets[sh.getName()] = { gid: sh.getSheetId(), rows: sh.getMaxRows(), cols: sh.getMaxColumns() }; });
+  return { id: id, sheets: sheets };
 }
-function api_getTemplate(pin, kind) {
+/** ส่งออกหลายช่วงของชีตเดียว: ranges = [[r1,c1,r2,c2], ...] (เริ่ม 0, ไม่รวมตัวท้าย) → PDF base64 ทีละช่วง */
+function api_xpdfPart(pin, id, gid, ranges, portrait) {
   checkPin_(pin);
-  var t = tplInfo_()[kind];
-  if (!t) return null;
-  try { return { name: t.name, b64: Utilities.base64Encode(DriveApp.getFileById(t.fileId).getBlob().getBytes()) }; } catch (e) { return null; }
-}
-function api_saveTemplate(pin, kind, b64, name) {
-  noKru_(need_(pin, null));
-  if (!TPL_KEY_RE.test(String(kind))) throw new Error('ชนิดแม่แบบไม่ถูกต้อง');
-  return withLock_(function () {
-    var old = tplInfo_()[kind];
-    var folder = subFolder_(rootFolder_(), TPL_FOLDER_NAME);
-    var ext = kind.indexOf('pp5') === 0 ? '.xlsm' : '.xlsx';
-    var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/octet-stream', 'แม่แบบ ' + kind.replace('pp5', 'ปพ.5').replace('pp6', 'ปพ.6').replace(/\|/g, ' ') + ext));
-    if (old && old.fileId) trashById_(old.fileId);
-    props_().setProperty('tpl:' + kind, JSON.stringify({ fileId: file.getId(), name: String(name || '').slice(0, 200), savedAt: Date.now() }));
-    return true;
+  if (!cache_().get('xpdf:' + id)) throw new Error('หมดเวลาสร้าง PDF กรุณาลองใหม่');
+  var tok = ScriptApp.getOAuthToken(), out = [];
+  (ranges || []).slice(0, 30).forEach(function (r) {
+    var url = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/export?format=pdf&gid=' + (+gid) +
+      '&r1=' + (+r[0]) + '&c1=' + (+r[1]) + '&r2=' + (+r[2]) + '&c2=' + (+r[3]) +
+      '&size=A4&portrait=' + (portrait === false ? 'false' : 'true') + '&scale=2&gridlines=false&printtitle=false&sheetnames=false' +
+      '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.4&bottom_margin=0.4&left_margin=0.35&right_margin=0.35';
+    var res = null;
+    for (var t = 0; t < 5; t++) {
+      res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) break;
+      Utilities.sleep(1200 * (t + 1));   // ส่งออกถี่เกินไป (429) → รอแล้วลองใหม่
+    }
+    if (res.getResponseCode() !== 200) throw new Error('ส่งออก PDF ไม่สำเร็จ (รหัส ' + res.getResponseCode() + ')');
+    out.push(Utilities.base64Encode(res.getBlob().getBytes()));
   });
+  return out;
+}
+function api_xpdfEnd(pin, id) {
+  checkPin_(pin);
+  if (cache_().get('xpdf:' + id)) { trashById_(id); cache_().remove('xpdf:' + id); }
+  return true;
 }

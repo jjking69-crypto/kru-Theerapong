@@ -194,7 +194,8 @@
     var d = ed.data;
     el.innerHTML = tools('<button class="btn" data-ed="addStu" data-n="1">+ เพิ่ม 1 คน</button><button class="btn" data-ed="addStu" data-n="10">+ เพิ่ม 10 คน</button>' +
       '<button class="btn danger" data-ed="delStu">ลบคนสุดท้าย</button><button class="btn" data-ed="pullRoster">' + (ctx.masterRoster && ctx.masterRoster() ? 'ใช้รายชื่อจากทะเบียน (ข้อมูล ' + esc(ctx.masterRoster().date) + ')' : 'ดึงรายชื่อจากไฟล์อื่นของห้องนี้') + '</button>') +
-      hint('เลขประจำตัวนักเรียนใช้ค้นหาผลในหน้าประกาศผล · เลขบัตรประชาชน 4 ตัวท้ายใช้ยืนยันตัวตนผู้ปกครอง (ถ้าเปิดใช้) · คัดลอกหลายแถวจาก Excel มาวางได้') + '<div class="ed-g"></div>';
+      hint('เลขประจำตัวนักเรียนใช้ค้นหาผลในหน้าประกาศผล · เลขบัตรประชาชน 4 ตัวท้ายใช้ยืนยันตัวตนผู้ปกครอง (ถ้าเปิดใช้) · คัดลอกหลายแถวจาก Excel มาวางได้' +
+        (ed.kind === 'pp6' ? '<br>➕ <b>นักเรียนที่ย้ายมาจากโรงเรียนอื่น</b>: กด "+ เพิ่ม 1 คน" ใส่เลขประจำตัวและชื่อ แล้วกรอกคะแนนจากโรงเรียนเดิมที่ขั้น "คะแนนภาค 1 / ภาค 2" และส่วนอื่น ๆ (เวลาเรียน คุณลักษณะ ฯลฯ) · ตั้งสถานะเป็น "ย้ายเข้า" ได้' : '')) + '<div class="ed-g"></div>';
     grid(el.querySelector('.ed-g'), {
       corner: 'เลขที่', rows: d.students,
       cols: [

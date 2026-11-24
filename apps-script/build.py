@@ -110,7 +110,11 @@ def build():
         'timeZone': 'Asia/Bangkok',
         'exceptionLogging': 'STACKDRIVER',
         'runtimeVersion': 'V8',
-        'oauthScopes': ['https://www.googleapis.com/auth/drive'],
+        # บริการ Drive API (แปลงไฟล์ Excel เป็น Google Sheets ชั่วคราว เพื่อสร้าง PDF รูปแบบต้นฉบับ)
+        'dependencies': {'enabledAdvancedServices': [{'userSymbol': 'Drive', 'version': 'v3', 'serviceId': 'drive'}]},
+        'oauthScopes': ['https://www.googleapis.com/auth/drive',
+                        'https://www.googleapis.com/auth/spreadsheets',
+                        'https://www.googleapis.com/auth/script.external_request'],
         'webapp': {'executeAs': 'USER_DEPLOYING', 'access': 'ANYONE'},
     }
     (HERE / 'appsscript.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

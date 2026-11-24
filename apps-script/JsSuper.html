@@ -101,6 +101,29 @@
   }
 
   // ปีการศึกษาปัจจุบัน (ระบบคิดจากวันที่ หรือแอดมินกำหนดเอง — รองรับการใช้งานต่อเนื่องหลายปี)
+  // ---------- อัปเดต / เพิ่ม ปพ.6 ปีเก่า (เช่น นักเรียนย้ายมาจากโรงเรียนอื่น) ----------
+  function oldPP6Card() {
+    var cy = DB.curYear || 2569, ys = []; for (var y = cy; y >= 2560; y--) ys.push(y);
+    var cls = [];
+    if (S.roster && S.roster.data) S.roster.data.classes.forEach(function (c) { if (c.stage === 'ป') cls.push(c.level + '/' + c.room); });
+    if (!cls.length) for (var l = 1; l <= 6; l++) cls.push(l + '/1', l + '/2');
+    var have = {}; S.entries.forEach(function (e) { if (e.slot === 'pp6') have[e.year + '|' + e.level + '/' + e.room] = 1; });
+    var oy = S.oldY || cy - 1;
+    return '<section class="card sup-card" id="supOld6"><h2>✏️ อัปเดต ปพ.6 ปีเก่า</h2>' +
+      '<p class="sub">เพิ่มรายชื่อนักเรียน (เช่น ย้ายมาจากโรงเรียนอื่น) และแก้คะแนน เวลาเรียน คุณลักษณะ ฯลฯ ใน ปพ.6 ของปีที่ผ่านมา · บันทึกแล้วหน้าประกาศผลอัปเดตตาม · ยังไม่มีไฟล์ของห้องนั้น = สร้างใหม่ได้</p>' +
+      '<div class="old6"><label>ปีการศึกษา<select id="supOldY">' + ys.map(function (y) { return '<option' + (y === +oy ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select></label>' +
+      '<div class="old6-c">' + cls.map(function (c) { var h = have[oy + '|' + c]; return '<button class="btn' + (h ? ' has' : '') + '" data-old6="' + c + '" title="' + (h ? 'มีไฟล์ ปพ.6 แล้ว — เปิดแก้ไข' : 'ยังไม่มี — สร้างใหม่') + '">ป.' + c + (h ? ' ✓' : '') + '</button>'; }).join('') + '</div></div>' +
+      '<p class="sub" style="margin-top:6px">✓ = มี ปพ.6 ในระบบแล้ว · กดห้องเพื่อเปิดหน้ากรอก ปพ.6 (เปิดในระบบครูด้วยสิทธิ์แอดมิน)</p></section>';
+  }
+  function openOld6(c) {
+    var p = c.split('/'), y = +(S.oldY || $('supOldY').value);
+    try {
+      localStorage.setItem('pp5-goto', JSON.stringify({ year: y, level: +p[0], room: +p[1], edit: true, section: 'roster', at: Date.now() }));
+      var ap = localStorage.getItem('pp5-admin-pin'); if (ap) localStorage.setItem('pp5-pin', ap);
+    } catch (e) {}
+    var base = window.PP5_HOME || '';
+    if (base) window.open(base + '?page=admin', '_top'); else toast('ไม่พบลิงก์ระบบครู', 'err');
+  }
   function yearCard() {
     var fixed = DB.curYearFixed;
     return '<section class="card sup-card"><h2>📅 ปีการศึกษาปัจจุบัน</h2><p class="sub">ระบบเปลี่ยนปีให้เองทุกวันที่ 1 พ.ค. (รองรับการใช้งานต่อไปอีกหลายปี) · ถ้าต้องการเปลี่ยนก่อน/หลังกำหนด ตั้งเองได้</p>' +
@@ -313,7 +336,7 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + oldPP6Card() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
@@ -323,12 +346,14 @@
     };
     main.onchange = async function (e) {
       if (e.target.dataset.flag) return saveFlags();
+      if (e.target.id === 'supOldY') { S.oldY = +e.target.value; render(); var c6 = $('supOld6'); if (c6) c6.scrollIntoView({ block: 'start' }); return; }
       if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
       if (e.target.id === 'supImgFile' && e.target.files[0]) return uploadImg(e.target.files[0]);
       if (e.target.id === 'supImpFile' && e.target.files.length) { var fl = Array.prototype.slice.call(e.target.files); e.target.value = ''; return importFiles(fl); }
     };
     main.onclick = function (e) {
       if (kruClick(e)) return;
+      var o6 = e.target.closest('[data-old6]'); if (o6) { openOld6(o6.dataset.old6); return; }
       var b = e.target.closest('[data-fl]');
       if (b) { Array.prototype.forEach.call(main.querySelectorAll('[data-flag]'), function (c) { c.checked = b.dataset.fl === 'all1'; }); saveFlags(); return; }
       var up = e.target.closest('[data-up]'), rm = e.target.closest('[data-rm]');

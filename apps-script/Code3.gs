@@ -1,3 +1,35 @@
+// ===== ผลการเรียนจากโรงเรียนอื่น (นักเรียนย้ายเข้า) — ครู/แอดมินเพิ่มได้ =====
+function external_() { var t = readText_(props_().getProperty('EXT_ID')); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
+function api_saveExternal(pin, id, year, json) {
+  need_(pin, 'allowEdit');
+  id = String(id || '').replace(/\s+/g, ''); year = +year;
+  if (!id || !(year > 2500 && year < 2700)) throw new Error('ข้อมูลไม่ถูกต้อง');
+  var v = json ? JSON.parse(json) : null;
+  if (v && JSON.stringify(v).length > 20000) throw new Error('ข้อมูลยาวเกินไป');
+  return withLock_(function () {
+    var all = external_(), m = all[id] || {};
+    if (v) { v.savedAt = Date.now(); m[year] = v; } else delete m[year];
+    if (Object.keys(m).length) all[id] = m; else delete all[id];
+    props_().setProperty('EXT_ID', writeText_(subFolder_(rootFolder_(), DATA_FOLDER_NAME), 'external.json', props_().getProperty('EXT_ID'), JSON.stringify(all)));
+    return true;
+  });
+}
+
+// ===== ปีการศึกษาปัจจุบัน: ตามวันที่ (เปิดภาคเรียน พ.ค.) หรือที่แอดมินตั้ง =====
+function curYear_() {
+  var v = +props_().getProperty('CUR_YEAR');
+  if (v > 2500) return v;
+  var now = new Date(), y = +Utilities.formatDate(now, 'Asia/Bangkok', 'yyyy') + 543, m = +Utilities.formatDate(now, 'Asia/Bangkok', 'M');
+  return m < 5 ? y - 1 : y;
+}
+function api_setCurYear(pin, year) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  year = +year;
+  if (year && !(year > 2500 && year < 2700)) throw new Error('ปีไม่ถูกต้อง');
+  if (year) props_().setProperty('CUR_YEAR', String(year)); else props_().deleteProperty('CUR_YEAR');
+  return curYear_();
+}
+
 // ===== ที่เก็บไฟล์ใน Drive (แสดงเฉพาะหน้าแอดมิน) =====
 function api_folderLinks(pin) {
   if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');

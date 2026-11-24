@@ -205,7 +205,102 @@
       if (ctx.toast) ctx.toast('สร้าง PDF ไม่สำเร็จ: ' + (e && e.message ? e.message : e), 'err');
     } finally { ld.done(); busy = false; }
   }
+  // ---------- PDF รูปแบบไฟล์ Excel ต้นฉบับ (ทุกชีตตามหน้ากระดาษของไฟล์) ----------
+  function loadOne(list) {
+    list = [].concat(list);
+    return list.reduce(function (p, src) {
+      return p.catch(function () {
+        return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+      });
+    }, Promise.reject());
+  }
+  function colIdx(l) { var n = 0; for (var i = 0; i < l.length; i++) n = n * 26 + (l.charCodeAt(i) - 64); return n - 1; }
+  function attr(x, k) { var m = x.match(new RegExp('\\b' + k + '="([^"]*)"')); return m ? m[1] : null; }
+  // อ่านลำดับชีต การซ่อน ขนาดพื้นที่ แนวกระดาษ และตัวแบ่งหน้า จากไฟล์ .xlsm
+  async function layoutOf(zip) {
+    var wb = await zip.file('xl/workbook.xml').async('string'), rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    var rid = {}; (rels.match(/<Relationship [^>]*>/g) || []).forEach(function (r) { rid[attr(r, 'Id')] = attr(r, 'Target'); });
+    var out = [];
+    var sheets = wb.match(/<sheet [^>]*>/g) || [];
+    for (var i = 0; i < sheets.length; i++) {
+      var sh = sheets[i], name = attr(sh, 'name').replace(/&amp;/g, '&'), state = attr(sh, 'state');
+      if (state === 'hidden' || state === 'veryHidden' || /^(ตั้งค่า|สารบัญ|อ่านก่อน)/.test(name)) continue;
+      var t = (rid[attr(sh, 'r:id')] || '').replace(/^\/?xl\//, ''), f = zip.file('xl/' + t);
+      if (!f) continue;
+      var x = await f.async('string');
+      var dim = (x.match(/<dimension ref="([^"]+)"/) || [])[1] || '', m = dim.match(/:?([A-Z]+)(\d+)$/);
+      var ps = (x.match(/<pageSetup[^>]*>/) || [''])[0];
+      var brk = function (tag) { var b = (x.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)</' + tag + '>')) || [])[1] || ''; return (b.match(/<brk [^>]*>/g) || []).map(function (q) { return +attr(q, 'id'); }).filter(function (v) { return v > 0; }); };
+      out.push({ name: name, rows: m ? +m[2] : 0, cols: m ? colIdx(m[1]) + 1 : 0, portrait: attr(ps, 'orientation') !== 'landscape', rowBrk: brk('rowBreaks'), colBrk: brk('colBreaks') });
+    }
+    // หน้าปกขึ้นก่อน (เหมือนการพิมพ์เล่ม ปพ.5)
+    out.sort(function (a, b) { return (/^ปกหน้า/.test(b.name) ? 1 : 0) - (/^ปกหน้า/.test(a.name) ? 1 : 0); });
+    return out;
+  }
+  function segs(brks, n) { var cut = [0].concat(brks.filter(function (v) { return v < n; }).sort(function (a, b) { return a - b; })), o = []; for (var i = 0; i < cut.length; i++) { var e = i + 1 < cut.length ? cut[i + 1] : n; if (e > cut[i]) o.push([cut[i], e]); } return o; }
+  // ฟอนต์ TH SarabunPSK ไม่มีใน Google Sheets → ใช้ Sarabun (ฟอนต์เดียวกันจาก Google) ขนาดเทียบเท่า
+  async function fixFonts(zip) {
+    var f = zip.file('xl/styles.xml'); if (!f) return;
+    var x = await f.async('string');
+    x = x.replace(/<font>([\s\S]*?)<\/font>|<font ([^>]*)>([\s\S]*?)<\/font>/g, function (all) {
+      if (!/<name val="(TH Sarabun[^"]*|Angsana New|AngsanaUPC|TH Niramit AS)"/.test(all)) return all;
+      return all.replace(/<name val="[^"]*"/, '<name val="Sarabun"').replace(/<sz val="([\d.]+)"/, function (q, v) { return '<sz val="' + Math.max(6, Math.round(+v * 0.78 * 2) / 2) + '"'; });
+    });
+    zip.file('xl/styles.xml', x);
+  }
+  async function excelPdf(recs, ctx, fileName) {
+    if (busy) return; busy = true;
+    recs = [].concat(recs);
+    var ld = window.PP5PinPad && PP5PinPad.loading ? PP5PinPad.loading('กำลังเตรียมไฟล์ Excel ต้นฉบับ...') : { set: function () {}, done: function () {} };
+    var store = ctx.store, id = null;
+    try {
+      await loadLibs();
+      if (!window.PDFLib) await loadOne(window.PP5_PDFLIB || ['vendor/pdf-lib.min.js']);
+      var out = await window.PDFLib.PDFDocument.create(), pages = 0;
+      for (var ri = 0; ri < recs.length; ri++) {
+      var rec = recs[ri], tag = recs.length > 1 ? '(' + (ri + 1) + '/' + recs.length + ') ' + rec.data.meta.subject + ' · ' : '';
+      ld.set(tag + 'กำลังเตรียมไฟล์ Excel ต้นฉบับ...');
+      var blob = await ctx.build(rec);
+      var zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
+      var lay = await layoutOf(zip);
+      await fixFonts(zip);
+      var up = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      ld.set(tag + 'กำลังแปลงไฟล์บน Google Drive...');
+      var st = await store.xpdfStart(up, nameOf(rec) + '.xlsm');
+      id = st.id;
+      for (var i = 0; i < lay.length; i++) {
+        var L = lay[i], g = st.sheets[L.name];
+        if (!g) continue;
+        var R = segs(L.rowBrk, L.rows || g.rows), C = segs(L.colBrk, L.cols || g.cols), ranges = [];
+        C.forEach(function (c) { R.forEach(function (r) { ranges.push([r[0], c[0], r[1], c[1]]); }); });   // ลงก่อนแล้วไปขวา (แบบ Excel)
+        ld.set(tag + 'กำลังสร้าง PDF ชีต ' + (i + 1) + '/' + lay.length + ' : ' + L.name);
+        var parts = await store.xpdfPart(id, g.gid, ranges, L.portrait);
+        for (var k = 0; k < parts.length; k++) {
+          var src = await window.PDFLib.PDFDocument.load(Uint8Array.from(atob(parts[k]), function (ch) { return ch.charCodeAt(0); }));
+          var cp = await out.copyPages(src, src.getPageIndices());
+          cp.forEach(function (pg) { out.addPage(pg); pages++; });
+        }
+      }
+      try { await store.xpdfEnd(id); } catch (e3) {}
+      id = null;
+      }
+      if (!pages) throw new Error('ไม่มีหน้าที่พิมพ์ได้ในไฟล์นี้');
+      var bytes = await out.save();
+      if (ctx.save) ctx.save(new Blob([bytes], { type: 'application/pdf' }), (recs.length > 1 ? fileSafe(fileName || 'ปพ.5 ทุกวิชา') : nameOf(recs[0])) + '_รูปแบบต้นฉบับ.pdf');
+      if (ctx.toast) ctx.toast('สร้าง PDF ปพ.5 รูปแบบต้นฉบับแล้ว ' + pages + ' หน้า' + (recs.length > 1 ? ' (' + recs.length + ' วิชา)' : ''), 'ok');
+    } catch (e) {
+      console.error(e);
+      var m = e && e.message ? e.message : String(e);
+      if (/NEED_DRIVE_API/.test(m)) m = 'ต้องเปิด "Drive API" ในโปรเจกต์ Apps Script ก่อน (เมนูซ้าย "บริการ" กด + เลือก Drive API แล้วกดเพิ่ม)';
+      if (ctx.toast) ctx.toast('สร้าง PDF รูปแบบต้นฉบับไม่สำเร็จ: ' + m, 'err');
+    } finally {
+      if (id) { try { await store.xpdfEnd(id); } catch (e2) {} }
+      ld.done(); busy = false;
+    }
+  }
+
   window.PP5Pdf = {
+    excel: excelPdf, layoutOf: layoutOf, segs: segs,
     pagesOf: pagesOf, fit: fit, css: injectCss,
     subject: function (rec, ctx) { return run([rec], ctx, nameOf(rec)); },
     classBook: function (recs, ctx, name) { return run(recs, ctx, fileSafe(name || 'ปพ.5 ทุกวิชา')); }
