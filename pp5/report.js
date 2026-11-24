@@ -524,7 +524,7 @@
         : '<div class="slot-acts"><button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">แก้ไขในระบบ</button><button class="btn" data-rc="replace">อัปโหลดใหม่</button><button class="btn" data-rc="dlx">ดาวน์โหลดไฟล์ Excel</button><button class="btn danger" data-rc="delete">ลบ</button></div>');
     if (!hasT2) h += '<p class="note" style="margin-top:12px">ไฟล์นี้ยังไม่มีคะแนนภาคเรียนที่ 2 (ในไฟล์ Excel เกรดจึงขึ้น #VALUE!) เลือกได้ว่าจะคิดระดับผลการเรียนจากคะแนนภาคเรียนที่ 1 ไปก่อน หรือเว้นว่างไว้จนกว่าจะมีคะแนนครบ</p>';
     h += '</div>';
-    h += checkPanel(rec);
+    h += (ctx.howTo ? ctx.howTo('pp6') : '') + checkPanel(rec);
 
     // ---- พิมพ์ / ดาวน์โหลด: ทั้งห้อง กับ รายคน แยกกันชัดเจน ----
     var cur = d.students.filter(function (s) { return String(s.no) === String(preview.no); })[0] || d.students[0];

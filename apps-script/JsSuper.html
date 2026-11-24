@@ -167,6 +167,68 @@
       render();
     } catch (e) { toast('ดึงไม่สำเร็จ: ' + e.message, 'err'); btn.disabled = false; msg.textContent = ''; }
   }
+  // ===== นำเข้า ปพ.6 ย้อนหลัง (ปีการศึกษาเก่า) — เฉพาะแอดมิน =====
+  var IMP = { rows: [] };
+  function importCard() {
+    var byYear = {};
+    S.entries.filter(function (e) { return e.slot === 'pp6'; }).forEach(function (e) { (byYear[e.year] = byYear[e.year] || []).push('ป.' + e.level + '/' + e.room); });
+    var yrs = Object.keys(byYear).sort().reverse();
+    return '<section class="card sup-card imp-card"><h2>📥 นำเข้า ปพ.6 ย้อนหลัง</h2>' +
+      '<p class="sub">ใส่ผลการเรียนปีเก่า (เช่น ปี 2560–2568) ให้นักเรียนดูย้อนหลังได้ถึง ป.1 · เลือกไฟล์ ปพ.6 ได้ทีละหลายไฟล์ ระบบอ่านปี/ชั้น/ห้องจากในไฟล์ เก็บแยกตามปี และขึ้นหน้าประกาศผลให้เอง</p>' +
+      '<div class="slot-acts"><button class="btn pri imp-btn" id="supImpBtn">📂 เลือกไฟล์ ปพ.6 ปีเก่า (เลือกได้หลายไฟล์)</button></div>' +
+      '<input type="file" id="supImpFile" accept=".xlsx,.xlsm,.xls" multiple hidden>' +
+      (IMP.rows.length ? '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th class="l">ไฟล์</th><th>ปีการศึกษา</th><th>ชั้น</th><th>นักเรียน</th><th class="l">ผล</th></tr></thead><tbody>' +
+        IMP.rows.map(function (r) { return '<tr><td class="l">' + esc(r.name) + '</td><td>' + esc(r.year || '-') + '</td><td>' + esc(r.cls || '-') + '</td><td>' + esc(r.n == null ? '-' : r.n) + '</td><td class="l ' + (r.ok ? 'imp-ok' : r.busy ? '' : 'imp-bad') + '">' + esc(r.msg) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+      '<h3 class="sup-h3" style="margin-top:14px">ปพ.6 ที่มีในระบบแล้ว</h3>' +
+      (yrs.length ? '<div class="imp-years">' + yrs.map(function (y) { return '<div><b>ปี ' + esc(y) + '</b> ' + byYear[y].sort().map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '</div>'; }).join('') + '</div>' : '<p class="sub">ยังไม่มี</p>') + '</section>';
+  }
+  function impCtx(rec) {
+    var cls = { year: rec.year, level: rec.level, room: rec.room };
+    var rc = { esc: esc, toast: toast, classRecords: function () { return []; }, pp6Record: function () { return rec; }, brand: function () { return null; }, sig: function () { return null; } };
+    return { esc: esc, toast: toast, store: function () { return DB; }, classInfo: function () { return cls; }, classRecords: function () { return []; }, pp6Record: function () { return rec; },
+      className: function () { return 'ป.' + cls.level + '/' + cls.room; }, reportCtx: rc,
+      rosterById: function () { return S.roster && S.roster.data && window.PP5Roster ? PP5Roster.byId(S.roster.data) : {}; },   // เลขบัตร 4 ตัวท้ายจากทะเบียน (ยืนยันตัวตนผู้ปกครอง)
+      classRoster: function () { return null; } };
+  }
+  async function importFiles(files) {
+    IMP.rows = Array.prototype.map.call(files, function (f) { return { name: f.name, msg: 'รอ...', busy: true }; });
+    render();
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i], row = IMP.rows[i];
+      row.msg = 'กำลังอ่าน...'; render();
+      try {
+        var u8 = new Uint8Array(await f.arrayBuffer());
+        var wb = XLSX.read(u8, { type: 'array' });
+        if (!PP6Parser.isPP6(wb)) throw new Error('ไม่ใช่ไฟล์ ปพ.6 (แบบรายงานผลรายบุคคล)');
+        var data = PP5Model.fillPP6(PP6Parser.parse(wb, u8), false), m = data.meta;
+        if (!m.year || !m.level || !m.room) throw new Error('ไม่พบปีการศึกษา/ชั้น/ห้องในไฟล์');
+        row.year = m.year; row.cls = 'ป.' + m.level + '/' + m.room; row.n = data.students.length;
+        var key = m.year + '|' + m.level + '|' + m.room + '|pp6', old = S.entries.filter(function (e) { return e.key === key; })[0];
+        var rec = { key: key, year: m.year, level: m.level, room: m.room, slot: 'pp6', data: data, origName: f.name, size: f.size, uploadedAt: Date.now(),
+          fileName: (m.levelName || ('ป.' + m.level)) + '-' + m.room + '_ปพ6_รายงานผลรายบุคคล_ปี' + m.year + '.xlsx', blob: new Blob([u8], { type: f.type || 'application/octet-stream' }) };
+        row.msg = 'กำลังบันทึก...'; render();
+        var saved = await DB.put(rec);
+        S.entries = S.entries.filter(function (e) { return e.key !== key; }).concat([saved || rec]);
+        row.msg = 'กำลังขึ้นหน้าประกาศผล...'; render();
+        var pub = PP5Publish.compileClass(impCtx(rec));
+        if (pub.students.length) await DB.publish(pub.key, pub);
+        row.ok = true; row.busy = false; row.msg = (old ? '✓ แทนที่ของเดิม' : '✓ นำเข้าแล้ว') + ' · ประกาศผล ' + pub.students.length + ' คน';
+      } catch (e) { row.ok = false; row.busy = false; row.msg = '✗ ' + (e && e.message ? e.message : e); }
+      render();
+    }
+    try { S.pub = await DB.publicStatus(); } catch (e) {}
+    var ok = IMP.rows.filter(function (r) { return r.ok; }).length;
+    toast('นำเข้า ปพ.6 ย้อนหลังแล้ว ' + ok + ' จาก ' + IMP.rows.length + ' ไฟล์', ok === IMP.rows.length ? 'ok' : 'info');
+    render();
+  }
+  // ===== ข้อมูลในระบบ: ที่เก็บไฟล์ + ล้างข้อมูลทั้งหมด (ย้ายมาจากหน้าครู) =====
+  function dataCard() {
+    return '<section class="card sup-card"><h2>🗄 ข้อมูลในระบบ</h2>' +
+      '<p class="sub">ไฟล์และคะแนนทั้งหมดเก็บใน Google Drive ของผู้ดูแลระบบ · ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)</p>' +
+      '<div class="slot-acts">' + (S.links ? '<a class="btn pri" href="' + esc(S.links.root) + '" target="_blank" rel="noopener">📂 เปิดโฟลเดอร์ใน Google Drive</a>' : '') +
+      '<button class="btn danger" id="supClearAll">🗑 ล้างข้อมูลทั้งหมด</button></div>' +
+      '<p class="sub" style="margin-top:6px">ล้างข้อมูลทั้งหมด = ลบไฟล์ ปพ.5 / ปพ.6 และคะแนนทุกห้องออกจากระบบ (ไฟล์ใน Drive ย้ายไปถังขยะ กู้คืนได้ภายใน 30 วัน) · ทะเบียนรายชื่อ โลโก้ และลายเซ็นไม่ถูกลบ</p></section>';
+  }
   function histCard() {
     return '<section class="card sup-card"><h2>📚 ผลการเรียนย้อนหลังรายคน / ผลจากโรงเรียนอื่น</h2><p class="sub">ค้นด้วยเลขประจำตัวนักเรียน เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่นักเรียนยังไม่ได้เรียนที่นี่ (ย้ายมา) เพิ่มผลการเรียนจากโรงเรียนเดิมได้</p><div id="supHist"></div></section>';
   }
@@ -176,7 +238,7 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + pinCard();
+      '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
@@ -188,6 +250,7 @@
       if (e.target.dataset.flag) return saveFlags();
       if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
       if (e.target.id === 'supImgFile' && e.target.files[0]) return uploadImg(e.target.files[0]);
+      if (e.target.id === 'supImpFile' && e.target.files.length) { var fl = Array.prototype.slice.call(e.target.files); e.target.value = ''; return importFiles(fl); }
     };
     main.onclick = function (e) {
       var b = e.target.closest('[data-fl]');
@@ -196,6 +259,13 @@
       if (up) { pendingImg = up.dataset.up; $('supImgFile').value = ''; $('supImgFile').click(); return; }
       if (rm && confirm('ลบรูปนี้?')) { saveBrand(imgPatch(rm.dataset.rm, null), 'ลบรูปแล้ว'); return; }
       if (e.target.id === 'supLibScan') { scanLib(); return; }
+      if (e.target.closest('#supImpBtn')) { $('supImpFile').value = ''; $('supImpFile').click(); return; }
+      if (e.target.id === 'supClearAll') {
+        if (!confirm('ล้างข้อมูลทั้งหมด?\nไฟล์ ปพ.5 / ปพ.6 และคะแนนทุกห้อง ' + S.entries.length + ' ไฟล์จะถูกลบออกจากระบบ')) return;
+        if (prompt('พิมพ์คำว่า ลบทั้งหมด เพื่อยืนยัน') !== 'ลบทั้งหมด') { toast('ยกเลิกแล้ว', 'info'); return; }
+        DB.clear().then(function () { S.entries = []; toast('ล้างข้อมูลแล้ว', 'info'); render(); }, function (er) { toast(er.message, 'err'); });
+        return;
+      }
       if (e.target.id === 'supYearSet') { var y = +$('supYear').value; if (!(y > 2500)) { toast('ใส่ปี พ.ศ. เช่น 2570', 'err'); return; } DB.setCurYear(y).then(function () { DB.curYearFixed = true; toast('ตั้งปีการศึกษาปัจจุบันเป็น ' + y + ' แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
       if (e.target.id === 'supYearAuto') { DB.setCurYear(0).then(function () { DB.curYearFixed = false; toast('กลับเป็นอัตโนมัติตามวันที่แล้ว', 'ok'); render(); }, function (er) { toast(er.message, 'err'); }); return; }
       if (e.target.id === 'supBrandSave') { saveBrand(textPatch(), 'บันทึกชื่อและตำแหน่งแล้ว'); return; }

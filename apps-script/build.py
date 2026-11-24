@@ -81,10 +81,10 @@ def build():
         html,
         '<a class="home" href="../" title="กลับหน้าแอปห้องเรียน">‹</a>',
         '<a class="home" id="driveLink" href="#" target="_blank" rel="noopener" hidden title="เปิดโฟลเดอร์ใน Google Drive">📁</a>')
-    html = replace_once(
-        html,
-        'ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)',
-        'ไฟล์และคะแนนเก็บใน Google Drive ของผู้ดูแลระบบ (แตะ 📁 มุมบนเพื่อเปิดโฟลเดอร์) ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย')
+    # ข้อความที่เก็บไฟล์ + ปุ่มล้างข้อมูลทั้งหมด ย้ายไปหน้าแอดมิน (หน้าครูไม่แสดง)
+    html, n = re.subn(r'\s*<p class="privacy">.*?</p>', '', html, count=1, flags=re.S)
+    if n != 1:
+        raise SystemExit('หาไม่เจอ: ข้อความ privacy')
 
     parts = [('JsPinPad', WEB / 'pinpad.js'), ('JsImg', WEB / 'imgtools.js'), ('JsStore', SRC / 'store.js'), ('JsParser', WEB / 'parser.js'), ('JsPP6Parser', WEB / 'pp6parser.js'),
              ('JsModel', WEB / 'model.js'), ('JsXlsxFill', WEB / 'xlsxfill.js'), ('JsTemplates', WEB / 'templates.js'), ('JsRoster', WEB / 'roster.js'), ('JsTeachers', WEB / 'teachers.js'), ('JsReconcile', WEB / 'reconcile.js'), ('JsLibrary', WEB / 'library.js'),

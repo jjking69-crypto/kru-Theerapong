@@ -553,3 +553,20 @@ dialog:not([open]) { display: none; }
 dialog.pp-dlg-open { display: block; position: fixed; top: 4vh; left: 50%; -webkit-transform: translateX(-50%); transform: translateX(-50%); max-height: 92vh; overflow: auto; z-index: 70; }
 .pp-dlg-scrim { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #0f172a66; z-index: 69; }
 @media (pointer: coarse) { input, select, textarea { font-size: 16px; } }   /* กัน iPhone/iPad ซูมเองเวลาแตะช่องกรอก */
+
+/* คำอธิบายปุ่ม */
+.howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.ht-it { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1.5px solid #dbeafe; border-radius: 16px; padding: 10px 12px; box-shadow: 0 8px 18px -16px #1e3a8a; }
+.ht-ic { flex: none; width: 38px; height: 38px; border-radius: 12px; background: #eff6ff; display: grid; place-items: center; font-size: 19px; }
+.ht-it b { display: block; color: #1e3a8a; font-family: "Prompt", sans-serif; }
+.ht-it small { display: block; color: #475569; font-size: 13.5px; line-height: 1.4; }
+.up-btn { flex-direction: column; display: inline-flex; align-items: center; justify-content: center; line-height: 1.2; }
+.up-sub { font: 500 12.5px "Sarabun", sans-serif; opacity: .85; }
+.ed-help { margin: 0 0 10px; font-size: 13.5px; color: #475569; }
+
+.imp-card { border: 2px solid #bfdbfe; }
+.imp-btn { font-size: 17px; padding: 14px 20px; border-radius: 16px; }
+.imp-ok { color: #15803d; font-weight: 600; }
+.imp-bad { color: #b91c1c; font-weight: 600; }
+.imp-years { display: flex; flex-direction: column; gap: 6px; }
+.imp-years .chip { margin: 2px; }

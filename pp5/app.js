@@ -202,6 +202,11 @@
           setBusy('');
           if (!confirm('⚠️ ไม่พบปีการศึกษาในไฟล์ "' + f.name + '"\n\nกด ตกลง = ใช้เป็นข้อมูลปีการศึกษาปัจจุบัน ' + cy + '\nกด ยกเลิก = ไม่นำเข้าไฟล์นี้')) { toast('ข้ามไฟล์ ' + f.name + ' (ไม่มีปีการศึกษา)', 'info'); continue; }
           meta.year = cy;
+        } else if (+meta.year < cy && DB !== LocalDB && DB.role !== 'admin') {
+          // ข้อมูลปีเก่า (ย้อนหลัง) นำเข้าได้ที่ระบบแอดมินเท่านั้น
+          setBusy('');
+          toast('ไฟล์ "' + f.name + '" เป็นปีการศึกษา ' + meta.year + ' (ปีเก่า) — นำเข้าข้อมูลย้อนหลังได้ที่ระบบแอดมิน ปุ่ม "นำเข้า ปพ.6 ย้อนหลัง"', 'err');
+          continue;
         } else if (+meta.year !== cy && !yearOk[meta.year]) {
           setBusy('');
           var older = +meta.year < cy;
@@ -653,6 +658,7 @@
       return DB.saveSettings ? DB.saveSettings(rec) : DB.put(rec);
     },
     compare: compareWithPP5,
+    howTo: function (k) { return howTo(k); },
     rosterLabel: function () { return roster && roster.data ? 'ทะเบียนรายชื่อ (ข้อมูล ' + (roster.data.date ? roster.data.date.display : roster.data.dateText) + ')' : ''; },
     rerender: function () { render(); },
     pickFor: function (slot) { pickFor(slot); },
@@ -834,7 +840,7 @@
     recs.forEach(function (r) { if (slots.indexOf(r.slot) < 0) slots.push(r.slot); });
 
     var fl = DB.flags || {}, off = DB.role !== 'admin' ? Object.keys(DB.flagDefs || {}).filter(function (k) { return fl[k] === false && /^allow/.test(k); }) : [];
-    var html = (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') +
+    var html = howTo('pp5') + (off.length ? '<div class="flag-off-note">ผู้ดูแลระบบปิดไว้ชั่วคราว: ' + off.map(function (k) { return esc(DB.flagDefs[k]); }).join(', ') + '</div>' : '') +
       '<p class="sub">มีข้อมูลแล้ว ' + recs.length + ' วิชา · กด <b>กรอกคะแนน</b> เพื่อกรอกในระบบ หรือ <b>⬇ Excel</b> เพื่อโหลดไฟล์รูปแบบต้นฉบับไปกรอกในคอม แล้วอัปโหลดกลับ</p><div class="slots">';
     slots.forEach(function (slot) {
       var rec = bySlot[slot], info = slotInfo(slot, rec);
@@ -929,13 +935,20 @@
       c.missing.map(function (d) { return 'ไม่มีในไฟล์: เลขที่ ' + d.no + ' ' + d.name; })).join('\n');
     return '<div class="slot-meta"><span class="badge warn" title="' + esc(tip) + '">⚠ ไม่ตรงทะเบียน ' + c.issues + ' รายการ (ใช้ชื่อตามทะเบียนแล้ว)</span></div>';
   }
+  // คำอธิบายสั้น ๆ ว่าแต่ละปุ่มใช้ทำอะไร
+  function howTo(kind) {
+    var items = kind === 'pp6'
+      ? [['✏️', 'แก้ไขในระบบ', 'กรอก/แก้คะแนน ปพ.6 บนเว็บได้เลย ระบบคำนวณเกรดให้ทันที'], ['⬇', 'ดาวน์โหลด Excel', 'โหลดไฟล์ ปพ.6 รูปแบบของโรงเรียนไปพิมพ์หรือเก็บไว้'], ['⇪', 'อัปโหลด', 'ส่งไฟล์ ปพ.6 Excel ที่กรอกในคอม ระบบใช้ไฟล์นี้แทนของเดิม'], ['🖨', 'PDF / พิมพ์', 'ใบรายงานผลของนักเรียนทั้งห้องหรือรายคน']]
+      : [['✏️', 'กรอกคะแนน', 'กรอกในระบบได้เลย ไม่ต้องใช้ Excel ระบบคิดคะแนนเก็บ รวม และเกรดให้ทันที'], ['⇪', 'อัปโหลด', 'ส่งไฟล์ ปพ.5 (Excel) ที่กรอกในคอมเข้าระบบ ไฟล์ใหม่ทับไฟล์เดิม (เช่น เพิ่มคะแนนเทอม 2)'], ['⬇', 'Excel', 'โหลดไฟล์ ปพ.5 รูปแบบต้นฉบับ (มีรายชื่อ+ตัวชี้วัดแล้ว) ไปกรอกในคอม']];
+    return '<div class="howto">' + items.map(function (x) { return '<div class="ht-it"><span class="ht-ic">' + x[0] + '</span><div><b>' + x[1] + '</b><small>' + x[2] + '</small></div></div>'; }).join('') + '</div>';
+  }
   function startButtons(slot) {
     var f = DB.flags || {}, adm = DB.role === 'admin';
     var canEdit = adm || f.allowEdit !== false, canUp = adm || f.allowUpload !== false;
     return '<div class="slot-acts">' +
-      (canEdit ? '<button class="btn pri" data-act="online" data-slot="' + esc(slot) + '">✎ กรอกคะแนน</button>' : '') +
-      (canUp ? '<button class="btn" data-act="upload" data-slot="' + esc(slot) + '">⇪ อัปโหลด</button>' : '') +
-      '<button class="btn ghost" data-act="template" data-slot="' + esc(slot) + '" title="ดาวน์โหลดไฟล์ Excel รูปแบบต้นฉบับ ไปกรอกในคอมแล้วอัปโหลดกลับ">⬇ Excel</button></div>';
+      (canEdit ? '<button class="btn pri" data-act="online" data-slot="' + esc(slot) + '" title="กรอกคะแนนบนเว็บ ระบบคิดเกรดให้ทันที">✎ กรอกคะแนน</button>' : '') +
+      (canUp ? '<button class="btn" data-act="upload" data-slot="' + esc(slot) + '" title="ส่งไฟล์ ปพ.5 Excel ที่กรอกในคอมเข้าระบบ">⇪ อัปโหลด</button>' : '') +
+      '<button class="btn ghost" data-act="template" data-slot="' + esc(slot) + '" title="โหลดไฟล์ ปพ.5 รูปแบบต้นฉบับไปกรอกในคอม แล้วอัปโหลดกลับ">⬇ Excel</button></div>';
   }
 
   function gradeCounts(students) {
@@ -1316,7 +1329,7 @@
 
   $('modalClose').addEventListener('click', function () { $('modal').close(); });
   $('modal').addEventListener('click', function (e) { if (e.target === $('modal')) $('modal').close(); });
-  $('clearAll').addEventListener('click', async function () {
+  if ($('clearAll')) $('clearAll').addEventListener('click', async function () {
     if (!records.length) { toast('ยังไม่มีข้อมูล', 'info'); return; }
     if (!confirm('ลบไฟล์และคะแนนทั้งหมด ' + records.length + ' ไฟล์' + (DB === LocalDB ? 'ออกจากเครื่องนี้' : 'ออกจากระบบ (ย้ายไฟล์ใน Drive ไปถังขยะ)') + '?')) return;
     await DB.clear();

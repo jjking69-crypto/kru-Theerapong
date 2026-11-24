@@ -109,9 +109,10 @@
     var title = isP5 ? 'ปพ.5 ' + (m.code || 'วิชาใหม่') + ' ' + (m.subject || '') : 'ปพ.6 ' + (m.className || '');
     var h = '<div class="ed-bar card"><div class="ed-t"><b>' + esc(title) + '</b><span>' + esc((m.levelName || '') + '/' + m.room + ' · ปีการศึกษา ' + m.year) +
       '</span></div><span class="ed-dirty" id="edDirty"' + (ed.dirty ? '' : ' hidden') + '>⚠️ ยังไม่ได้บันทึก</span>' +
-      '<div class="ed-acts"><button class="btn pri" data-ed="save">✏️ บันทึกในระบบ</button>' +
-      '<button class="btn xl" data-ed="excel"><span class="xl-ic" aria-hidden="true">X</span>ดาวน์โหลด Excel (รูปแบบต้นฉบับ)</button>' +
+      '<div class="ed-acts"><button class="btn pri" data-ed="save" title="เก็บคะแนนที่กรอกเข้าระบบ (และอัปเดตไฟล์ Excel ของวิชานี้)">✏️ บันทึกในระบบ</button>' +
+      '<button class="btn xl" data-ed="excel" title="โหลดไฟล์ Excel รูปแบบต้นฉบับที่มีข้อมูลที่กรอกแล้ว"><span class="xl-ic" aria-hidden="true">X</span>ดาวน์โหลด Excel (รูปแบบต้นฉบับ)</button>' +
       '<button class="btn" data-ed="close">✖ ปิด</button></div></div>';
+    h += '<p class="ed-help">✏️ <b>บันทึกในระบบ</b> = เก็บคะแนนที่กรอก (ระบบเขียนลงไฟล์ Excel ของวิชานี้ให้ด้วย) · <b>ดาวน์โหลด Excel</b> = โหลดไฟล์ไปพิมพ์หรือกรอกต่อในคอม</p>';
     if (ed.intent === 'excel') h += '<p class="note">ตรวจข้อมูล' + (isP5 ? 'วิชา รายชื่อ และตัวชี้วัด' : 'ห้อง รายชื่อ และรายวิชา') + ' แล้วกด <b>ดาวน์โหลด Excel</b> เพื่อนำไปกรอกในคอมพิวเตอร์ กรอกเสร็จแล้วอัปโหลดไฟล์กลับเข้าระบบได้เลย</p>';
     h += '<nav class="ed-steps" aria-label="ขั้นตอนการกรอก">' + SECTIONS[ed.kind].map(function (s, i) {
       return '<button data-sec="' + s[0] + '" class="' + (ed.section === s[0] ? 'on' : '') + '"><i>' + (i + 1) + '</i>' + s[1] + '</button>';
