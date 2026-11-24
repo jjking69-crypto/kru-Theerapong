@@ -753,6 +753,12 @@
         return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (on ? '<em class="ck">✓</em>' : n ? '<i>' + n + '</i>' : '') + '</button>';
       }).join('') + '</div>';
     }
+    // แถบเลือกห้อง: พับไว้ (กดเพื่อเปลี่ยนห้อง) · ยังไม่เลือกห้อง = กางไว้
+    var open = pickerOpen || !state.level;
+    $('picker').classList.toggle('collapsed', !open);
+    $('pkBar').setAttribute('aria-expanded', open ? 'true' : 'false');
+    $('pkCls').textContent = state.level ? 'ป.' + state.level + '/' + state.room : 'ยังไม่ได้เลือกห้อง — กดเพื่อเลือก';
+    $('pkYear').textContent = 'ปีการศึกษา ' + (state.year || '') + (state.year === curYear() ? '' : ' (ปีเก่า)');
     $('classChips').innerHTML = [[1, 4], [2, 5], [3, 6]].map(function (g) { return '<div class="cls-box">' + g.map(levelRow).join('') + '</div>'; }).join('');
 
     var withData = records.filter(function (r) { return r.data; });
@@ -1357,10 +1363,13 @@
   });
   // หน้าจอโหลดตอนเปิดระบบ
   function bootDone() { var bl = document.getElementById('bootLoader'); if (bl) { bl.classList.add('done'); setTimeout(function () { bl.remove(); }, 400); } }
+  var pickerOpen = false;
+  $('pkBar').addEventListener('click', function () { pickerOpen = !$('picker').classList.contains('collapsed') ? false : true; if (!state.level) pickerOpen = true; renderPicker(); });
   $('classChips').addEventListener('click', function (e) {
     var b = e.target.closest('[data-cls]');
     if (!b || !leaveEditor()) return;
     var p = b.dataset.cls.split('/');
+    pickerOpen = false;   // เลือกแล้วพับแถบกลับ
     state.level = +p[0]; state.room = +p[1]; state.student = null;
     render();
   });

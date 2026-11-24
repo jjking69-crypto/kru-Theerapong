@@ -39,8 +39,12 @@
   </header>
 
   <main class="wrap">
-    <section class="picker card">
-      <div class="pk-tab">🎓 เลือกห้องเรียน / ระดับ</div>
+    <section class="picker card" id="picker">
+      <button type="button" class="pk-bar" id="pkBar" aria-expanded="false" aria-controls="pkBody">
+        <span class="pk-bi">🎓</span><span class="pk-bt"><small>ห้องเรียน</small><b id="pkCls">ยังไม่ได้เลือกห้อง</b></span>
+        <span class="pk-by" id="pkYear"></span><span class="pk-bc">เปลี่ยนห้อง <i>▾</i></span>
+      </button>
+      <div class="pk-body" id="pkBody">
       <div class="field pk-year">
         <label for="yearSel">ปีการศึกษา</label>
         <div class="pk-ysel"><span aria-hidden="true">📅</span><select id="yearSel"></select></div>
@@ -53,6 +57,7 @@
       <div class="field">
         <button class="btn pri up-btn" id="upBtn" type="button" title="เลือกไฟล์ ปพ.5 / ปพ.6 / รายชื่อ (.docx) ได้หลายไฟล์ หรือลากไฟล์มาวางที่ใดก็ได้บนหน้านี้">⇪ อัปโหลดไฟล์<small class="up-sub">ปพ.5 · ปพ.6 · รายชื่อ</small></button>
         <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls,.docx" multiple hidden>
+      </div>
       </div>
     </section>
 
