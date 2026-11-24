@@ -620,6 +620,42 @@ body.ro [data-rc="replace"], body.ro [data-rc="delete"], body.ro [data-act="edit
 .tabs { gap: 8px; }
 .tabs button { padding: 10px 16px; font-size: 15px; }
 .tabs button .ti { font-size: 19px; }
+/* เมนูในแถบหัว (สลับระบบ) ต้องลอยเหนือทุกส่วน ไม่โดนตัด/ทับ */
+.top { overflow: visible; z-index: 40; }
+.top-scene { overflow: hidden; }
+.top-in { z-index: 41; }
+.sw-menu { z-index: 1000; }
+
+/* ===== แถบเมนูด้านซ้าย ===== */
+.side-nav { position: fixed; top: 0; left: 0; bottom: 0; width: 236px; z-index: 60; background: linear-gradient(180deg, #0f2a7a, #1e3a8a 60%, #1d4ed8); color: #fff; padding: 14px 10px calc(14px + env(safe-area-inset-bottom)); overflow-y: auto; display: flex; flex-direction: column; gap: 3px; box-shadow: 6px 0 24px -12px #0b1f5c; }
+.sn-head { display: flex; align-items: center; gap: 10px; padding: 4px 6px 12px; }
+.sn-head img { width: 44px; height: 44px; object-fit: contain; }
+.sn-logo { font-size: 32px; }
+.sn-head b { display: block; font: 700 15px "Prompt", sans-serif; } .sn-head small { opacity: .8; font-size: 12.5px; }
+.sn-who { background: #ffffff1f; border-radius: 12px; padding: 8px 10px; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.sn-who span { display: block; font-weight: 400; font-size: 12.5px; opacity: .85; }
+.sn-sec { font-size: 12px; opacity: .65; padding: 10px 10px 3px; letter-spacing: .3px; }
+.sn-i { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; color: #e0ecff; border-radius: 12px; padding: 9px 10px; font: 600 15px "Sarabun", sans-serif; cursor: pointer; text-decoration: none; }
+.sn-i span { width: 26px; text-align: center; font-size: 17px; }
+.sn-i:hover { background: #ffffff1a; color: #fff; }
+.sn-i.on { background: #fff; color: #1e3a8a; box-shadow: 0 6px 14px -8px #000; }
+.sn-i.on2 { box-shadow: inset 3px 0 0 #facc15; color: #fff; }
+.sn-i.out { color: #fecaca; }
+.side-open { display: none; position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 10px; z-index: 59; width: 44px; height: 44px; border-radius: 50%; border: 0; background: #0f2a7a; box-shadow: 0 6px 16px -6px #0b1f5c; cursor: pointer; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.side-open span { display: block; width: 20px; height: 2.5px; border-radius: 2px; background: #fff; }
+.side-scrim { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #0f172a66; z-index: 58; }
+@media (min-width: 1100px) {
+  body { padding-left: 236px; }
+  .home { display: none; }
+}
+@media (max-width: 1099px) {
+  .side-nav { transform: translateX(-105%); -webkit-transform: translateX(-105%); transition: transform .2s; }
+  body.side-show .side-nav { transform: none; -webkit-transform: none; }
+  .side-open { display: flex; }
+  body:not(.sup-page) .top-in { padding-left: 62px; }
+  .home { display: none; }
+}
+body.sup-page { padding-left: 0 !important; }
 
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
@@ -1032,6 +1068,9 @@ body.pub-has-result.pv2 .pv-main { max-width: 1080px; margin-top: 10px; }
 /* เมนูเข้าสู่ระบบลอยอยู่บนสุดเสมอ */
 .pv2 .pub-login-menu { position: fixed; z-index: 200; }
 .plm-ic.d { background: #fef3c7; }
+/* เมนูเข้าสู่ระบบ ต้องอยู่เหนือกล่องผลการเรียนเสมอ */
+.pv-top { z-index: 100 !important; }
+.pv2 .pub-login, .pv2 .pub-login-menu { z-index: 1000 !important; }
 
 [hidden]{display:none!important}
 </style>

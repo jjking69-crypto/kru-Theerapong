@@ -265,9 +265,12 @@
       lm.hidden = !open;
       if (lb) lb.setAttribute('aria-expanded', open ? 'true' : 'false');
       // วางเมนูแบบลอยอยู่บนสุดเสมอ (กันไปอยู่ด้านหลังเมื่อหน้าแสดงผลนักเรียนแล้ว)
-      if (open && lb && window.innerWidth > 520) { var r = lb.getBoundingClientRect(); lm.style.top = (r.bottom + 8) + 'px'; lm.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; }
+      if (open) place();
     }
-    window.addEventListener('scroll', function () { if (lm && !lm.hidden) menu(false); }, { passive: true });
+    function place() { if (lb && lm && window.innerWidth > 520) { var r = lb.getBoundingClientRect(); lm.style.top = Math.max(8, r.bottom + 8) + 'px'; lm.style.right = Math.max(8, window.innerWidth - r.right) + 'px'; } }
+    // หน้าเลื่อน/ปรับขนาด: ให้เมนูขยับตามปุ่ม (ไม่ปิดเอง)
+    window.addEventListener('scroll', function () { if (lm && !lm.hidden) place(); }, { passive: true });
+    window.addEventListener('resize', function () { if (lm && !lm.hidden) place(); });
     if (lb) lb.addEventListener('click', function (e) { e.stopPropagation(); menu(lm.hidden); });
     document.addEventListener('click', function (e) { if (lm && !lm.hidden && !e.target.closest('.pub-login')) menu(false); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu(false); });

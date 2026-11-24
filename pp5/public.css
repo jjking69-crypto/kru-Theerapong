@@ -309,3 +309,6 @@ body.pub-has-result.pv2 .pv-main { max-width: 1080px; margin-top: 10px; }
 /* เมนูเข้าสู่ระบบลอยอยู่บนสุดเสมอ */
 .pv2 .pub-login-menu { position: fixed; z-index: 200; }
 .plm-ic.d { background: #fef3c7; }
+/* เมนูเข้าสู่ระบบ ต้องอยู่เหนือกล่องผลการเรียนเสมอ */
+.pv-top { z-index: 100 !important; }
+.pv2 .pub-login, .pv2 .pub-login-menu { z-index: 1000 !important; }

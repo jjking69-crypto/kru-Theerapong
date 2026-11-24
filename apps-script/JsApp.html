@@ -772,6 +772,7 @@
   }
 
   function render() {
+    renderSide();
     renderPicker();
     renderRosterBar();
     // รุ่นที่เก็บข้อมูลบนเซิร์ฟเวอร์: โหลดข้อมูลของห้องที่เลือกเมื่อจำเป็น
@@ -1429,6 +1430,52 @@
     toast('ล้างข้อมูลแล้ว', 'info');
   });
 
+  // สลับระบบ: แอดมิน = หน้าแยก (ถามรหัสแอดมิน) · ครู ↔ ผู้อำนวยการ = ล้างรหัสเดิมแล้วกดรหัสใหม่
+  function switchTo(want) {
+    var base = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
+    var now = DB.role === 'admin' ? 'admin' : DB.role === 'director' ? 'director' : 'teacher';
+    if (want === 'admin') { if (base) window.open(base + '?page=super', '_top'); return true; }
+    if (want === now) return false;
+    try { localStorage.removeItem('pp5-pin'); } catch (er) {}
+    if (window.PP5_LOGOUT) PP5_LOGOUT(true); else location.reload();
+    return true;
+  }
+
+  // ---------- แถบเมนูด้านซ้าย ----------
+  var SIDE_TABS = [['track', '📋', 'ติดตามงาน'], ['check', '🔎', 'ตรวจสอบ'], ['subjects', '📘', 'รายวิชา (ปพ.5)'], ['report', '📗', 'ใบรายงาน (ปพ.6)'], ['summary', '📊', 'สรุปทั้งห้อง'], ['student', '🧒', 'รายบุคคล'], ['publish', '📢', 'ประกาศผล'], ['roster', '👥', 'ทะเบียนรายชื่อ']];
+  function renderSide() {
+    var el = $('sideNav');
+    if (!el) return;
+    var adm = DB.role === 'admin', dir = DB.role === 'director';
+    var home = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
+    var logo = (typeof effBrand === 'function' && effBrand().logo) || '';
+    var cls = state.level ? 'ป.' + state.level + '/' + state.room : 'ยังไม่เลือกห้อง';
+    el.innerHTML = '<div class="sn-head">' + (logo ? '<img src="' + logo + '" alt="">' : '<span class="sn-logo">🏫</span>') + '<div><b>ระบบ ปพ.5 / ปพ.6</b><small>โรงเรียนวัดทุ่งแฝก</small></div></div>' +
+      '<div class="sn-who">' + (adm ? '👑 แอดมิน' : dir ? '👔 ผู้อำนวยการ' : DB === LocalDB ? '💻 ใช้งานในเครื่อง' : '👤 ครู') + '<span>ปี ' + esc(state.year || '') + ' · ' + esc(cls) + '</span></div>' +
+      '<div class="sn-sec">เมนู</div>' +
+      SIDE_TABS.filter(function (t) { return t[0] !== 'track' || adm || dir; }).map(function (t) {
+        return '<button type="button" class="sn-i' + (state.tab === t[0] ? ' on' : '') + '" data-side="' + t[0] + '"><span>' + t[1] + '</span>' + t[2] + '</button>';
+      }).join('') +
+      (DB === LocalDB ? '' : '<div class="sn-sec">สลับระบบ</div>' +
+        '<button type="button" class="sn-i' + (!adm && !dir ? ' on2' : '') + '" data-sto="teacher"><span>👤</span>ระบบครู</button>' +
+        '<button type="button" class="sn-i' + (dir ? ' on2' : '') + '" data-sto="director"><span>👔</span>ระบบผู้อำนวยการ</button>' +
+        '<button type="button" class="sn-i" data-sto="admin"><span>🛡</span>ระบบแอดมิน</button>' +
+        '<div class="sn-sec"></div>' +
+        (home ? '<a class="sn-i" href="' + esc(home) + '" target="_top"><span>🏠</span>หน้าแรก (ประกาศผล)</a>' : '') +
+        '<button type="button" class="sn-i out" data-sout="1"><span>↪</span>ออกจากระบบ</button>');
+  }
+  function sideDrawer(open) { document.body.classList.toggle('side-show', open); $('sideScrim').hidden = !open; }
+  if ($('sideNav')) {
+    $('sideNav').addEventListener('click', function (e) {
+      var t = e.target.closest('[data-side]'), s = e.target.closest('[data-sto]'), o = e.target.closest('[data-sout]');
+      if (t) { if (!leaveEditor()) return; state.tab = t.dataset.side; state.student = null; sideDrawer(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      else if (s) { sideDrawer(false); switchTo(s.dataset.sto); }
+      else if (o && confirm('ออกจากระบบ?')) { if (window.PP5_LOGOUT) PP5_LOGOUT(); }
+    });
+    $('sideOpen').addEventListener('click', function () { sideDrawer(!document.body.classList.contains('side-show')); });
+    $('sideScrim').addEventListener('click', function () { sideDrawer(false); });
+  }
+
   // ---------- ปุ่มมุมขวาบน: สิทธิ์ผู้ใช้ / ผู้ดูแลระบบหลัก / ออกจากระบบ ----------
   function renderTopActs() {
     var el = $('topActs');
@@ -1473,16 +1520,7 @@
   }
   if ($('topActs')) $('topActs').addEventListener('click', function (e) {
     var to = e.target.closest('[data-to]');
-    if (to) {
-      var base = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
-      var want = to.dataset.to, now = DB.role === 'admin' ? 'admin' : DB.role === 'director' ? 'director' : 'teacher';
-      if (want === 'admin') { if (base) window.open(base + '?page=super', '_top'); return; }   // หน้าแอดมินแยก ถามรหัสแอดมิน
-      if (want === now) { to.closest('.sw-menu').hidden = true; return; }
-      // สลับครู ↔ ผู้อำนวยการ: ออกจากรหัสเดิม แล้วกดรหัสใหม่
-      try { localStorage.removeItem('pp5-pin'); } catch (er) {}
-      if (window.PP5_LOGOUT) PP5_LOGOUT(true); else location.reload();
-      return;
-    }
+    if (to) { if (switchTo(to.dataset.to) === false) to.closest('.sw-menu').hidden = true; return; }
     var b = e.target.closest('[data-top]');
     if (!b) return;
     if (b.dataset.top === 'switch') { var mn = b.parentNode.querySelector('.sw-menu'); mn.hidden = !mn.hidden; return; }

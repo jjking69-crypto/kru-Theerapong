@@ -13,6 +13,10 @@
 </head>
 <body>
   <div id="bootLoader" class="boot" role="status" aria-live="polite"><div class="pp-load-box"><div class="pp-spin"></div><b id="bootText">กำลังเข้าสู่ระบบครู...</b><small>กรุณารอสักครู่</small></div></div>
+  <!-- แถบเมนูด้านซ้าย (จอคอม: ค้างไว้ · มือถือ: กด ☰) -->
+  <div class="side-scrim" id="sideScrim" hidden></div>
+  <aside class="side-nav" id="sideNav" aria-label="เมนูหลัก"></aside>
+  <button type="button" class="side-open" id="sideOpen" aria-label="เปิดเมนู" aria-controls="sideNav"><span></span><span></span><span></span></button>
   <header class="top">
     <div class="top-in">
       <a class="home" id="driveLink" href="#" target="_blank" rel="noopener" hidden title="เปิดโฟลเดอร์ใน Google Drive">📁</a>
