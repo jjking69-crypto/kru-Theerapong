@@ -682,6 +682,15 @@ body.sup-page { padding-left: 0 !important; }
   .brand h1 { font-size: 17px; }
 }
 
+/* ปุ่ม "เปลี่ยนห้อง" ให้เด่น */
+.pk-bc { background: #facc15; color: #1e3a8a; font: 700 16px "Prompt", sans-serif; padding: 9px 18px; box-shadow: 0 6px 14px -6px #0008, inset 0 -2px 0 #0002; border: 2px solid #fff; animation: pkPulse 2.4s ease-in-out infinite; }
+.pk-bar:hover .pk-bc { background: #fde047; }
+.picker:not(.collapsed) .pk-bc { animation: none; background: #fff; }
+@keyframes pkPulse { 0%, 100% { box-shadow: 0 6px 14px -6px #0008, 0 0 0 0 #facc1599; } 50% { box-shadow: 0 6px 14px -6px #0008, 0 0 0 8px #facc1500; } }
+@media (prefers-reduced-motion: reduce) { .pk-bc { animation: none; } }
+@media (max-width: 640px) { .pk-bc { font-size: 14px; padding: 7px 12px; } }
+.cls-box { justify-content: center; }
+
 /* ---------- แผงควบคุมใบรายงาน ---------- */
 .rc-panel { padding: 14px 16px; margin-bottom: 14px; }
 .rc-panel h3 { margin: 0 0 10px; font-size: 16px; }

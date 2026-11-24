@@ -741,8 +741,7 @@
     });
     $('classSel').innerHTML = opts;
     // ปุ่มเลือกห้อง: แถวละชั้น กดได้ทันที (จุดเขียว = มีข้อมูลแล้ว)
-    // จัดเป็น 3 กล่อง: (ป.1, ป.4) (ป.2, ป.5) (ป.3, ป.6)
-    function levelRow(l) {
+        function levelRow(l) {
       var rooms = roomsOf(state.year, l).slice();
       if (l === state.level && rooms.indexOf(state.room) < 0) rooms.push(state.room);
       rooms.sort(function (a, b) { return a - b; });
@@ -758,7 +757,8 @@
     $('pkBar').setAttribute('aria-expanded', open ? 'true' : 'false');
     $('pkCls').textContent = state.level ? 'ป.' + state.level + '/' + state.room : 'ยังไม่ได้เลือกห้อง — กดเพื่อเลือก';
     $('pkYear').textContent = 'ปีการศึกษา ' + (state.year || '') + (state.year === curYear() ? '' : ' (ปีเก่า)');
-    $('classChips').innerHTML = [[1, 4], [2, 5], [3, 6]].map(function (g) { return '<div class="cls-box">' + g.map(levelRow).join('') + '</div>'; }).join('');
+    // เรียงตามลำดับ ป.1 → ป.6 (อ่านซ้ายไปขวา บนลงล่าง) กล่องละชั้น
+    $('classChips').innerHTML = LEVELS.map(function (l) { return '<div class="cls-box">' + levelRow(l) + '</div>'; }).join('');
 
     var withData = records.filter(function (r) { return r.data; });
     var any = classRecords().filter(function (r) { return r.data; })[0] || withData.filter(function (r) { return r.slot !== 'pp6'; })[0];
