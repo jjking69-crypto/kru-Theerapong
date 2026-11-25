@@ -769,14 +769,15 @@
       return '<div class="cls-row"><span class="cls-lv">ป.' + l + '</span>' + rooms.map(function (r) {
         var n = records.filter(function (x) { return x.year === state.year && x.level === l && x.room === r; }).length;
         var on = l === state.level && r === state.room;
-        return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (on ? '<em class="ck">✓</em>' : n ? '<i>' + n + '</i>' : '') + '</button>';
+        return '<button type="button" class="cls-b' + (on ? ' on' : '') + (n ? ' has' : '') + '" data-cls="' + l + '/' + r + '" role="tab" aria-selected="' + on + '" title="' + (n ? 'มีข้อมูล ' + n + ' ไฟล์' : 'ยังไม่มีข้อมูล') + '">ป.' + l + '/' + r + (on ? '<em class="ck">✓</em>' : '') + '</button>';
       }).join('') + '</div>';
     }
     // แถบเลือกห้อง: พับไว้ (กดเพื่อเปลี่ยนห้อง) · ยังไม่เลือกห้อง = กางไว้
-    var open = pickerOpen || !state.level;
+    var overview = !state.level && state.tab === 'subjects' && isKru();   // ภาพรวมวิชาที่ฉันสอน: พับแถบเลือกห้องไว้
+    var open = pickerOpen || (!state.level && !overview);
     $('picker').classList.toggle('collapsed', !open);
     $('pkBar').setAttribute('aria-expanded', open ? 'true' : 'false');
-    $('pkCls').textContent = state.level ? 'ป.' + state.level + '/' + state.room : 'ยังไม่ได้เลือกห้อง — กดเพื่อเลือก';
+    $('pkCls').textContent = state.level ? 'ป.' + state.level + '/' + state.room : overview ? 'ทุกวิชาที่ฉันสอน' : 'ยังไม่ได้เลือกห้อง — กดเพื่อเลือก';
     $('pkYear').textContent = 'ปีการศึกษา ' + (state.year || '') + (state.year === curYear() ? '' : ' (ปีเก่า)');
     // เรียงตามลำดับ ป.1 → ป.6 (อ่านซ้ายไปขวา บนลงล่าง) กล่องละชั้น
     $('classChips').innerHTML = LEVELS.map(function (l) { var r = levelRow(l); return r ? '<div class="cls-box">' + r + '</div>' : ''; }).join('') +
@@ -815,6 +816,17 @@
         });
         return;
       }
+    }
+    // ยังไม่เลือกห้อง + เมนู ปพ.5 → ภาพรวม: ครูรายบุคคล = วิชาที่ฉันสอนทุกชั้น · คนอื่น = ตารางทุกห้อง
+    if (!state.level && state.tab === 'subjects' && !(window.PP5Editor && PP5Editor.active())) {
+      document.body.classList.remove('editing');
+      if (isKru()) renderMine();
+      else {
+        $('banner').innerHTML = '<div class="bnr" style="--bc:#1d5bd8"><div class="bi">📘</div><div class="bm"><div class="bk">ปพ.5 · ภาพรวมทุกห้อง</div><div class="bt">รายวิชา (ปพ.5) ทุกชั้น</div><div class="bs">ปีการศึกษา ' + esc(state.year) + ' · กดช่องเพื่อเปิดห้อง/วิชานั้น</div></div></div>';
+        renderTrack();
+      }
+      saveUI();
+      return;
     }
     if (!state.level && state.tab !== 'track' && state.tab !== 'roster') {
       document.body.classList.remove('editing');
@@ -1171,6 +1183,98 @@
   }
 
   // ---------- หน้าต่าง: คะแนนตามตัวชี้วัดของวิชา ----------
+  // ---------- ข้อมูลที่กรอกค้างไว้ในเครื่อง (ยังไม่บันทึก) → ปุ่มกรอกต่อ ----------
+  function showDrafts() {
+    if (!window.PP5Editor || !PP5Editor.drafts) return;
+    var ds = PP5Editor.drafts().filter(function (d) { return d.cls && d.cls.level; }).slice(0, 4);
+    var el = $('draftBar');
+    if (!el) { el = document.createElement('div'); el.id = 'draftBar'; document.body.appendChild(el); }
+    if (!ds.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = '<b>📝 มีข้อมูลที่กรอกค้างไว้ (ยังไม่บันทึก)</b>' + ds.map(function (d) {
+      return '<div class="db-it"><span>' + esc(d.title || '') + ' · ป.' + d.cls.level + '/' + d.cls.room + ' ปี ' + d.cls.year + ' <small>' + new Date(d.at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</small></span>' +
+        '<button class="btn pri" data-dr="' + esc(d.t) + '">กรอกต่อ</button><button class="btn" data-drx="' + esc(d.t) + '">ทิ้ง</button></div>';
+    }).join('');
+    el.onclick = async function (e) {
+      var go2 = e.target.closest('[data-dr]'), x = e.target.closest('[data-drx]');
+      if (x) { if (confirm('ทิ้งข้อมูลที่กรอกค้างไว้?')) { PP5Editor.dropDraft(x.dataset.drx); showDrafts(); } return; }
+      if (!go2 || !leaveEditor()) return;
+      var d = PP5Editor.drafts().filter(function (q) { return q.t === go2.dataset.dr; })[0];
+      if (!d) return;
+      state.year = +d.cls.year; state.level = +d.cls.level; state.room = +d.cls.room; state.tab = d.kind === 'pp6' ? 'report' : 'subjects';
+      var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+      if (need.length && DB.ensureData) { setBusy('กำลังโหลดข้อมูล...'); try { await DB.ensureData(need); } finally { setBusy(null); } }
+      render();
+      var p6 = d.kind === 'pp6' ? pp6Record() : null;
+      if (d.oldKey && (records.some(function (r) { return r.key === d.oldKey; }) || (p6 && p6.key === d.oldKey))) PP5Editor.open({ kind: d.kind, key: d.oldKey, resume: true }, editorCtx);
+      else PP5Editor.open({ kind: d.kind, slot: d.slot, intent: d.intent, resume: true }, editorCtx);
+      el.hidden = true;
+    };
+  }
+  // ---------- โหลดข้อมูลล่วงหน้าเบื้องหลัง (เปิดห้องถัดไปเร็วขึ้น) ----------
+  function prefetch() {
+    if (!DB.ensureData || DB === LocalDB) return;
+    var want = records.filter(function (r) {
+      if (r.data || r.year !== state.year) return false;
+      return isKru() ? myClass(r.level, r.room) : true;
+    });
+    var i = 0;
+    (function next() {
+      if (i >= want.length) return;
+      var part = want.slice(i, i + 12).filter(function (r) { return !r.data; }); i += 12;
+      if (!part.length) return next();
+      DB.ensureData(part).then(function () { setTimeout(next, 300); }, function () {});
+    })();
+  }
+  // ---------- ภาพรวม "วิชาที่ฉันสอน" (ครูรายบุคคล): ทุกชั้น ป.1 → ป.6 ไม่ต้องเลือกห้องทีละห้อง ----------
+  function renderMine() {
+    var yr = state.year, order = CORE.map(function (c) { return c.slot; });
+    var items = kruSubs().map(function (x) { var p = x.split('|'), c = p[0].split('/'); return { level: +c[0], room: +c[1], slot: p[1] }; })
+      .sort(function (a, b) { return a.level - b.level || a.room - b.room || order.indexOf(a.slot) - order.indexOf(b.slot); });
+    var done = 0, h = '';
+    var home = kruPP6().slice().sort();
+    if (home.length) h += '<div class="mine-home">📗 ห้องประจำชั้น (ปพ.6): ' + home.map(function (c) { var p = c.split('/'); return '<button class="btn" data-mine="report" data-cls="' + c + '">ป.' + esc(c) + ' · ใบรายงาน ปพ.6</button>'; }).join('') + '</div>';
+    var lastLv = null;
+    h += '<div class="mine-list">';
+    items.forEach(function (it) {
+      var c = it.level + '/' + it.room;
+      if (it.slot === '+') {
+        h += (lastLv !== it.level ? '<div class="mine-lv">ประถมศึกษาปีที่ ' + it.level + '</div>' : '') + '<div class="mine-it extra"><div class="slot-ic" style="background:' + EXTRA_COLOR + '">+</div><div class="mine-t"><b>รายวิชาเพิ่มเติม</b><small>ป.' + c + '</small></div><div class="mine-a"><button class="btn" data-mine="class" data-cls="' + c + '">เปิดห้องนี้</button></div></div>';
+        lastLv = it.level; return;
+      }
+      var info = slotInfo(it.slot, null), rec = records.filter(function (r) { return r.year === yr && r.level === it.level && r.room === it.room && r.slot === it.slot; })[0];
+      if (rec) done++;
+      var name = rec && rec.data ? rec.data.meta.subject : info.name, d = rec && rec.uploadedAt ? new Date(rec.uploadedAt) : null;
+      h += (lastLv !== it.level ? '<div class="mine-lv">ประถมศึกษาปีที่ ' + it.level + '</div>' : '') +
+        '<div class="mine-it' + (rec ? ' has' : '') + '"><div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>' +
+        '<div class="mine-t"><b>' + esc(name) + '</b><small>ป.' + c + (rec ? ' · <span class="ok">✓ มีข้อมูลแล้ว' + (d ? ' (' + d.getDate() + '/' + (d.getMonth() + 1) + ')' : '') + '</span>' : ' · <span class="no">ยังไม่มีข้อมูล</span>') + '</small></div>' +
+        '<div class="mine-a"><button class="btn pri" data-mine="' + (rec ? 'edit' : 'online') + '" data-cls="' + c + '" data-slot="' + it.slot + '"' + (rec ? ' data-key="' + esc(rec.key) + '"' : '') + '>✏️ กรอกคะแนน</button>' +
+        (rec ? '<button class="btn" data-mine="open" data-cls="' + c + '" data-key="' + esc(rec.key) + '">👁 ดูคะแนน</button><button class="btn" data-mine="pdf" data-cls="' + c + '" data-key="' + esc(rec.key) + '">📄 PDF</button>' : '') + '</div></div>';
+      lastLv = it.level;
+    });
+    h += '</div>';
+    var nSub = items.filter(function (x) { return x.slot !== '+'; }).length;
+    $('banner').innerHTML = '<div class="bnr" style="--bc:#1d5bd8"><div class="bi">📘</div><div class="bm"><div class="bk">ปพ.5 · วิชาที่ฉันสอน</div><div class="bt">' + esc(String(DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, 'ครู')) + '</div><div class="bs">ปีการศึกษา ' + esc(yr) + ' · ทุกชั้นเรียงจาก ป.1 → ป.6 · กดปุ่มได้เลยไม่ต้องเลือกห้อง</div></div><div class="bx"><span class="bx-ic">📚</span><span>ทำแล้ว<b>' + done + '/' + nSub + '</b></span></div></div>';
+    view.innerHTML = (items.length ? h : '<div class="card empty-state"><b>ยังไม่ได้เลือกวิชาที่สอน</b><br><button class="btn pri" data-kru="mine">⚙️ วิชาที่ฉันสอน</button></div>') +
+      '<div class="mine-foot"><button class="btn" data-kru="mine">⚙️ เพิ่ม/ลด วิชาที่ฉันสอน</button></div>';
+    view.onchange = null;
+    view.onclick = async function (e) {
+      var b = e.target.closest('[data-mine]'); if (!b) return;
+      var p = b.dataset.cls.split('/'), act = b.dataset.mine;
+      state.level = +p[0]; state.room = +p[1]; state.student = null;
+      if (act === 'report') { state.tab = 'report'; render(); return; }
+      if (act === 'class') { state.tab = 'subjects'; render(); return; }
+      state.tab = 'subjects';
+      var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+      if (need.length && DB.ensureData) { setBusy('กำลังโหลดข้อมูล ป.' + b.dataset.cls + '...'); try { await DB.ensureData(need); } finally { setBusy(null); } }
+      var rec = b.dataset.key ? records.filter(function (r) { return r.key === b.dataset.key; })[0] : null;
+      render();
+      if (act === 'online') PP5Editor.open({ kind: 'pp5', slot: b.dataset.slot, intent: 'online' }, editorCtx);
+      else if (act === 'edit' && rec) PP5Editor.open({ kind: 'pp5', key: rec.key }, editorCtx);
+      else if (act === 'open' && rec) openSubject(rec.key);
+      else if (act === 'pdf' && rec && rec.data) { if (DB.xpdfStart) PP5Pdf.excel(rec, pdfCtx); else PP5Pdf.subject(rec, pdfCtx); }
+    };
+  }
   function openSubject(key) {
     var rec = records.filter(function (r) { return r.key === key; })[0];
     if (!rec) return;
@@ -1588,6 +1692,17 @@
 
   // ---------- แถบเมนูด้านซ้าย ----------
   var SIDE_TABS = [['track', '📋', 'ติดตามงาน'], ['check', '🔎', 'ตรวจสอบ'], ['subjects', '📘', 'รายวิชา (ปพ.5)'], ['report', '📗', 'ใบรายงาน (ปพ.6)'], ['summary', '📊', 'สรุปทั้งห้อง'], ['student', '🧒', 'รายบุคคล'], ['publish', '📢', 'ประกาศผล'], ['roster', '👥', 'ทะเบียนรายชื่อ']];
+  // ความคืบหน้าปีปัจจุบัน: [ทำแล้ว, ทั้งหมด] (จำนวนเล่ม ปพ.)
+  function progress(kind) {
+    var yr = state.year, has = function (l, r, sl) { return records.some(function (x) { return x.year === yr && x.level === l && x.room === r && x.slot === sl; }); };
+    if (isKru()) {
+      if (kind === 'pp5') { var ss = kruSubs().filter(function (x) { return !/\|\+$/.test(x); }); return [ss.filter(function (x) { var p = x.split('|'), c = p[0].split('/'); return has(+c[0], +c[1], p[1]); }).length, ss.length]; }
+      var hs = kruPP6(); return [hs.filter(function (c) { var p = c.split('/'); return has(+p[0], +p[1], 'pp6'); }).length, hs.length];
+    }
+    var cls = allClasses(), core = CORE.map(function (c) { return c.slot; });
+    if (kind === 'pp5') { var n = 0; cls.forEach(function (c) { var p = c.split('/'); core.forEach(function (sl) { if (has(+p[0], +p[1], sl)) n++; }); }); return [n, cls.length * core.length]; }
+    return [cls.filter(function (c) { var p = c.split('/'); return has(+p[0], +p[1], 'pp6'); }).length, cls.length];
+  }
   function renderSide() {
     var el = $('sideNav');
     if (!el) return;
@@ -1601,7 +1716,9 @@
       '<div class="sn-who">' + (adm ? '👑 แอดมิน' : dir ? '👔 ผู้อำนวยการ' : DB === LocalDB ? '💻 ใช้งานในเครื่อง' : kru ? '👤 ครู' + esc(String(DB.me && DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, '')) : '🏫 ระบบโรงเรียน') + '<span>ปี ' + esc(state.year || '') + ' · ' + esc(cls) + '</span></div>' +
       '<div class="sn-sec">เมนู</div>' +
       SIDE_TABS.filter(function (t) { return t[0] !== 'track' || adm || dir; }).map(function (t) {
-        return '<button type="button" class="sn-i' + (state.tab === t[0] ? ' on' : '') + '" data-side="' + t[0] + '"><span>' + t[1] + '</span>' + t[2] + '</button>';
+        var cnt = t[0] === 'subjects' ? progress('pp5') : t[0] === 'report' ? progress('pp6') : null;
+        return '<button type="button" class="sn-i' + (state.tab === t[0] ? ' on' : '') + '" data-side="' + t[0] + '"><span>' + t[1] + '</span>' + t[2] +
+          (cnt && cnt[1] ? '<em class="sn-cnt' + (cnt[0] >= cnt[1] ? ' full' : '') + '" title="ทำแล้ว ' + cnt[0] + ' จาก ' + cnt[1] + ' เล่ม">' + cnt[0] + '/' + cnt[1] + '</em>' : '') + '</button>';
       }).join('') +
       (kru ? '<button type="button" class="sn-i" data-kru="mine"><span>⚙️</span>วิชาที่ฉันสอน</button>' : '') +
       (DB === LocalDB ? '' : '<div class="sn-sec">สลับระบบ</div>' +
@@ -1618,7 +1735,7 @@
     $('sideNav').addEventListener('click', function (e) {
       var t = e.target.closest('[data-side]'), s = e.target.closest('[data-sto]'), o = e.target.closest('[data-sout]');
       if (e.target.closest('[data-kru]')) { sideDrawer(false); return; }
-      if (t) { if (!leaveEditor()) return; state.tab = t.dataset.side; state.student = null; sideDrawer(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      if (t) { if (!leaveEditor()) return; state.tab = t.dataset.side; state.student = null; if (t.dataset.side === 'subjects' && isKru()) state.level = state.room = null; sideDrawer(false); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
       else if (s) { sideDrawer(false); switchTo(s.dataset.sto); }
       else if (o && confirm('ออกจากระบบ?')) { if (window.PP5_LOGOUT) PP5_LOGOUT(); }
     });
@@ -1686,11 +1803,11 @@
       await DB.open();
       renderTopActs();
       var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดรายวิชาและรายชื่อนักเรียน...';
-      records = await DB.all();
-      if (DB.templateInfo) { try { tplInfo = (await DB.templateInfo()) || {}; } catch (te) { tplInfo = {}; } }
-      if (DB.getRoster) { try { roster = (await DB.getRoster()) || null; } catch (re) { roster = null; } }
-      if (DB.getLib) { try { learned = (await DB.getLib()) || {}; } catch (le) { learned = {}; } }
-      if (DB.getBrand) { try { brand = await DB.getBrand(); sigs = (await DB.getSigs()) || {}; } catch (be) { console.warn('brand', be); } }
+      // โหลดพร้อมกันทุกอย่าง (เร็วกว่าทีละอย่าง)
+      var soft = function (p, d) { return p ? Promise.resolve(p).catch(function (er) { console.warn(er); return d; }) : Promise.resolve(d); };
+      var got = await Promise.all([DB.all(), soft(DB.templateInfo && DB.templateInfo(), {}), soft(DB.getRoster && DB.getRoster(), null), soft(DB.getLib && DB.getLib(), {}),
+        soft(DB.getBrand && DB.getBrand(), null), soft(DB.getSigs && DB.getSigs(), {})]);
+      records = got[0]; tplInfo = got[1] || {}; roster = got[2] || null; learned = got[3] || {}; if (got[4]) brand = got[4]; sigs = got[5] || {};
       rosterVer++;
       setTimeout(function () { var lg = effBrand().logo, im = $('topLogo'); if (lg && im) { im.src = lg; im.hidden = false; } }, 0);
     } catch (e) {
@@ -1708,6 +1825,7 @@
     state.level = null; state.room = null; state.student = null;
     if (DB.role !== 'director' && state.tab === 'track') state.tab = 'subjects';
     await kruFirstSetup();
+    if (isKru()) state.tab = 'subjects';   // ครูเข้าระบบ → เห็นวิชาที่ตัวเองสอนทั้งหมดทันที
     // มาจากระบบแอดมิน "อัปเดต ปพ.6 ปีเก่า": เปิดห้อง/ปีนั้น แล้วเปิดหน้ากรอก ปพ.6 ทันที
     var go = null;
     try { go = JSON.parse(localStorage.getItem('pp5-goto') || 'null'); localStorage.removeItem('pp5-goto'); } catch (ge) { go = null; }
@@ -1716,6 +1834,8 @@
     } else go = null;
     render();
     bootDone();
+    showDrafts();
+    prefetch();
     if (go && go.edit && window.PP5Editor) {
       var openGo = function () { openPP6Roster(); };
       var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });

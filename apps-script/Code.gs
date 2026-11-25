@@ -258,11 +258,20 @@ function api_save(pin, entry, fileB64, dataJson) {
 }
 function api_getData(pin, keys) {
   checkPin_(pin);
-  var out = {};
-  (keys || []).forEach(function (key) {
-    var e = getEntry_(key);
-    if (!e || !e.dataId) return;
-    try { out[key] = DriveApp.getFileById(e.dataId).getBlob().getDataAsString('UTF-8'); } catch (err) { /* ไฟล์หาย */ }
+  var out = {}, list = [];
+  (keys || []).forEach(function (key) { var e = getEntry_(key); if (e && e.dataId) list.push({ key: key, id: e.dataId }); });
+  // อ่านหลายไฟล์พร้อมกัน (เร็วกว่าอ่านทีละไฟล์) · ไม่สำเร็จ → อ่านแบบปกติ
+  try {
+    var tok = ScriptApp.getOAuthToken();
+    for (var b = 0; b < list.length; b += 15) {
+      var part = list.slice(b, b + 15);
+      UrlFetchApp.fetchAll(part.map(function (x) { return { url: 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(x.id) + '?alt=media', headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true }; }))
+        .forEach(function (rs, k) { if (rs.getResponseCode() === 200) out[part[k].key] = rs.getContentText('UTF-8'); });
+    }
+  } catch (e) { /* ไม่มีสิทธิ์เรียกภายนอก → ใช้ DriveApp */ }
+  list.forEach(function (x) {
+    if (out[x.key] != null) return;
+    try { out[x.key] = DriveApp.getFileById(x.id).getBlob().getDataAsString('UTF-8'); } catch (err) { /* ไฟล์หาย */ }
   });
   return out;
 }

@@ -84,6 +84,22 @@
 
   var MAX_UPLOAD = 40 * 1024 * 1024;
 
+  // แคชข้อมูลคะแนนในเบราว์เซอร์ (IndexedDB): เปิดห้องเดิมซ้ำ = ไม่ต้องโหลดจาก Drive ใหม่ (ถ้าไฟล์ไม่เปลี่ยน)
+  var IDB = (function () {
+    var dbp = null;
+    function db() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (res) {
+        try { var rq = indexedDB.open('pp5-cache', 1); rq.onupgradeneeded = function () { rq.result.createObjectStore('d'); }; rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { res(null); }; }
+        catch (e) { res(null); }
+      });
+      return dbp;
+    }
+    function tx(mode, fn) { return db().then(function (d) { return new Promise(function (res) { if (!d) return res(null); try { var r = fn(d.transaction('d', mode).objectStore('d')); r.onsuccess = function () { res(r.result || null); }; r.onerror = function () { res(null); }; } catch (e) { res(null); } }); }); }
+    return { get: function (k) { return tx('readonly', function (s) { return s.get(k); }); }, put: function (k, v) { return tx('readwrite', function (s) { return s.put(v, k); }); } };
+  })();
+  var inflight = {};
+
   window.PP5_STORE = {
     rootUrl: null,
     open: function () {
@@ -108,12 +124,31 @@
         settings: rec.settings || null
       };
       var saved = await call('api_save', [entry, b64, JSON.stringify(rec.data)]);
+      if (saved && rec.data) IDB.put(rec.key, { at: saved.uploadedAt || 0, data: rec.data });
       delete rec.blob; // ไฟล์อยู่ใน Drive แล้ว
       return saved;
     },
     ensureData: async function (recs) {
-      var map = await call('api_getData', [recs.map(function (r) { return r.key; })]);
-      recs.forEach(function (r) { if (map && map[r.key]) r.data = JSON.parse(map[r.key]); });
+      var miss = [], waits = [];
+      for (var i = 0; i < recs.length; i++) {
+        var r = recs[i];
+        if (r.data) continue;
+        if (inflight[r.key]) { waits.push(inflight[r.key].then(function (rr) { return function (d) { if (d && !rr.data) rr.data = d; }; }(r))); continue; }
+        var c = await IDB.get(r.key);
+        if (c && c.at === (r.uploadedAt || 0) && c.data) r.data = c.data; else miss.push(r);
+      }
+      if (miss.length) {
+        var req = call('api_getData', [miss.map(function (r) { return r.key; })]);
+        miss.forEach(function (r) {
+          inflight[r.key] = req.then(function (map) {
+            var d = map && map[r.key] ? JSON.parse(map[r.key]) : null;
+            if (d) { r.data = d; IDB.put(r.key, { at: r.uploadedAt || 0, data: d }); }
+            return d;
+          }).finally(function () { delete inflight[r.key]; });
+          waits.push(inflight[r.key]);
+        });
+      }
+      await Promise.all(waits);
     },
     saveSettings: function (rec) { return call('api_saveSettings', [rec.key, JSON.stringify(rec.settings || {})]); },
     del: function (key) { return call('api_delete', [key]); },

@@ -779,3 +779,26 @@ td.g-collect input { background: #eff6ff; font-weight: 700; }
 /* ปุ่มอื่นของการ์ดวิชา: แสดงครบ เป็นปุ่มเล็ก 2 คอลัมน์ */
 .slot .more-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; padding-top: 0; }
 .slot .more-list .btn { justify-content: center; font-size: 13px; padding: 7px 6px; border-radius: 10px; white-space: normal; line-height: 1.25; }
+/* ข้อมูลที่กรอกค้างไว้ในเครื่อง */
+#draftBar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 14px; z-index: 60; background: #fffbeb; border: 2px solid #f59e0b; border-radius: 16px; padding: 10px 14px; box-shadow: 0 12px 30px -12px #0006; max-width: min(640px, calc(100vw - 24px)); width: max-content; display: flex; flex-direction: column; gap: 6px; }
+#draftBar .db-it { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#draftBar .db-it span { flex: 1; min-width: 180px; }
+#draftBar small { color: #92400e; }
+.ed-draft { color: #15803d; font-size: 12.5px; font-weight: 600; }
+/* ภาพรวมวิชาที่ฉันสอน */
+.mine-home { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #ecfeff; border: 1px solid #a5f3fc; border-radius: 14px; padding: 10px 12px; margin-bottom: 12px; font-weight: 600; color: #0e7490; }
+.mine-list { display: grid; gap: 8px; }
+.mine-lv { font: 700 16px "Prompt", sans-serif; color: #1e3a8a; margin: 8px 0 0; padding-left: 4px; border-left: 4px solid #2563eb; }
+.mine-it { display: flex; align-items: center; gap: 12px; background: #fff; border: 1.5px solid #e2e8f0; border-radius: 16px; padding: 10px 12px; flex-wrap: wrap; }
+.mine-it.has { border-color: #bbf7d0; }
+.mine-it .slot-ic { flex: none; }
+.mine-t { flex: 1; min-width: 180px; display: flex; flex-direction: column; }
+.mine-t b { font: 700 16px "Prompt", sans-serif; }
+.mine-t small { color: #64748b; }
+.mine-t .ok { color: #15803d; font-weight: 600; } .mine-t .no { color: #b45309; font-weight: 600; }
+.mine-a { display: flex; gap: 6px; flex-wrap: wrap; }
+.mine-foot { margin-top: 14px; text-align: center; }
+.sn-cnt { margin-left: auto; font-style: normal; font: 700 12.5px "Prompt", sans-serif; background: #ffffff26; color: #fde68a; border-radius: 999px; padding: 2px 9px; }
+.sn-i.on .sn-cnt { background: #dbeafe; color: #1e3a8a; }
+.sn-cnt.full { color: #bbf7d0; }
+.sn-i.on .sn-cnt.full { background: #dcfce7; color: #166534; }

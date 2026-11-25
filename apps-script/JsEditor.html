@@ -46,6 +46,31 @@
     return mr && mr.teachers.length ? 'ครู' + mr.teachers[0] : '';
   }
 
+  // ---------- ฉบับร่างในเบราว์เซอร์: กรอกแล้วจำไว้ตลอด (เผลอปิด/รีเฟรช ข้อมูลยังอยู่) — ยังไม่บันทึกเข้าระบบจนกว่าจะกด "บันทึกในระบบ" ----------
+  var DRAFT = 'pp5-draft:';
+  function targetOf(e) { return e.oldKey || [e.cls.year, e.cls.level, e.cls.room, e.kind, e.slot || ''].join('|'); }
+  function draftGet(t) { try { var v = localStorage.getItem(DRAFT + t); return v ? JSON.parse(v) : null; } catch (er) { return null; } }
+  function draftDel(t) { try { localStorage.removeItem(DRAFT + t); } catch (er) {} }
+  function draftList() {
+    var out = [];
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(DRAFT) === 0) { try { var v = JSON.parse(localStorage.getItem(k)); if (v && v.data) out.push(v); } catch (e2) {} } } } catch (er) {}
+    return out.sort(function (a, b) { return b.at - a.at; });
+  }
+  var draftTimer = null;
+  function draftSave() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(function () {
+      if (!ed || !ed.dirty) return;
+      var v = { t: targetOf(ed), kind: ed.kind, slot: ed.slot, intent: ed.intent, cls: ed.cls, oldKey: ed.oldKey, section: ed.section, at: Date.now(),
+        title: ed.kind === 'pp5' ? ((ed.data.meta.code || '') + ' ' + (ed.data.meta.subject || '')).trim() : 'ปพ.6', data: ed.data };
+      try { localStorage.setItem(DRAFT + v.t, JSON.stringify(v)); }
+      catch (er) {   // ที่เก็บเต็ม: ลบร่างเก่าสุดแล้วลองใหม่
+        var all = draftList(); if (all.length > 1) { draftDel(all[all.length - 1].t); try { localStorage.setItem(DRAFT + v.t, JSON.stringify(v)); } catch (e3) {} }
+      }
+      var b = document.getElementById('edDraft'); if (b) { b.hidden = false; b.textContent = '💾 จำไว้ในเครื่องแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
+    }, 600);
+  }
+  window.addEventListener('beforeunload', function (e) { if (ed && ed.dirty) { draftSave(); e.preventDefault(); e.returnValue = ''; } });
   function open(opt, c) {
     ctx = c;
     var cls = c.classInfo(), data, oldKey = null;
@@ -77,7 +102,16 @@
       if (window.PP5Teachers) hr = PP5Teachers.fullName(hr);
       data = M().newPP6({ year: cls.year, level: cls.level, room: cls.room, school: 'โรงเรียน' + (window.PP5Teachers ? PP5Teachers.SCHOOL : 'วัดทุ่งแฝก'), teacher: hr, students: rosterFromClass(c) });
     }
-    ed = { kind: opt.kind, data: data, oldKey: oldKey, section: 'info', dirty: false, intent: opt.intent || 'online' };
+    ed = { kind: opt.kind, data: data, oldKey: oldKey, section: 'info', dirty: false, intent: opt.intent || 'online', slot: opt.slot || null, cls: { year: cls.year, level: cls.level, room: cls.room } };
+    // มีข้อมูลที่กรอกค้างไว้ (ยังไม่บันทึก) ของวิชา/ห้องนี้ → กรอกต่อจากเดิม
+    var dr = draftGet(targetOf(ed));
+    if (dr && dr.data) {
+      var when = new Date(dr.at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      if (opt.resume || confirm('พบข้อมูลที่กรอกค้างไว้เมื่อ ' + when + ' (ยังไม่ได้บันทึกเข้าระบบ)\n\nตกลง = กรอกต่อจากที่ค้างไว้\nยกเลิก = ทิ้งข้อมูลที่ค้าง แล้วเริ่มจากข้อมูลล่าสุดในระบบ')) {
+        ed.data = dr.data; ed.dirty = true; ed.section = dr.section || ed.section; data = ed.data;
+        c.toast('กรอกต่อจากข้อมูลที่ค้างไว้เมื่อ ' + when + ' · อย่าลืมกด "บันทึกในระบบ"', 'info');
+      } else draftDel(targetOf(ed));
+    }
     c.rerender();
     window.scrollTo({ top: 0 });
     // ปพ.5 ใหม่ที่ยังไม่มีตัวชี้วัด: ลองหาจากไฟล์ ปพ.5 ปีที่แล้วในโฟลเดอร์ต้นฉบับให้อัตโนมัติ
@@ -94,14 +128,15 @@
     }
   }
   function close(force) {
-    if (!force && ed && ed.dirty && !confirm('ยังไม่ได้บันทึกการแก้ไข ต้องการปิดหรือไม่?')) return;
+    if (!force && ed && ed.dirty && !confirm('ยังไม่ได้บันทึกการแก้ไข ต้องการปิดและทิ้งข้อมูลที่กรอกหรือไม่?\n(ถ้าจะกรอกต่อภายหลัง กด "ยกเลิก" แล้วกด "บันทึกในระบบ")')) return;
+    if (ed) draftDel(targetOf(ed));
     ed = null;
     ctx.rerender();
   }
   function recompute() {
     if (ed.kind === 'pp5') M().fillPP5(ed.data, true); else M().fillPP6(ed.data, true);
   }
-  function touch() { ed.dirty = true; var b = document.getElementById('edDirty'); if (b) b.hidden = false; }
+  function touch() { ed.dirty = true; var b = document.getElementById('edDirty'); if (b) b.hidden = false; draftSave(); }
 
   // ---------- หน้าจอ ----------
   function render(view, c) {
@@ -109,7 +144,7 @@
     var d = ed.data, m = d.meta, isP5 = ed.kind === 'pp5';
     var title = isP5 ? 'ปพ.5 ' + (m.code || 'วิชาใหม่') + ' ' + (m.subject || '') : 'ปพ.6 ' + (m.className || '');
     var h = '<div class="ed-bar card"><div class="ed-t"><b>' + esc(title) + '</b><span>' + esc((m.levelName || '') + '/' + m.room + ' · ปีการศึกษา ' + m.year) +
-      '</span></div><span class="ed-dirty" id="edDirty"' + (ed.dirty ? '' : ' hidden') + '>⚠️ ยังไม่ได้บันทึก</span>' +
+      '</span></div><span class="ed-dirty" id="edDirty"' + (ed.dirty ? '' : ' hidden') + '>⚠️ ยังไม่ได้บันทึก</span><span class="ed-draft" id="edDraft" hidden></span>' +
       '<div class="ed-acts"><button class="btn pri" data-ed="save" title="เก็บคะแนนที่กรอกเข้าระบบ (และอัปเดตไฟล์ Excel ของวิชานี้)">✏️ บันทึกในระบบ</button>' +
       '<button class="btn xl" data-ed="excel" title="โหลดไฟล์ Excel รูปแบบต้นฉบับที่มีข้อมูลที่กรอกแล้ว"><span class="xl-ic" aria-hidden="true">X</span>ดาวน์โหลด Excel (รูปแบบต้นฉบับ)</button>' +
       '<button class="btn" data-ed="close">✖ ปิด</button></div></div>';
@@ -588,7 +623,9 @@
     var noId = d.students.filter(function (s) { return !s.id; }).length;
     try {
       ctx.setBusy('กำลังบันทึก...');
+      var t0 = targetOf(ed);
       var rec = await ctx.saveEdited(ed.kind, d, ed.oldKey);
+      clearTimeout(draftTimer); draftDel(t0); draftDel(targetOf({ oldKey: rec.key }));
       ed.oldKey = rec.key; ed.dirty = false;
       ctx.toast('บันทึกแล้ว' + (noId ? ' (มี ' + noId + ' คนที่ยังไม่มีเลขประจำตัว จะค้นหาผลในหน้าประกาศผลไม่ได้)' : ''), noId ? 'info' : 'ok');
       ed = null;
@@ -614,6 +651,7 @@
   window.PP5Editor = {
     open: open, close: close, render: render,
     active: function () { return !!ed; },
+    drafts: draftList, dropDraft: draftDel,
     kind: function () { return ed ? ed.kind : null; },
     title: function () { return ed && ed.kind === 'pp5' ? ((ed.data.meta.code || '') + ' ' + (ed.data.meta.subject || '')).trim() : ''; }
   };
