@@ -1227,6 +1227,14 @@
     })();
   }
   // ---------- ภาพรวม "วิชาที่ฉันสอน" (ครูรายบุคคล): ทุกชั้น ป.1 → ป.6 ไม่ต้องเลือกห้องทีละห้อง ----------
+  // ปุ่มทั้งหมดของวิชา (แสดงครบ ไม่ต้องเข้าไปในห้อง)
+  function mineBtns(rec, c, slot) {
+    var f = DB.flags || {}, adm = DB.role === 'admin', canUp = adm || f.allowUpload !== false, canEdit = adm || f.allowEdit !== false;
+    var b = function (act, label, cls) { return '<button class="btn' + (cls ? ' ' + cls : '') + '" data-mine="' + act + '" data-cls="' + c + '" data-slot="' + slot + '"' + (rec ? ' data-key="' + esc(rec.key) + '"' : '') + '>' + label + '</button>'; };
+    if (!rec) return (canEdit ? b('online', '✏️ กรอกคะแนน', 'pri') : '') + (canUp ? b('upload', '⇪ อัปโหลด Excel') : '') + b('template', '⬇ ดาวน์โหลดไฟล์ Excel เปล่า');
+    return (canEdit ? b('edit', '✏️ กรอกคะแนน', 'pri') : '') + b('open', '👁 ดูคะแนน') + b('pdf', '📄 PDF ฉบับเต็ม') + (DB.xpdfStart ? b('pdfb', '🧾 PDF สรุปย่อ') : '') +
+      b('download', '⬇ ดาวน์โหลด Excel') + (canUp ? b('upload', '⇪ อัปโหลดไฟล์ใหม่ทับ') : '') + (f.allowDelete !== false || adm ? b('delete', '🗑 ลบ', 'danger') : '');
+  }
   function renderMine() {
     var yr = state.year, order = CORE.map(function (c) { return c.slot; });
     var items = kruSubs().map(function (x) { var p = x.split('|'), c = p[0].split('/'); return { level: +c[0], room: +c[1], slot: p[1] }; })
@@ -1248,8 +1256,7 @@
       h += (lastLv !== it.level ? '<div class="mine-lv">ประถมศึกษาปีที่ ' + it.level + '</div>' : '') +
         '<div class="mine-it' + (rec ? ' has' : '') + '"><div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>' +
         '<div class="mine-t"><b>' + esc(name) + '</b><small>ป.' + c + (rec ? ' · <span class="ok">✓ มีข้อมูลแล้ว' + (d ? ' (' + d.getDate() + '/' + (d.getMonth() + 1) + ')' : '') + '</span>' : ' · <span class="no">ยังไม่มีข้อมูล</span>') + '</small></div>' +
-        '<div class="mine-a"><button class="btn pri" data-mine="' + (rec ? 'edit' : 'online') + '" data-cls="' + c + '" data-slot="' + it.slot + '"' + (rec ? ' data-key="' + esc(rec.key) + '"' : '') + '>✏️ กรอกคะแนน</button>' +
-        (rec ? '<button class="btn" data-mine="open" data-cls="' + c + '" data-key="' + esc(rec.key) + '">👁 ดูคะแนน</button><button class="btn" data-mine="pdf" data-cls="' + c + '" data-key="' + esc(rec.key) + '">📄 PDF</button>' : '') + '</div></div>';
+        '<div class="mine-a">' + mineBtns(rec, c, it.slot) + '</div></div>';
       lastLv = it.level;
     });
     h += '</div>';
@@ -1270,9 +1277,14 @@
       var rec = b.dataset.key ? records.filter(function (r) { return r.key === b.dataset.key; })[0] : null;
       render();
       if (act === 'online') PP5Editor.open({ kind: 'pp5', slot: b.dataset.slot, intent: 'online' }, editorCtx);
+      else if (act === 'template') PP5Editor.open({ kind: 'pp5', slot: b.dataset.slot, intent: 'excel' }, editorCtx);
+      else if (act === 'upload') pickFor(b.dataset.slot);
       else if (act === 'edit' && rec) PP5Editor.open({ kind: 'pp5', key: rec.key }, editorCtx);
       else if (act === 'open' && rec) openSubject(rec.key);
       else if (act === 'pdf' && rec && rec.data) { if (DB.xpdfStart) PP5Pdf.excel(rec, pdfCtx); else PP5Pdf.subject(rec, pdfCtx); }
+      else if (act === 'pdfb' && rec && rec.data) PP5Pdf.subject(rec, pdfCtx);
+      else if (act === 'download' && rec) download(rec);
+      else if (act === 'delete' && rec) removeRecord(rec);
     };
   }
   function openSubject(key) {

@@ -802,3 +802,6 @@ td.g-collect input { background: #eff6ff; font-weight: 700; }
 .sn-i.on .sn-cnt { background: #dbeafe; color: #1e3a8a; }
 .sn-cnt.full { color: #bbf7d0; }
 .sn-i.on .sn-cnt.full { background: #dcfce7; color: #166534; }
+.mine-a .btn { font-size: 13.5px; padding: 7px 10px; border-radius: 10px; }
+.mine-a { justify-content: flex-end; }
+@media (max-width: 760px) { .mine-a { justify-content: flex-start; width: 100%; } .mine-a .btn { flex: 1 1 140px; } }
