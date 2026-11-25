@@ -610,7 +610,9 @@
     afterChange({ year: meta.year, level: meta.level, room: meta.room });
     return rec;
   }
+  var termsAll = {};   // วันเปิด-ปิดภาคเรียนรายปี (แอดมินตั้ง)
   var editorCtx = {
+    terms: function () { return termsAll; },
     esc: esc, toast: toast, setBusy: setBusy,
     rerender: function () { render(); },
     classInfo: curClass,
@@ -989,7 +991,7 @@
         '<div class="slot-meta"><span>' + n + ' คน</span><span>' + d.indicators.length + ' ตัวชี้วัด</span>' +
         (m.teacher ? '<span>ครู' + esc(String(m.teacher).replace(/^(นาย|นางสาว|นาง)/, '')) + '</span>' : '') + '</div>' +
         rosterChip(rec) +
-        '<div class="slot-meta">' + (full ? '<span class="badge ok">คะแนนครบทุกตัวชี้วัด</span>' : '<span class="badge warn">กรอกคะแนนแล้ว ' + filledAll + '/' + d.indicators.length + ' ตัวชี้วัด</span>') +
+        '<div class="slot-meta">' + doneBadge('pp5', d) +
         (dist.rest ? '' : '') + '</div>' +
         // ปุ่มหลัก 2 ปุ่มใหญ่ · ปุ่มอื่นแสดงครบเป็นปุ่มเล็กด้านล่าง
         '<div class="slot-acts slot-main">' +
@@ -1223,10 +1225,23 @@
       if (i >= want.length) return;
       var part = want.slice(i, i + 12).filter(function (r) { return !r.data; }); i += 12;
       if (!part.length) return next();
-      DB.ensureData(part).then(function () { setTimeout(next, 300); }, function () {});
+      DB.ensureData(part).then(function () {
+        if (!state.level && state.tab === 'subjects' && isKru() && !(window.PP5Editor && PP5Editor.active())) renderMine();   // อัปเดตป้ายครบ/ไม่ครบในภาพรวม
+        setTimeout(next, 300);
+      }, function () {});
     })();
   }
   // ---------- ภาพรวม "วิชาที่ฉันสอน" (ครูรายบุคคล): ทุกชั้น ป.1 → ป.6 ไม่ต้องเลือกห้องทีละห้อง ----------
+  // ป้ายความครบถ้วน: ✓ ครบ / ⚠️ ยังไม่ครบ N ช่อง (ภาค 2 นับตั้งแต่ 1 ก.พ.)
+  function doneBadge(kind, d) {
+    if (!d || !PP5Model.completeness) return '';
+    var c = PP5Model.completeness(kind, d);
+    if (!c.total) return '';
+    if (!c.missing) return '<span class="badge ok" title="ตรวจถึงภาคเรียนที่ ' + c.term + '">✓ กรอกครบแล้ว' + (c.term < 2 ? ' (ภาค 1)' : '') + '</span>';
+    var det = c.items.filter(function (x) { return x.missing; }).map(function (x) { return x.label + ' ขาด ' + x.missing + ' ช่อง'; }).join('\n');
+    return '<span class="badge warn miss-b" title="' + esc(det) + '">⚠️ ยังกรอกไม่ครบ ' + c.missing + ' ช่อง</span>' +
+      '<span class="miss-d">' + c.items.filter(function (x) { return x.missing; }).map(function (x) { return esc(x.label) + ' <b>' + x.missing + '</b>'; }).join(' · ') + '</span>';
+  }
   // ปุ่มทั้งหมดของวิชา (แสดงครบ ไม่ต้องเข้าไปในห้อง)
   function mineBtns(rec, c, slot) {
     var f = DB.flags || {}, adm = DB.role === 'admin', canUp = adm || f.allowUpload !== false, canEdit = adm || f.allowEdit !== false;
@@ -1255,7 +1270,7 @@
       var name = rec && rec.data ? rec.data.meta.subject : info.name, d = rec && rec.uploadedAt ? new Date(rec.uploadedAt) : null;
       h += (lastLv !== it.level ? '<div class="mine-lv">ประถมศึกษาปีที่ ' + it.level + '</div>' : '') +
         '<div class="mine-it' + (rec ? ' has' : '') + '"><div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>' +
-        '<div class="mine-t"><b>' + esc(name) + '</b><small>ป.' + c + (rec ? ' · <span class="ok">✓ มีข้อมูลแล้ว' + (d ? ' (' + d.getDate() + '/' + (d.getMonth() + 1) + ')' : '') + '</span>' : ' · <span class="no">ยังไม่มีข้อมูล</span>') + '</small></div>' +
+        '<div class="mine-t"><b>' + esc(name) + '</b><small>ป.' + c + (rec ? ' · <span class="ok">✓ มีข้อมูลแล้ว' + (d ? ' (' + d.getDate() + '/' + (d.getMonth() + 1) + ')' : '') + '</span>' : ' · <span class="no">ยังไม่มีข้อมูล</span>') + '</small>' + (rec && rec.data ? '<div class="mine-b">' + doneBadge('pp5', rec.data) + '</div>' : '') + '</div>' +
         '<div class="mine-a">' + mineBtns(rec, c, it.slot) + '</div></div>';
       lastLv = it.level;
     });
@@ -1818,8 +1833,8 @@
       // โหลดพร้อมกันทุกอย่าง (เร็วกว่าทีละอย่าง)
       var soft = function (p, d) { return p ? Promise.resolve(p).catch(function (er) { console.warn(er); return d; }) : Promise.resolve(d); };
       var got = await Promise.all([DB.all(), soft(DB.templateInfo && DB.templateInfo(), {}), soft(DB.getRoster && DB.getRoster(), null), soft(DB.getLib && DB.getLib(), {}),
-        soft(DB.getBrand && DB.getBrand(), null), soft(DB.getSigs && DB.getSigs(), {})]);
-      records = got[0]; tplInfo = got[1] || {}; roster = got[2] || null; learned = got[3] || {}; if (got[4]) brand = got[4]; sigs = got[5] || {};
+        soft(DB.getBrand && DB.getBrand(), null), soft(DB.getSigs && DB.getSigs(), {}), soft(DB.getTerms && DB.getTerms(), {})]);
+      records = got[0]; tplInfo = got[1] || {}; roster = got[2] || null; learned = got[3] || {}; if (got[4]) brand = got[4]; sigs = got[5] || {}; termsAll = got[6] || {};
       rosterVer++;
       setTimeout(function () { var lg = effBrand().logo, im = $('topLogo'); if (lg && im) { im.src = lg; im.hidden = false; } }, 0);
     } catch (e) {

@@ -101,6 +101,34 @@
   }
 
   // ปีการศึกษาปัจจุบัน (ระบบคิดจากวันที่ หรือแอดมินกำหนดเอง — รองรับการใช้งานต่อเนื่องหลายปี)
+  // ---------- วันเปิด-ปิดภาคเรียน (ครูเลือกวันที่สอน → ระบบคิดชั่วโมงให้) ----------
+  function parseDay(t) {
+    t = String(t || '').trim(); var m;
+    if ((m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    if ((m = t.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/))) { var y = +m[3]; if (y > 2400) y -= 543; return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
+    return null;
+  }
+  function termsCard() {
+    var cy = DB.curYear || 2569, y = S.termY || cy, T = (S.terms || {})[y] || { t1: {}, t2: {}, off: [] };
+    var thOff = (T.off || []).map(function (d) { var p = d.split('-'); return +p[2] + '/' + +p[1] + '/' + (+p[0] + 543); }).join('\n');
+    var ys = []; for (var v = cy + 1; v >= cy - 2; v--) ys.push(v);
+    var inp = function (k, x) { return '<input type="date" data-term="' + k + '" value="' + esc(x || '') + '">'; };
+    return '<section class="card sup-card" id="supTerms"><h2>📅 วันเปิด-ปิดภาคเรียน</h2>' +
+      '<p class="sub">ครูเลือกแค่ "วันที่สอน" (เช่น จันทร์ พุธ) ระบบคิดจำนวนชั่วโมงเรียนของแต่ละภาคให้ และใส่วันที่ในบันทึกเวลามาเรียนของไฟล์ ปพ.5</p>' +
+      '<div class="term-g"><label>ปีการศึกษา<select id="supTermY">' + ys.map(function (v2) { return '<option' + (v2 === +y ? ' selected' : '') + '>' + v2 + '</option>'; }).join('') + '</select></label>' +
+      '<label>ภาค 1 เปิด' + inp('t1.s', T.t1 && T.t1.s) + '</label><label>ภาค 1 ปิด' + inp('t1.e', T.t1 && T.t1.e) + '</label>' +
+      '<label>ภาค 2 เปิด' + inp('t2.s', T.t2 && T.t2.s) + '</label><label>ภาค 2 ปิด' + inp('t2.e', T.t2 && T.t2.e) + '</label></div>' +
+      '<label class="term-off">วันหยุดระหว่างภาค (ไม่นับชั่วโมง) — บรรทัดละวัน เช่น 28/7/2569<textarea id="supTermOff" rows="4">' + esc(thOff) + '</textarea></label>' +
+      '<div class="slot-acts"><button class="btn pri" id="supTermSave">💾 บันทึกวันเปิด-ปิดภาคเรียนปี ' + esc(y) + '</button></div></section>';
+  }
+  async function saveTerms() {
+    var y = S.termY || DB.curYear, v = { t1: {}, t2: {}, off: [] }, bad = [];
+    Array.prototype.forEach.call(document.querySelectorAll('[data-term]'), function (i) { var k = i.dataset.term.split('.'); v[k[0]][k[1]] = i.value; });
+    String($('supTermOff').value || '').split(/[\n,]+/).forEach(function (t) { if (!t.trim()) return; var d = parseDay(t); if (d) v.off.push(d); else bad.push(t.trim()); });
+    if (bad.length) { toast('อ่านวันที่ไม่ได้: ' + bad.join(', ') + ' (ใช้รูปแบบ วัน/เดือน/ปี พ.ศ.)', 'err'); return; }
+    try { S.terms = await DB.saveTerms(y, v); toast('บันทึกวันเปิด-ปิดภาคเรียนปี ' + y + ' แล้ว · วันหยุด ' + v.off.length + ' วัน', 'ok'); render(); var c = $('supTerms'); if (c) c.scrollIntoView({ block: 'start' }); }
+    catch (e) { toast('บันทึกไม่สำเร็จ: ' + e.message, 'err'); }
+  }
   // ---------- อัปเดต / เพิ่ม ปพ.6 ปีเก่า (เช่น นักเรียนย้ายมาจากโรงเรียนอื่น) ----------
   function oldPP6Card() {
     var cy = DB.curYear || 2569, ys = []; for (var y = cy; y >= 2560; y--) ys.push(y);
@@ -394,7 +422,7 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      pubCard() + oldPP6Card() + '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
+      pubCard() + termsCard() + oldPP6Card() + '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
@@ -404,6 +432,7 @@
     };
     main.onchange = async function (e) {
       if (e.target.dataset.flag) return saveFlags();
+      if (e.target.id === 'supTermY') { S.termY = +e.target.value; render(); var ct = $('supTerms'); if (ct) ct.scrollIntoView({ block: 'start' }); return; }
       if (e.target.id === 'supPubY') { S.pubY = +e.target.value; render(); var cp = $('supPub'); if (cp) cp.scrollIntoView({ block: 'start' }); return; }
       if (e.target.id === 'supOldY') { S.oldY = +e.target.value; render(); var c6 = $('supOld6'); if (c6) c6.scrollIntoView({ block: 'start' }); return; }
       if (e.target.id === 'supRosterFile' && e.target.files[0]) return uploadRoster(e.target.files[0]);
@@ -412,6 +441,7 @@
     };
     main.onclick = function (e) {
       if (kruClick(e)) return;
+      if (e.target.id === 'supTermSave') { saveTerms(); return; }
       var o6 = e.target.closest('[data-old6]'); if (o6) { openOld6(o6.dataset.old6); return; }
       var pc = e.target.closest('[data-pubc]');
       if (pc) {
@@ -488,8 +518,8 @@
       acts();
       var bt = document.getElementById('bootText'); if (bt) bt.textContent = 'กำลังโหลดข้อมูลทุกห้อง...';
       var r = await Promise.all([DB.all(), DB.publicStatus().catch(function () { return {}; }), DB.getRoster().catch(function () { return null; }), DB.templateInfo().catch(function () { return {}; }),
-        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; }), DB.getLib().catch(function () { return {}; }), DB.kruList ? DB.kruList().catch(function () { return []; }) : []]);
-      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {}; S.lib = r[6] || {}; S.kru = r[7] || [];
+        DB.getBrand().catch(function () { return null; }), DB.getSigs().catch(function () { return {}; }), DB.getLib().catch(function () { return {}; }), DB.kruList ? DB.kruList().catch(function () { return []; }) : [], DB.getTerms ? DB.getTerms().catch(function () { return {}; }) : {}]);
+      S.entries = r[0] || []; S.pub = r[1] || {}; S.roster = r[2]; S.tpl = r[3] || {}; S.brand = r[4]; S.sigs = r[5] || {}; S.lib = r[6] || {}; S.kru = r[7] || []; S.terms = r[8] || {};
       render();
       bootDone();
       DB.folderLinks().then(function (l) { S.links = l; render(); }, function (er) { console.warn('links', er); });

@@ -12,6 +12,8 @@
   'use strict';
 
   var C = function (n) { return XF.colName(n); };
+  function tYmd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function tDays(span) { var p = span.s.split('-'), q = span.e.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]), end = new Date(+q[0], +q[1] - 1, +q[2]), o = []; while (d <= end && o.length < 400) { o.push(new Date(d)); d.setDate(d.getDate() + 1); } return o; }
   function norm(s) { return String(s == null ? '' : s).replace(/\s+/g, ''); }
   function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
   function str(v) { return v == null ? '' : String(v); }
@@ -90,6 +92,25 @@
 
     // เวลาเรียน (สรุป) และบันทึกรายวัน (ล้าง เพราะระบบเก็บเฉพาะยอดรวม)
     if (!keep) for (var t = 1; t <= 2; t++) { var day = await book.sheet('บันทึกมาเรียน_T' + t); if (day) day.clearRange(4, 200, 7, 46); }
+    // บันทึกรายวัน: วันที่ วัน และจำนวนคาบ ตามวันเปิด-ปิดภาคเรียน + วันที่ครูสอน (ไฟล์ใหม่เท่านั้น ไฟล์เดิมของครูไม่แตะ)
+    if (!keep && data && data.schedule && data.schedule.days) {
+      var THM = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'], WD = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+      var SCH = data.schedule, OFF = SCH.off || [];
+      for (var tt = 1; tt <= 2; tt++) {
+        var dsh = await book.sheet('บันทึกมาเรียน_T' + tt), span = SCH['t' + tt];
+        if (!dsh || !span || !span.s || !span.e || !XF.colName) continue;
+        for (var bb = 0; bb < 6; bb++) for (var cc = 0; cc < 30; cc++) { var cn = C(33 * bb + 4 + cc); ['2', '5', '6'].forEach(function (rr) { dsh.clear(cn + rr); }); }
+        var dl = tDays(span).slice(0, 180);
+        dl.forEach(function (d, i) {
+          var col = C(33 * Math.floor(i / 30) + 4 + (i % 30)), w = d.getDay(), key = tYmd(d), k = +SCH.days[w] || 0;
+          dsh.set(col + '2', d.getDate() + ' ' + THM[d.getMonth()] + ' ' + (d.getFullYear() + 543));
+          dsh.set(col + '5', WD[w]);
+          if (w === 0 || w === 6) { dsh.set(col + '6', WD[w]); studs.forEach(function (s) { dsh.set(col + (6 + s.no), WD[w]); }); }
+          else if (OFF.indexOf(key) >= 0) dsh.set(col + '6', 'หยุด');
+          else if (k) dsh.set(col + '6', k);
+        });
+      }
+    }
     var at = await book.sheet('สรุปเวลาเรียน');
     function atSet(addr, v) { if (keep && at.isFormula(addr)) return; at.set(addr, v); }   // ไฟล์ครูที่คิดจากบันทึกรายวัน: คงสูตรไว้
     if (data) { if (data.hours.t1 != null) atSet('G3', data.hours.t1); if (data.hours.t2 != null) atSet('L3', data.hours.t2); }
@@ -116,16 +137,21 @@
 
     // กิจกรรมพัฒนาผู้เรียน (ชั่วโมงที่เข้าร่วม: ผ่าน = เต็ม, ไม่ผ่าน = 0)
     var ac = await book.sheet('ประเมินกิจกรรมพัฒนาผู้เรียน');
+    // ชั่วโมงเต็มของแต่ละกิจกรรม (แก้ได้ในระบบ) → แถว 5
+    var AHx = (data && data.activityHours) || {}, CMAP = { guidance: 'D', scout: 'J', club: 'Q', social: 'AA' };
+    Object.keys(CMAP).forEach(function (k) { if (num(AHx[k]) != null) ac.set(CMAP[k] + '5', num(AHx[k])); });
     var full = { D: num(ac.get('D5')) || 40, J: num(ac.get('J5')) || 40, Q: num(ac.get('Q5')) || 30, AA: num(ac.get('AA5')) || 10 };
     ['D', 'J', 'P', 'Q', 'Z', 'AA'].forEach(function (col) { for (var r = 7; r <= 46; r++) ac.clear(col + r); });
     studs.forEach(function (s) {
-      var r = 6 + s.no, a = s.activities || {};
-      var hrs = function (v, col) { return !v ? null : /^ผ/.test(v) ? full[col] : 0; };
-      if (hrs(a.guidance, 'D') != null) ac.set('D' + r, hrs(a.guidance, 'D'));
-      if (hrs(a.scout, 'J') != null) ac.set('J' + r, hrs(a.scout, 'J'));
+      var r = 6 + s.no, a = s.activities || {}, H = a.hours || {};
+      // ชั่วโมงเข้าร่วมจริง (ถ้ามี) · ไม่มี → จากผล ผ. = เต็ม / มผ. = 0
+      var hrs = function (k, col) { var h = num(H[k]); if (h != null) return h; var v = a[k]; return !v ? null : /^ผ/.test(v) ? full[col] : 0; };
+      if (hrs('guidance', 'D') != null) ac.set('D' + r, hrs('guidance', 'D'));
+      if (hrs('scout', 'J') != null) ac.set('J' + r, hrs('scout', 'J'));
       if (a.clubName) ac.set('P' + r, a.clubName);
-      if (hrs(a.club, 'Q') != null) ac.set('Q' + r, hrs(a.club, 'Q'));
-      if (a.social) { ac.set('Z' + r, 'บำเพ็ญประโยชน์'); ac.set('AA' + r, hrs(a.social, 'AA')); }
+      if (hrs('club', 'Q') != null) ac.set('Q' + r, hrs('club', 'Q'));
+      if (a.socialName || a.social || num(H.social) != null) ac.set('Z' + r, a.socialName || 'บำเพ็ญประโยชน์');
+      if (hrs('social', 'AA') != null) ac.set('AA' + r, hrs('social', 'AA'));
     });
 
     // คุณลักษณะ 0-3 (ข้อ 1-10 ที่คอลัมน์ D, F, H, ...)

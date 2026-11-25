@@ -770,6 +770,18 @@ function api_saveExternal(pin, id, year, json) {
 }
 
 // ===== ปีการศึกษาปัจจุบัน: ตามวันที่ (เปิดภาคเรียน พ.ค.) หรือที่แอดมินตั้ง =====
+// ===== วันเปิด-ปิดภาคเรียน (แอดมินกำหนดรายปี) → ครูเลือกวันที่สอน ระบบคิดชั่วโมงให้ =====
+//   { "2569": { t1: { s: "2026-05-16", e: "2026-10-10" }, t2: { s, e }, off: ["2026-07-28", ...] } }
+function terms_() { try { return JSON.parse(props_().getProperty('TERMS') || '{}'); } catch (e) { return {}; } }
+function api_getTerms(pin) { checkPin_(pin); return terms_(); }
+function api_saveTerms(pin, year, json) {
+  if (checkPin_(pin) !== 'admin') throw new Error('เฉพาะผู้ดูแลระบบหลัก');
+  var all = terms_(), v = json ? JSON.parse(json) : null, ok = function (d) { return /^\d{4}-\d{2}-\d{2}$/.test(String(d || '')); };
+  if (!v) delete all[year];
+  else all[+year] = { t1: { s: ok(v.t1 && v.t1.s) ? v.t1.s : '', e: ok(v.t1 && v.t1.e) ? v.t1.e : '' }, t2: { s: ok(v.t2 && v.t2.s) ? v.t2.s : '', e: ok(v.t2 && v.t2.e) ? v.t2.e : '' }, off: (v.off || []).filter(ok).slice(0, 120) };
+  props_().setProperty('TERMS', JSON.stringify(all));
+  return all;
+}
 function curYear_() {
   var v = +props_().getProperty('CUR_YEAR');
   if (v > 2500) return v;

@@ -91,7 +91,8 @@
     } else {
       inner = '<input data-r="' + r + '" data-c="' + ci + '" value="' + esc(show(v, c)) + '"' + (c.type === 'num' ? ' inputmode="decimal"' : '') + ' autocomplete="off">';
     }
-    return '<td class="g-in ' + (bad ? 'g-bad ' : '') + (c.cls || '') + '"' + st + '>' + inner + '</td>';
+    var req = c.req && (v == null || v === '');   // ช่องที่ยังต้องกรอก (เตือนว่ายังไม่ครบ)
+    return '<td class="g-in ' + (bad ? 'g-bad ' : '') + (req ? 'g-req ' : '') + (c.cls || '') + '"' + st + '>' + inner + '</td>';
   };
   Grid.prototype.refresh = function () {
     var self = this, o = this.o;
@@ -156,6 +157,7 @@
       var ok = self.setCell(r, ci, t.value);
       var td = t.parentNode, v = self.get(o.rows[r], c);
       td.classList.toggle('g-bad', !ok || (c.type === 'num' && v != null && ((c.max != null && v > c.max) || (c.min != null && v < c.min))));
+      td.classList.toggle('g-req', !!c.req && (v == null || v === ''));
       if (o.onChange) o.onChange(o.rows[r], c);
       if (c.rerender) { self.render(); self.focus(r, ci); } else self.refresh();   // คอลัมน์ที่เปลี่ยนหลายช่องในแถว (เช่น "ทั้งแถว")
     }

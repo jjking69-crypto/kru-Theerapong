@@ -174,9 +174,78 @@
       if (force || w.avg == null) w.avg = round(mean([w.t1.avg, w.t2.avg]), 2);
       if (force || w.level == null) w.level = levelOfAvg(w.avg);
       if (force || !w.text) w.text = w.level == null ? '' : LEVEL_TEXT[w.level];
-      s.activities = s.activities || { clubName: '', guidance: '', scout: '', club: '', social: '' };
+      var ac = s.activities = s.activities || { clubName: '', guidance: '', scout: '', club: '', social: '' };
+      ac.hours = ac.hours || {};
+      // มีชั่วโมงเข้าร่วม → ผลประเมินตามสูตรในไฟล์ (80% ขึ้นไป = ผ.)
+      var AH = data.activityHours || {};
+      ['guidance', 'scout', 'club', 'social'].forEach(function (k) {
+        var h = num(ac.hours[k]), mx = num(AH[k]);
+        if (h != null && mx) { if (force || !ac[k]) ac[k] = h / mx * 100 >= 80 ? 'ผ.' : 'มผ.'; }
+      });
     });
     return data;
+  }
+
+  // ---------- วันเรียนตามวันเปิด-ปิดภาคเรียน ----------
+  // span = { s: 'YYYY-MM-DD', e: 'YYYY-MM-DD' } · days = { 1: คาบ, 3: คาบ } (0 = อาทิตย์) · off = ['YYYY-MM-DD'] วันหยุด
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function termDays(span) {
+    if (!span || !span.s || !span.e) return [];
+    var p = span.s.split('-'), q = span.e.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]), end = new Date(+q[0], +q[1] - 1, +q[2]), out = [];
+    while (d <= end && out.length < 400) { out.push(new Date(d)); d.setDate(d.getDate() + 1); }
+    return out;
+  }
+  function teachHours(span, days, off) {
+    if (!span || !span.s || !span.e || !days) return null;
+    var offs = off || [], n = 0, cnt = 0;
+    termDays(span).forEach(function (d) { var k = num(+days[d.getDay()]); if (k && offs.indexOf(ymd(d)) < 0) { n += k; cnt++; } });
+    return { hours: n, days: cnt };
+  }
+
+  // ---------- ความครบถ้วนของข้อมูล (ใช้ทั้งข้อมูลที่กรอกในระบบและไฟล์ที่อัปโหลด) ----------
+  // ภาคเรียนที่ 2 นับตั้งแต่ 1 ก.พ. ของปีการศึกษานั้น · ก่อนหน้านั้นไม่เตือนช่องของภาค 2 / ผลปลายปี
+  function activeTerm(year, now) { var g = (+year || 0) - 543; return g > 0 && (now || Date.now()) >= new Date(g + 1, 1, 1).getTime() ? 2 : 1; }
+  function blankV(v) { return v == null || v === '' || (typeof v === 'number' && !isFinite(v)); }
+  function completeness(kind, d, now) {
+    var out = { term: activeTerm(d && d.meta && d.meta.year, now), items: [], missing: 0, total: 0, bySec: {} };
+    if (!d || !d.students) return out;
+    var st = d.students.filter(function (s) { return s.name || s.first; }), T2 = out.term >= 2;
+    function add(sec, label, term, miss, tot) {
+      if (!tot) return;
+      out.items.push({ sec: sec, label: label, term: term, missing: miss, total: tot });
+      out.missing += miss; out.total += tot; out.bySec[sec] = (out.bySec[sec] || 0) + miss;
+    }
+    function count(fn) { var m = 0, t = 0; st.forEach(function (s) { fn(s).forEach(function (v) { t++; if (blankV(v)) m++; }); }); return [m, t]; }
+    var c;
+    if (kind === 'pp5') {
+      var inds = d.indicators || [];
+      [1, 2].forEach(function (tm) {
+        if (tm === 2 && !T2) return;
+        var ii = inds.filter(function (i) { return (i.term || 1) === tm; });
+        c = count(function (s) { return ii.map(function (i) { return (s.scores || {})[i.idx]; }); }); add('scores', 'คะแนนตัวชี้วัด ภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { return ['read', 'think', 'write'].map(function (k) { return ((s.rtw || {})['t' + tm] || {})[k]; }); }); add('rtw', 'อ่าน คิด เขียน ภาค ' + tm, tm, c[0], c[1]);
+      });
+      if (T2) {
+        c = count(function (s) { var r = s.result || {}; return [r.rms ? 0 : r.final]; }); add('scores', 'คะแนนสอบปลายภาค', 2, c[0], c[1]);
+        c = count(function (s) { return (d.characteristicItems || []).map(function (it) { return ((s.characteristics || {}).items || {})[it.no]; }); }); add('char', 'คุณลักษณะอันพึงประสงค์', 2, c[0], c[1]);
+        c = count(function (s) { var a = s.activities || {}; return [a.guidance, a.scout, a.club, a.social]; }); add('act', 'กิจกรรมพัฒนาผู้เรียน', 2, c[0], c[1]);
+      }
+    } else {
+      var subs = d.subjects || [];
+      [1, 2].forEach(function (tm) {
+        if (tm === 2 && !T2) return;
+        var t = 't' + tm;
+        c = count(function (s) { var o = []; subs.forEach(function (sub) { var x = (s[t] || {})[sub.code] || {}; o.push(x.collect, x.exam); }); return o; }); add(t, 'คะแนนภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { var a = (s.attendance || {})[t] || {}; return [a.total, a.present]; }); add('att', 'เวลาเรียน ภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { var h = (s.health || {})[t] || {}; return [h.w, h.h]; }); add('health', 'น้ำหนัก/ส่วนสูง ภาค ' + tm, tm, c[0], c[1]);
+      });
+      if (T2) {
+        c = count(function (s) { return (d.rtwItems || []).map(function (it, i) { return ((s.rtw || {}).scores || [])[i]; }); }); add('rtw', 'อ่าน คิดวิเคราะห์ และเขียน', 2, c[0], c[1]);
+        c = count(function (s) { return (d.characteristicItems || []).map(function (n, i) { return ((s.characteristics || {}).items || [])[i]; }); }); add('char', 'คุณลักษณะอันพึงประสงค์', 2, c[0], c[1]);
+        c = count(function (s) { var o = []; (d.competencyGroups || []).forEach(function (g, gi) { g.items.forEach(function (x, ii) { o.push(((s.competencies || [])[gi] || [])[ii]); }); }); return o; }); add('comp', 'สมรรถนะของผู้เรียน', 2, c[0], c[1]);
+      }
+    }
+    return out;
   }
 
   // ---------- ปพ.6 (ทั้งห้อง) ----------
@@ -603,7 +672,7 @@
 
   return {
     newPP5: newPP5, newPP6: newPP6, fillPP5: fillPP5, fillPP6: fillPP6, pp6FromPP5: pp6FromPP5, pp5TermScores: pp5TermScores, findStu: findStu, nameKey: nameKey,
-    exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob,
+    exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob, completeness: completeness, activeTerm: activeTerm, termDays: termDays, teachHours: teachHours, ymd: ymd,
     defaultSubjects: defaultSubjects, subjectDefaults: subjectDefaults, blankStudent: blankStudent, copyRoster: copyRoster,
     gradeOf: gradeOf, fullName: fullName, stageName: stageName,
     CHAR_ITEMS: CHAR_ITEMS, RTW_ITEMS: RTW_ITEMS, COMPETENCY: COMPETENCY, LEVEL_TEXT: LEVEL_TEXT

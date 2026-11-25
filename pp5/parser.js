@@ -603,14 +603,19 @@
     var hourCols = [];
     for (var hc = 0; hc <= b.e.c && hourCols.length < 4; hc++) if (norm(cell(ws, r0 + 2, hc)) === 'จำนวนชั่วโมง') hourCols.push({ c: hc, max: num(cell(ws, r0 + 3, hc)) });
     var keys = ['guidance', 'scout', 'club', 'social'];
+    // ชื่อกิจกรรมเพื่อสังคมฯ ของแต่ละคน (คอลัมน์หัว "กิจกรรมเพื่อสังคม..." แถวเดียวกับ "จำนวนชั่วโมง")
+    var socName = null;
+    for (var sc = 0; sc <= b.e.c; sc++) if (/^กิจกรรมเพื่อสังคม/.test(norm(cell(ws, r0 + 2, sc)))) { socName = sc; break; }
+    out.max = {};
+    hourCols.forEach(function (h, i) { if (h.max) out.max[keys[i]] = h.max; });
     studentRows(ws, bk).forEach(function (s) {
-      var o = { clubName: club ? String(cell(ws, s.r, club.c) || '') : '' };
+      var o = { clubName: club ? String(cell(ws, s.r, club.c) || '') : '', socialName: socName != null ? String(cell(ws, s.r, socName) || '') : '', hours: {} };
       acts.forEach(function (a) { o[a.key] = String(cell(ws, s.r, a.c) || ''); });
       hourCols.forEach(function (h, i) {
-        var k = keys[i];
-        if (o[k] || !h.max) return;
-        var v = num(cell(ws, s.r, h.c));
-        if (v != null) o[k] = v / h.max * 100 >= 80 ? 'ผ.' : 'มผ.';
+        var k = keys[i], v = num(cell(ws, s.r, h.c));
+        if (v != null) o.hours[k] = v;   // ชั่วโมงที่เข้าร่วมจริง
+        if (o[k] || !h.max || v == null) return;
+        o[k] = v / h.max * 100 >= 80 ? 'ผ.' : 'มผ.';
       });
       out.byNo[s.no] = o;
     });
@@ -678,6 +683,7 @@
       characteristicItems: chars.items,
       maxima: results.max,
       hours: att.hours,
+      activityHours: acts.max || null,
       indicatorTotal: indSum.total || indicators.length,
       students: students
     };

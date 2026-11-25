@@ -471,6 +471,12 @@
         c.notInRoster.map(function (d) { return '<li class="bad">ไม่มีในทะเบียน: ' + esc(d.name) + (d.id ? ' (' + esc(d.id) + ')' : '') + '</li>'; }).join('') +
         c.missing.map(function (d) { return '<li class="bad">มีในทะเบียนแต่ไม่มีในไฟล์: เลขที่ ' + esc(d.no) + ' ' + esc(d.name) + '</li>'; }).join('') + '</ul>');
     }
+    if (window.PP5Model && PP5Model.completeness && !rec.virtual) {
+      var cp = PP5Model.completeness('pp6', rec.data);
+      if (cp.total) h += cp.missing ? chkItem(false, 'ความครบถ้วนของข้อมูล', 'ยังกรอกไม่ครบ ' + cp.missing + ' ช่อง' + (cp.term < 2 ? ' (ตรวจเฉพาะภาคเรียนที่ 1 — ภาค 2 เริ่มตรวจ 1 ก.พ.)' : '') + ' · กด "แก้ไขในระบบ" ขั้นที่มีตัวเลขสีแดงคือส่วนที่ยังไม่ครบ',
+        '<ul class="chk-list">' + cp.items.filter(function (x) { return x.missing; }).map(function (x) { return '<li class="bad">' + esc(x.label) + ': ขาด ' + x.missing + ' จาก ' + x.total + ' ช่อง</li>'; }).join('') + '</ul>')
+        : chkItem(true, 'ความครบถ้วนของข้อมูล', 'กรอกครบทุกช่องแล้ว' + (cp.term < 2 ? ' (ภาคเรียนที่ 1)' : ''));
+    }
     if (rec.virtual) h += chkItem(true, 'คะแนน', 'คำนวณจากไฟล์ ปพ.5 โดยตรง');
     else {
       var cmp = ctx.compare ? ctx.compare(rec) : null;

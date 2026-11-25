@@ -221,8 +221,27 @@
   }
   function colIdx(l) { var n = 0; for (var i = 0; i < l.length; i++) n = n * 26 + (l.charCodeAt(i) - 64); return n - 1; }
   function attr(x, k) { var m = x.match(new RegExp('\\b' + k + '="([^"]*)"')); return m ? m[1] : null; }
+  // ชีตที่เป็นช่องกรอก: หน้าไหนไม่มีข้อมูลที่ครูกรอกเลย → ไม่ใส่ใน PDF (เร็วขึ้น)
+  var INPUT_SHEET = /^(บันทึกมาเรียน|คะแนนเก็บ|ประเมินคุณลักษณะ|ประเมินการ(อ่าน|คิด|เขียน)|ประเมินกิจกรรม)/;
+  async function sharedStrings(zip) {
+    var f = zip.file('xl/sharedStrings.xml'); if (!f) return [];
+    var x = await f.async('string');
+    return (x.match(/<si>[\s\S]*?<\/si>/g) || []).map(function (si) { return (si.match(/<t[^>]*>([^<]*)<\/t>/g) || []).map(function (t) { return t.replace(/<[^>]+>/g, ''); }).join(''); });
+  }
+  function filledCells(x, ss) {
+    var rows = {}, cells = [], re = /<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, m;
+    while ((m = re.exec(x))) {
+      var col = colIdx(m[1]), row = +m[2] - 1, inner = m[4] || '', vm = inner.match(/<v>([^<]*)<\/v>/), im = inner.match(/<t[^>]*>([^<]*)<\/t>/);
+      var val = vm ? vm[1] : im ? im[1] : '';
+      if (/t="s"/.test(m[3]) && vm) val = ss[+vm[1]] || '';
+      if (col === 0 && /^\d+$/.test(String(val).trim()) && +val >= 1 && +val <= 60) rows[row] = 1;   // แถวนักเรียน (คอลัมน์ "ที่")
+      if (col >= 3 && !/<f[ >\/]/.test(inner) && String(val).trim() !== '' && !/^(ส|อา|หยุด)$/.test(String(val).trim())) cells.push([row, col]);
+    }
+    return cells.filter(function (p) { return rows[p[0]]; });
+  }
   // อ่านลำดับชีต การซ่อน ขนาดพื้นที่ แนวกระดาษ และตัวแบ่งหน้า จากไฟล์ .xlsm
   async function layoutOf(zip) {
+    var ss = await sharedStrings(zip);
     var wb = await zip.file('xl/workbook.xml').async('string'), rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
     var rid = {}; (rels.match(/<Relationship [^>]*>/g) || []).forEach(function (r) { rid[attr(r, 'Id')] = attr(r, 'Target'); });
     var out = [];
@@ -236,7 +255,8 @@
       var dim = (x.match(/<dimension ref="([^"]+)"/) || [])[1] || '', m = dim.match(/:?([A-Z]+)(\d+)$/);
       var ps = (x.match(/<pageSetup[^>]*>/) || [''])[0];
       var brk = function (tag) { var b = (x.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)</' + tag + '>')) || [])[1] || ''; return (b.match(/<brk [^>]*>/g) || []).map(function (q) { return +attr(q, 'id'); }).filter(function (v) { return v > 0; }); };
-      out.push({ name: name, rows: m ? +m[2] : 0, cols: m ? colIdx(m[1]) + 1 : 0, portrait: attr(ps, 'orientation') !== 'landscape', rowBrk: brk('rowBreaks'), colBrk: brk('colBreaks') });
+      out.push({ name: name, rows: m ? +m[2] : 0, cols: m ? colIdx(m[1]) + 1 : 0, portrait: attr(ps, 'orientation') !== 'landscape', rowBrk: brk('rowBreaks'), colBrk: brk('colBreaks'),
+        filled: INPUT_SHEET.test(name) ? filledCells(x, ss) : null });
     }
     // หน้าปกขึ้นก่อน (เหมือนการพิมพ์เล่ม ปพ.5)
     out.sort(function (a, b) { return (/^ปกหน้า/.test(b.name) ? 1 : 0) - (/^ปกหน้า/.test(a.name) ? 1 : 0); });
@@ -292,7 +312,7 @@
   function b64u8(b) { return Uint8Array.from(atob(b), function (ch) { return ch.charCodeAt(0); }); }
   function u8b64(u8) { var s = '', k = 0x8000; for (var i = 0; i < u8.length; i += k) s += String.fromCharCode.apply(null, u8.subarray(i, i + k)); return btoa(s); }
   // ลายเซ็นข้อมูลของวิชา: ไม่เปลี่ยน = ใช้ PDF เดิมได้
-  function stampOf(rec) { return [rec.uploadedAt || '', (rec.data.students || []).length, JSON.stringify(rec.data.students.map(function (x) { return [x.no, x.id]; })).length, 'v2'].join('|'); }
+  function stampOf(rec) { return [rec.uploadedAt || '', (rec.data.students || []).length, JSON.stringify(rec.data.students.map(function (x) { return [x.no, x.id]; })).length, 'v3'].join('|'); }
   async function oneExcelPdf(rec, ctx, ld, tag) {
     var store = ctx.store, stamp = stampOf(rec), id = null;
     if (store.xpdfCacheGet) {
@@ -315,7 +335,8 @@
         if (!g) return;
         var R = segs(L.rowBrk, L.rows || g.rows), C = segs(L.colBrk, L.cols || g.cols), ranges = [];
         C.forEach(function (c) { R.forEach(function (r) { ranges.push([r[0], c[0], r[1], c[1]]); }); });   // ลงก่อนแล้วไปขวา (แบบ Excel)
-        jobs.push({ gid: g.gid, ranges: ranges, portrait: L.portrait });
+        if (L.filled) ranges = ranges.filter(function (rg) { return L.filled.some(function (p) { return p[0] >= rg[0] && p[0] < rg[2] && p[1] >= rg[1] && p[1] < rg[3]; }); });   // หน้าที่ยังไม่ได้กรอก → ตัดออก
+        if (ranges.length) jobs.push({ gid: g.gid, ranges: ranges, portrait: L.portrait });
       });
       // ส่งเป็นชุด ๆ ละไม่เกิน ~12 หน้า (เซิร์ฟเวอร์ดึงพร้อมกันทีละหลายหน้า)
       var groups = [], cur = [], n = 0, total = 0;
