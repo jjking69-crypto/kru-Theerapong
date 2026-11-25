@@ -415,7 +415,7 @@
       el.innerHTML = tools('ถ้ากรอกช่อง <b>"คะแนนเก็บ"</b> เอง ระบบจะเฉลี่ยลงตัวชี้วัดของ <select id="edDistTerm" class="ed-mini">' +
         [0, 1, 2].map(function (t) { return '<option value="' + t + '"' + ((ed.distTerm || 0) === t ? ' selected' : '') + '>' + (t ? 'ภาคเรียนที่ ' + t : 'อัตโนมัติ (ตอนนี้ภาค ' + termNow(d.meta.year) + ')') + '</option>'; }).join('') + '</select>' +
         '<span class="sub" style="margin:0">ภาค 2 เริ่ม 1 ก.พ. ทุกปี</span>') +
-        hint('กรอกคะแนนแต่ละตัวชี้วัด (ระบบคิดคะแนนเก็บให้) <b>หรือ</b> กรอกคะแนนเก็บเองแล้วระบบเฉลี่ยลงตัวชี้วัดภาค ' + tn + ' · ลบช่องคะแนนเก็บ = กลับไปคิดจากตัวชี้วัด · ช่องสีแดง = เกินคะแนนเต็ม') + '<div class="ed-g"></div>';
+        hint('<b>สูตรคะแนนเก็บ = คะแนนตัวชี้วัดที่ได้ ÷ คะแนนเต็มรวมทุกตัวชี้วัด (' + (mx.indTotal || 0) + ') × ' + mx.collect + '</b> (ปัดเศษ) เช่น ได้ 80 จาก ' + (mx.indTotal || 100) + ' = ' + Math.round(80 / (mx.indTotal || 100) * mx.collect) + '/' + mx.collect + ' · ไม่ใช่นำคะแนนมาบวกกันตรง ๆ<br>กรอกคะแนนแต่ละตัวชี้วัด (ระบบคิดคะแนนเก็บให้) <b>หรือ</b> กรอกคะแนนเก็บเองแล้วระบบเฉลี่ยลงตัวชี้วัดภาค ' + tn + ' · ลบช่องคะแนนเก็บ = กลับไปคิดจากตัวชี้วัด · ช่องสีแดง = เกินคะแนนเต็ม') + '<div class="ed-g"></div>';
       var dt = el.querySelector('#edDistTerm'); if (dt) dt.onchange = function () { ed.distTerm = +dt.value || 0; ctx.rerender(); };
       var cols = inds.map(function (i) {
         return { label: i.code || ('#' + i.idx), sub: '/' + (i.max == null ? '?' : i.max), group: 'ภาคเรียนที่ ' + (i.term || 1), type: 'num', w: 54, max: i.max, min: 0, req: needT(i.term || 1),
@@ -424,7 +424,7 @@
       cols.push({ label: 'ปลายภาค', sub: '/' + mx.final, group: 'สรุป', type: 'num', w: 64, max: mx.final, min: 0, req: needT(2), get: function (s) { return s.result.final; }, set: function (s, v) { s.result.final = v; } });
       cols.push({ label: 'ร/มส', group: 'สรุป', type: 'select', options: ['', 'ร', 'มส'], w: 56, get: function (s) { return s.result.rms; }, set: function (s, v) { s.result.rms = v; } });
       cols.push({ label: 'รวมตัวชี้วัด', sub: '/' + (mx.indTotal || 0), group: 'สรุป', type: 'ro', w: 64, get: function (s) { return s.result.indTotal; } });
-      cols.push({ label: 'คะแนนเก็บ', sub: '/' + mx.collect + ' กรอกได้', group: 'สรุป', type: 'num', w: 70, max: mx.collect, min: 0, rerender: true, cls: 'g-collect',
+      cols.push({ label: 'คะแนนเก็บ', sub: '/' + mx.collect + ' กรอกได้', group: 'สรุป', type: 'num', w: 70, max: mx.collect, min: 0, rerender: true, live: true, cls: 'g-collect',
         get: function (s) { return s.result.collect; },
         set: function (s, v) {
           if (v == null) { s.result.collectManual = false; s.result.collect = null; return; }

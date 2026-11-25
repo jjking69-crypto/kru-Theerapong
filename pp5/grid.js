@@ -96,6 +96,14 @@
   };
   Grid.prototype.refresh = function () {
     var self = this, o = this.o;
+    // ช่องกรอกที่ระบบคำนวณให้ด้วย (live) เช่น คะแนนเก็บ: อัปเดตค่าที่แสดง (ยกเว้นช่องที่กำลังพิมพ์)
+    Array.prototype.forEach.call(this.el.querySelectorAll('input[data-c]'), function (inp) {
+      var c = o.cols[+inp.dataset.c];
+      if (!c || !c.live || inp === document.activeElement) return;
+      var v = self.get(o.rows[+inp.dataset.r], c);
+      inp.value = show(v, c);
+      inp.parentNode.classList.toggle('g-req', !!c.req && (v == null || v === ''));
+    });
     Array.prototype.forEach.call(this.el.querySelectorAll('td.g-ro'), function (td) {
       var r = +td.dataset.r, c = o.cols[+td.dataset.c];
       td.textContent = show(self.get(o.rows[r], c), c);
