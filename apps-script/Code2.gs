@@ -242,8 +242,7 @@ function saveIndex_(idx) {
 
 /** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
 function api_publish(pin, key, pubJson) {
-  var kp = String(key).split('|');
-  needScope_(pin, 'allowPublish', kp[1], kp[2], 'pp6');
+  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
   return withLock_(function () {
     var pub = JSON.parse(pubJson);
     if (pub.logo) {
@@ -266,8 +265,7 @@ function api_publish(pin, key, pubJson) {
   });
 }
 function api_unpublish(pin, key) {
-  var kp = String(key).split('|');
-  needScope_(pin, 'allowPublish', kp[1], kp[2], 'pp6');
+  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
   return withLock_(function () {
     var idx = readIndex_(), old = idx.classes[key];
     if (!old) return true;

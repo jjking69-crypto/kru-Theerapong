@@ -311,8 +311,10 @@
     else if (roster.url) window.open(roster.url, '_blank', 'noopener');
   }
   function renderRosterBar() {
+    if (DB !== LocalDB && !canManage()) { var rb0 = $('rosterBar'); if (rb0) { rb0.innerHTML = ''; rb0.hidden = true; } return; }   // ครู: ดูทะเบียนได้ที่เมนู "ทะเบียนรายชื่อ"
     var el = $('rosterBar');
     if (!el) return;
+    el.hidden = false;
     if (!roster || !roster.data) {
       el.innerHTML = '<div class="card roster-bar empty"><span>📋 ยังไม่มีทะเบียนรายชื่อนักเรียน' + (canManage() ? '' : ' (แอดมินอัปโหลดได้ที่ระบบแอดมิน)') + '</span>' + (canManage() ? '<button class="btn pri" data-rb="up">อัปโหลดไฟล์รายชื่อ (.docx)</button>' : '') + '</div>';
       return;
@@ -445,7 +447,8 @@
   function curClass() { return { year: state.year, level: state.level, room: state.room }; }
   function publishCtx() { return ctxFor(curClass()); }
   function afterChange(cls) {
-    if (DB === LocalDB || !window.PP5Publish) return;
+    // หน้าประกาศผลอัปเดตโดยแอดมินเท่านั้น (ไม่อัปเดตอัตโนมัติเมื่อครูบันทึก)
+    if (DB === LocalDB || !window.PP5Publish || true) return;
     var c = ctxFor(cls);
     c.withClass(cls).then(function (cc) { PP5Publish.autoPublish(cc, cls); });
   }
@@ -975,16 +978,17 @@
         rosterChip(rec) +
         '<div class="slot-meta">' + (full ? '<span class="badge ok">คะแนนครบทุกตัวชี้วัด</span>' : '<span class="badge warn">กรอกคะแนนแล้ว ' + filledAll + '/' + d.indicators.length + ' ตัวชี้วัด</span>') +
         (dist.rest ? '' : '') + '</div>' +
-        '<div class="slot-acts act-list">' +
-        actBtn('open', '', rec.key, '👁', 'ดูคะแนน', 'คะแนนทุกตัวชี้วัด รวม และเกรด', 'pri') +
-        actBtn('pdf5', '', rec.key, '📄', 'PDF ปพ.5', DB.xpdfStart ? 'รูปแบบไฟล์ Excel ต้นฉบับ ทุกชีต' : 'ทั้งเล่ม ทุกหน้า พร้อมพิมพ์') +
-        (DB.xpdfStart ? actBtn('pdf5b', '', rec.key, '🧾', 'PDF สรุปย่อ', 'ปก ตัวชี้วัด คะแนน สรุปผล (เร็ว)') : '') +
-        (readOnly() ? actBtn('download', '', rec.key, '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.5 ของวิชานี้') :
-          actBtn('edit', '', rec.key, '✏️', 'แก้ไข/กรอกต่อ', 'กรอกคะแนนเพิ่มบนเว็บ (เช่น เทอม 2)') +
-          actBtn('replace', slot, '', '⇪', 'อัปโหลดไฟล์ใหม่', 'ไฟล์ Excel ใหม่ทับไฟล์เดิม') +
-          actBtn('download', '', rec.key, '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.5 ของวิชานี้') +
-          '<button class="btn danger act-del" data-act="delete" data-key="' + esc(rec.key) + '">🗑 ลบ</button>') +
-        '</div></div>';
+        // ปุ่มหลัก 2 ปุ่ม · ที่เหลืออยู่ในเมนู "เพิ่มเติม" (หน้าจอไม่รก)
+        '<div class="slot-acts slot-main">' +
+        (readOnly() ? '' : '<button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">✏️ กรอกคะแนน</button>') +
+        '<button class="btn" data-act="open" data-key="' + esc(rec.key) + '">👁 ดูคะแนน</button></div>' +
+        '<details class="slot-more"><summary>⋯ เพิ่มเติม (PDF · Excel · อัปโหลด)</summary><div class="more-list">' +
+        '<button class="btn" data-act="pdf5" data-key="' + esc(rec.key) + '">📄 PDF ปพ.5' + (DB.xpdfStart ? ' (รูปแบบต้นฉบับ)' : '') + '</button>' +
+        (DB.xpdfStart ? '<button class="btn" data-act="pdf5b" data-key="' + esc(rec.key) + '">🧾 PDF สรุปย่อ</button>' : '') +
+        '<button class="btn" data-act="download" data-key="' + esc(rec.key) + '">⬇ ดาวน์โหลด Excel</button>' +
+        (readOnly() ? '' : '<button class="btn" data-act="replace" data-slot="' + esc(slot) + '">⇪ อัปโหลดไฟล์ใหม่ทับ</button>' +
+          '<button class="btn danger" data-act="delete" data-key="' + esc(rec.key) + '">🗑 ลบวิชานี้</button>') +
+        '</div></details></div>';
     });
     if (!kru || mySlot(state.level, state.room, 'x-')) html += '<div class="slot card empty" data-slot="__extra" tabindex="0" role="button">' +
       '<div class="slot-h"><div class="slot-ic" style="background:' + EXTRA_COLOR + '">+</div><div><div class="slot-n">รายวิชาเพิ่มเติม</div><div class="slot-c">เช่น หน้าที่พลเมือง, คอมพิวเตอร์</div></div></div>' +
@@ -1147,10 +1151,10 @@
     var f = DB.flags || {}, adm = DB.role === 'admin';
     var canEdit = adm || f.allowEdit !== false, canUp = adm || f.allowUpload !== false;
     if (readOnly()) return '<div class="slot-acts"><span class="ro-note">ยังไม่ได้ส่ง</span></div>';
-    return '<div class="slot-acts act-list">' +
-      (canEdit ? actBtn('online', slot, '', '✏️', 'กรอกคะแนน', 'กรอกบนเว็บ ระบบคิดเกรดให้ทันที', 'pri') : '') +
-      (canUp ? actBtn('upload', slot, '', '⇪', 'อัปโหลด', 'ส่งไฟล์ Excel ที่กรอกในคอม') : '') +
-      actBtn('template', slot, '', '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.5 ต้นฉบับไปกรอกในคอม') + '</div>';
+    return '<div class="slot-acts slot-main">' +
+      (canEdit ? '<button class="btn pri" data-act="online" data-slot="' + esc(slot) + '">✏️ เริ่มกรอกคะแนน</button>' : '') +
+      (canUp ? '<button class="btn" data-act="upload" data-slot="' + esc(slot) + '">⇪ อัปโหลด Excel</button>' : '') + '</div>' +
+      '<button class="link-btn" data-act="template" data-slot="' + esc(slot) + '">⬇ ดาวน์โหลดไฟล์ Excel เปล่าไปกรอกในคอม</button>';
   }
 
   function gradeCounts(students) {
@@ -1586,6 +1590,7 @@
   function renderSide() {
     var el = $('sideNav');
     if (!el) return;
+    document.body.classList.add('has-side');
     var adm = DB.role === 'admin', dir = DB.role === 'director';
     var home = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
     var logo = (typeof effBrand === 'function' && effBrand().logo) || '';

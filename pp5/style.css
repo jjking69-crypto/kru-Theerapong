@@ -730,3 +730,46 @@ body.sup-page { padding-left: 0 !important; }
 .old6 select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 700 16px "Prompt", sans-serif; }
 .old6-c { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .old6-c .btn.has { border-color: #86efac; background: #f0fdf4; color: #166534; }
+/* แท็บประกาศผล (ครู): ลิงก์ส่งผู้ปกครองอย่างเดียว */
+.pb-link { text-align: center; padding: 28px 20px; max-width: 640px; margin: 0 auto; }
+.pb-link .pb-ic { font-size: 46px; }
+.pb-link h2 { margin: 6px 0; font: 700 22px "Prompt", sans-serif; color: #1e3a8a; }
+.pb-url input { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 2px solid #bfdbfe; border-radius: 14px; font: 600 15px "Sarabun", sans-serif; text-align: center; background: #f8fbff; color: #1e3a8a; }
+.pb-acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0 6px; }
+.pb-acts .btn.line { background: #06c755; color: #fff; border-color: #06c755; }
+/* แอดมิน: อัปเดตหน้าประกาศผล */
+.pubc-top { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.pubc-top select { padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); font: 700 15px "Prompt", sans-serif; }
+.pubc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.pubc { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; border: 1.5px solid #e2e8f0; border-radius: 14px; padding: 8px 12px; background: #fff; }
+.pubc b { font: 700 17px "Prompt", sans-serif; }
+.pubc small { grid-column: 1; color: #64748b; font-size: 12.5px; }
+.pubc .btn { grid-row: 1 / span 3; grid-column: 2; }
+.pubc.stale { border-color: #fdba74; background: #fff7ed; }
+.pubc-new { color: #c2410c; font-weight: 700; font-size: 13px; }
+.pubc-ok { color: #15803d; font-size: 13px; }
+.pubc-msg { margin-top: 8px; color: #1e3a8a; font-weight: 600; }
+
+/* ===== หน้าระบบครูแบบโล่ง ใช้ง่าย ===== */
+/* จอกว้างมีเมนูซ้ายแล้ว ซ่อนแถบแท็บซ้ำด้านบน */
+@media (min-width: 1100px) { body.has-side .tabs { display: none; } }
+/* แบนเนอร์หัวส่วนให้เตี้ยลง */
+.bnr { padding: 10px 16px; margin: 6px 0 12px; gap: 12px; }
+.bnr .bi { width: 42px; height: 42px; font-size: 24px; border-radius: 12px; }
+.bnr .bt { font-size: 19px; }
+.bnr .bk { font-size: 12px; }
+.bnr .bs { font-size: 13px; }
+/* การ์ดวิชา: ปุ่มหลัก 2 ปุ่ม + เมนูเพิ่มเติม */
+.slot-main { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.slot-main .btn { padding: 10px 8px; font-size: 15px; border-radius: 12px; justify-content: center; }
+.slot-main .btn:only-child { grid-column: 1 / -1; }
+.slot-more { margin-top: 6px; }
+.slot-more summary { cursor: pointer; list-style: none; text-align: center; color: #475569; font-size: 13.5px; padding: 6px; border-radius: 10px; }
+.slot-more summary::-webkit-details-marker { display: none; }
+.slot-more summary:hover { background: #f1f5f9; }
+.slot-more[open] summary { color: #1d4ed8; }
+.more-list { display: grid; gap: 6px; padding-top: 4px; }
+.more-list .btn { justify-content: flex-start; font-size: 14px; padding: 8px 12px; }
+.link-btn { display: block; width: 100%; margin-top: 6px; background: none; border: 0; color: #64748b; font: 13.5px "Sarabun", sans-serif; cursor: pointer; text-decoration: underline; padding: 4px; }
+.link-btn:hover { color: #1d4ed8; }
+.slot.card.empty .slot-empty-t { margin: 6px 0 2px; }

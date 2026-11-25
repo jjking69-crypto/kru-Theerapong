@@ -1,7 +1,8 @@
 /*
  * ทะเบียนรายชื่อนักเรียน (ไฟล์ Word) = ข้อมูลหลักของระบบ
- *   - จับคู่นักเรียนในไฟล์ ปพ.5 / ปพ.6 กับทะเบียนด้วยเลขประจำตัว (ถ้าไม่มีใช้ชื่อ)
- *   - ใช้ชื่อ เลขที่ จากทะเบียนแทนของในไฟล์ และรายงานว่าตรงกันหรือไม่
+ *   - จับคู่นักเรียนในไฟล์ ปพ.5 / ปพ.6 กับทะเบียนด้วย "ชื่อ" เป็นหลัก (เลขประจำตัวในไฟล์อาจพิมพ์ผิด)
+ *     ถ้าชื่อไม่ตรงใคร (เช่น สะกดต่าง) จึงใช้เลขประจำตัวช่วย
+ *   - ใช้เลขประจำตัว เลขที่ ชื่อ จากทะเบียนแทนของในไฟล์เสมอ และรายงานว่าแก้อะไรไปบ้าง
  *   - เทียบคะแนนใน ปพ.6 กับคะแนนที่คำนวณจาก ปพ.5
  */
 (function (root) {
@@ -10,31 +11,42 @@
   function full(s) { return s.name || ((s.prefix || '') + (s.first || '') + ' ' + (s.last || '')).trim(); }
   function idOf(s) { return s && s.id != null ? String(s.id).replace(/\s+/g, '') : ''; }
 
-  function match(list, s) {
-    var id = idOf(s);
-    if (id) { var h = list.filter(function (x) { return idOf(x) === id; })[0]; if (h) return h; }
-    var n = nk(full(s));
-    return n ? list.filter(function (x) { return nk(full(x)) === n; })[0] || null : null;
+  function key(r) { return idOf(r) || nk(full(r)); }
+  // used = คนในทะเบียนที่จับคู่ไปแล้ว (กันคนเดียวถูกจับซ้ำ)
+  function match(list, s, used) {
+    used = used || {};
+    var n = nk(full(s)), id = idOf(s);
+    var free = function (x) { return !used[key(x)]; };
+    if (n) { var h = list.filter(function (x) { return free(x) && nk(full(x)) === n; })[0]; if (h) return h; }
+    if (id) { var h2 = list.filter(function (x) { return free(x) && idOf(x) === id; })[0]; if (h2) return h2; }
+    return null;
+  }
+  // จับคู่ทั้งห้อง: รอบแรกด้วยชื่อ (ทุกคน) แล้วรอบสองด้วยเลขประจำตัว (คนที่ชื่อไม่ตรง)
+  function pairAll(students, roster) {
+    var used = {}, pairs = students.map(function () { return null; });
+    students.forEach(function (s, i) { var n = nk(full(s)); if (!n) return; var r = roster.filter(function (x) { return !used[key(x)] && nk(full(x)) === n; })[0]; if (r) { pairs[i] = r; used[key(r)] = 1; } });
+    students.forEach(function (s, i) { if (pairs[i] || !idOf(s)) return; var r = roster.filter(function (x) { return !used[key(x)] && idOf(x) === idOf(s); })[0]; if (r) { pairs[i] = r; used[key(r)] = 1; } });
+    return { pairs: pairs, used: used };
   }
 
   // ตรวจรายชื่อในไฟล์เทียบกับทะเบียน (ไม่แก้ข้อมูล)
   function rosterCheck(students, roster) {
     var res = { total: students.length, matched: 0, diffs: [], notInRoster: [], missing: [] };
     if (!roster || !roster.length) return null;
-    var used = {};
-    students.forEach(function (s) {
-      var r = match(roster, s);
+    var pa = pairAll(students, roster), used = pa.used;
+    students.forEach(function (s, i) {
+      var r = pa.pairs[i];
       if (!r) { res.notInRoster.push({ no: s.no, id: idOf(s), name: full(s) }); return; }
-      used[idOf(r) || nk(full(r))] = 1;
       res.matched++;
       var d = [];
       if (+s.no !== +r.no) d.push('เลขที่ ' + (s.no == null ? '-' : s.no) + ' → ' + r.no);
       if (nk(full(s)) !== nk(full(r))) d.push('ชื่อ "' + full(s) + '" → "' + full(r) + '"');
       else if (full(s).replace(/\s+/g, '') !== full(r).replace(/\s+/g, '')) d.push('คำนำหน้า "' + full(s) + '" → "' + full(r) + '"');
       if (!idOf(s) && idOf(r)) d.push('เพิ่มเลขประจำตัว ' + idOf(r));
+      else if (idOf(s) && idOf(r) && idOf(s) !== idOf(r)) d.push('เลขประจำตัว ' + idOf(s) + ' → ' + idOf(r));
       if (d.length) res.diffs.push({ no: r.no, id: idOf(r), name: full(r), items: d });
     });
-    roster.forEach(function (r) { if (!used[idOf(r) || nk(full(r))]) res.missing.push({ no: r.no, id: idOf(r), name: full(r) }); });
+    roster.forEach(function (r) { if (!used[key(r)]) res.missing.push({ no: r.no, id: idOf(r), name: full(r) }); });
     res.issues = res.diffs.length + res.notInRoster.length + res.missing.length;
     return res;
   }
@@ -42,13 +54,14 @@
   // ใช้ข้อมูลจากทะเบียน (เลขที่ เลขประจำตัว ชื่อ) แทนข้อมูลในไฟล์ แล้วคืนผลตรวจ (ก่อนแก้)
   function applyRoster(data, roster) {
     if (!data || !data.students || !roster || !roster.length) return null;
-    var chk = rosterCheck(data.students, roster);
-    data.students.forEach(function (s) {
-      var r = match(roster, s);
+    var chk = rosterCheck(data.students, roster), pa = pairAll(data.students, roster);
+    data.students.forEach(function (s, i) {
+      var r = pa.pairs[i];
       if (!r) { s.inRoster = false; return; }
       s.inRoster = true;
       if (s.noInFile == null && +s.no !== +r.no) s.noInFile = s.no;
       if (s.nameInFile == null && nk(full(s)) !== nk(full(r))) s.nameInFile = full(s);
+      if (s.idInFile == null && idOf(s) && idOf(r) && idOf(s) !== idOf(r)) s.idInFile = idOf(s);
       s.no = r.no; s.id = idOf(r) || s.id;
       s.prefix = r.prefix || s.prefix; s.first = r.first || s.first; s.last = r.last || s.last;
       s.name = full({ prefix: r.prefix, first: r.first, last: r.last, name: r.name });

@@ -133,6 +133,27 @@
   function render(el, c) {
     ctx = c;
     var store = c.store(), server = !!(store && store.publish);
+    // ครู / ระบบโรงเรียน / ผอ.: แสดงแค่ลิงก์ส่งผู้ปกครอง (แอดมินเป็นผู้อัปเดตหน้าประกาศผล)
+    if (server && store.role !== 'admin') {
+      var url = store.publicUrl || window.PP5_HOME || '';
+      var msg = 'ตรวจสอบผลการเรียนของนักเรียนได้ที่ ' + url;
+      el.innerHTML = '<div class="card pb-link"><div class="pb-ic">📢</div><h2>ลิงก์ประกาศผลสำหรับผู้ปกครอง</h2>' +
+        '<p>ส่งลิงก์นี้ให้ผู้ปกครอง แล้วกรอกเลขประจำตัวนักเรียนเพื่อดูผลการเรียน</p>' +
+        '<div class="pb-url"><input id="pbUrl" readonly value="' + esc(url) + '"></div>' +
+        '<div class="pb-acts"><button class="btn pri" data-pb="copyUrl">📋 คัดลอกลิงก์</button>' +
+        '<a class="btn line" href="https://line.me/R/msg/text/?' + encodeURIComponent(msg) + '" target="_blank" rel="noopener">💬 ส่งทาง LINE</a>' +
+        '<a class="btn" href="' + esc(url) + '" target="_top">👁 เปิดหน้าประกาศผล</a></div>' +
+        '<p class="sub">ข้อมูลบนหน้าประกาศผลอัปเดตโดยแอดมิน</p></div>';
+      el.onclick = function (e) {
+        if (!e.target.closest('[data-pb="copyUrl"]')) return;
+        var inp = document.getElementById('pbUrl');
+        var done = function () { c.toast('คัดลอกลิงก์แล้ว', 'ok'); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { inp.select(); document.execCommand('copy'); done(); });
+        else { inp.select(); document.execCommand('copy'); done(); }
+      };
+      el.onchange = null;
+      return;
+    }
     var cls = c.classInfo(), pub = compileClass(c);
     var h = '<h2 class="sec">ประกาศผลการเรียนสำหรับผู้ปกครอง</h2>';
     if (!server) {
@@ -155,7 +176,7 @@
       tileH('บัตร ปชช. 4 ตัวท้าย', nNid + ' / ' + nId, 'ใช้เมื่อเปิดการยืนยันตัวตน') + '</div>';
     if (server) h += '<div class="rc-actions"><button class="btn pri" data-pb="pubClass">อัปเดตข้อมูลห้องนี้</button><button class="btn" data-pb="pubAll">อัปเดตทุกห้อง</button>' +
       '<span class="sub" style="margin:0;align-self:center">' + (st ? 'อัปเดตล่าสุด ' + new Date(st.updatedAt).toLocaleString('th-TH') : 'ยังไม่เคยเผยแพร่ห้องนี้') + '</span></div>' +
-      '<p class="sub" style="margin-top:8px">ระบบอัปเดตให้อัตโนมัติทุกครั้งที่อัปโหลดหรือบันทึกไฟล์ของห้อง</p>';
+      '<p class="sub" style="margin-top:8px">ครูอัปโหลด/บันทึกไฟล์แล้ว หน้าประกาศผลจะยังไม่เปลี่ยน จนกว่าแอดมินกด "อัปเดต"</p>';
     h += '</div>';
 
     // ตัวอย่าง
