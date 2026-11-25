@@ -495,7 +495,7 @@
     var ro = ctx.readOnly && ctx.readOnly();
     function b(attr, ic, t, sub, cls) { return '<button class="btn act-b ' + (cls || '') + '" ' + attr + '><span class="ab-ic">' + ic + '</span><span class="ab-t"><b>' + t + '</b><small>' + sub + '</small></span></button>'; }
     return '<div class="act-grid">' +
-      (ro ? '' : b('data-act="edit" data-key="' + esc(rec.key) + '"', '✏️', 'แก้ไขในระบบ', 'กรอก/แก้คะแนน ปพ.6 บนเว็บ ระบบคิดเกรดให้ทันที', 'pri')) +
+      (ro ? '' : b('data-act="edit" data-key="' + esc(rec.key) + '"', '✏️', 'แก้ไขในระบบ', 'กรอก/แก้คะแนน · เพิ่มนักเรียน (ย้ายเข้า) ได้ที่ขั้น "นักเรียน"', 'pri')) +
       b('data-rc="dlx"', '⬇', 'ดาวน์โหลด Excel', 'ไฟล์ ปพ.6 รูปแบบของโรงเรียน ไปพิมพ์หรือเก็บไว้') +
       (ro ? '' : b('data-rc="replace"', '⇪', 'อัปโหลดไฟล์ ปพ.6', 'ไฟล์ Excel ที่กรอกในคอม ระบบใช้ไฟล์นี้แทนของเดิม')) +
       b('data-rc="pdf-all"', '🖨', 'PDF ทั้งห้อง', 'ใบรายงานผลทุกคนในไฟล์เดียว') + '</div>';

@@ -934,7 +934,7 @@
     } else b = BANNERS[state.tab] || BANNERS.subjects;
     if (state.tab === 'subjects' || (window.PP5Editor && PP5Editor.active())) { var n = classRecords().length; extra = '<div class="bx"><span class="bx-ic">💾</span><span>ข้อมูลที่กรอกแล้ว<b>' + n + ' วิชา</b></span></div>'; }
     else if (state.tab === 'report') { var p6 = pp6Record(); extra = '<div class="bx"><span class="bx-ic">📗</span><span>' + (p6 ? (p6.virtual ? 'สร้างจาก ปพ.5' : 'ไฟล์ที่อัปโหลด') + '<b>' + p6.data.students.length + ' คน</b>' : 'ยังไม่มีข้อมูล') + '</span></div>'; }
-    var oldNote = state.year !== curYear() ? '<div class="old-note">📦 กำลังดูข้อมูล<b>ปีการศึกษา ' + esc(state.year) + '</b> ' + (state.year < curYear() ? '(ปีเก่า)' : '') + ' — ไม่ใช่ปีปัจจุบัน (' + curYear() + ') <button class="btn" data-goyear="' + curYear() + '">กลับไปปี ' + curYear() + '</button></div>' : '';
+    var oldNote = state.year !== curYear() ? '<div class="old-note">📦 กำลังดูข้อมูล<b>ปีการศึกษา ' + esc(state.year) + '</b> ' + (state.year < curYear() ? '(ปีเก่า)' : '') + ' — ไม่ใช่ปีปัจจุบัน (' + curYear() + ') ' + (state.level && !readOnly() && state.year < curYear() && mySlot(state.level, state.room, 'pp6') ? '<button class="btn pri" data-old6ed="1">➕ เพิ่มนักเรียน / แก้ ปพ.6 ปีนี้</button> ' : '') + '<button class="btn" data-goyear="' + curYear() + '">กลับไปปี ' + curYear() + '</button></div>' : '';
     el.innerHTML = oldNote + '<div class="bnr" style="--bc:' + b.c + '"><div class="bi">' + b.i + '</div><div class="bm"><div class="bk">' + esc(b.k) + '</div>' +
       '<div class="bt">' + esc(b.t) + (state.tab === 'track' && !(window.PP5Editor && PP5Editor.active()) ? '' : ' · ชั้น ' + esc(cls)) + '</div><div class="bs">ปีการศึกษา ' + esc(state.year || '') + ' · ' + esc(b.s) + '</div></div>' + extra + '</div>';
   }
@@ -1554,6 +1554,21 @@
 
   document.addEventListener('click', function (e) { var k = e.target.closest('[data-kru="mine"]'); if (k && isKru()) { e.preventDefault(); openMine(); } });
 
+  // เปิดหน้ากรอก ปพ.6 ของห้อง/ปีที่เลือก ที่ขั้น "นักเรียน" (เพิ่มนักเรียนย้ายเข้า + แก้คะแนน)
+  function openPP6Roster() {
+    var p6 = pp6Record();
+    if (p6) PP5Editor.open({ kind: 'pp6', key: p6.key }, editorCtx); else PP5Editor.open({ kind: 'pp6', slot: 'pp6', intent: 'online' }, editorCtx);
+    setTimeout(function () { var b = document.querySelector('.ed-steps [data-sec="roster"]'); if (b) b.click(); }, 300);
+    toast('เปิด ปพ.6 ป.' + state.level + '/' + state.room + ' ปีการศึกษา ' + state.year + ' · กด "+ เพิ่ม 1 คน" แล้วกรอกคะแนนภาค 1/2 และส่วนอื่น ๆ · อย่าลืมกด "บันทึกในระบบ"', 'info');
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('[data-old6ed]') || !leaveEditor()) return;
+    state.tab = 'report';
+    var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+    if (need.length && DB.ensureData) DB.ensureData(need).then(function () { render(); openPP6Roster(); }, function () { render(); openPP6Roster(); });
+    else { render(); openPP6Roster(); }
+  });
+
   // สลับระบบ: แอดมิน = หน้าแยก (ถามรหัสแอดมิน) · ครู ↔ ผู้อำนวยการ = ล้างรหัสเดิมแล้วกดรหัสใหม่
   function switchTo(want) {
     var base = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
@@ -1695,12 +1710,7 @@
     render();
     bootDone();
     if (go && go.edit && window.PP5Editor) {
-      var openGo = function () {
-        var p6 = pp6Record();
-        if (p6) PP5Editor.open({ kind: 'pp6', key: p6.key }, editorCtx); else PP5Editor.open({ kind: 'pp6', slot: 'pp6', intent: 'online' }, editorCtx);
-        if (go.section === 'roster') setTimeout(function () { var b = document.querySelector('.ed-steps [data-sec="roster"], .ed-steps [data-step="roster"]'); if (b) b.click(); }, 300);
-        toast('เปิด ปพ.6 ป.' + go.level + '/' + (go.room || 1) + ' ปีการศึกษา ' + go.year + ' · เพิ่มนักเรียนได้ที่ขั้น "นักเรียน" แล้วกรอกคะแนนภาค 1/2 และส่วนอื่น ๆ', 'info');
-      };
+      var openGo = function () { openPP6Roster(); };
       var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
       if (need.length && DB.ensureData) DB.ensureData(need).then(function () { render(); openGo(); }, openGo); else openGo();
     }
