@@ -279,13 +279,15 @@
     var d = ed.data, inds = (d.indicators || []).filter(function (i) { return i.max; }), mc = (d.maxima && d.maxima.collect) || 70;
     var T = inds.filter(function (i) { return (i.term || 1) === term; });
     if (!T.length || !mc) return;
-    var tMax = T.reduce(function (a, i) { return a + i.max; }, 0), all = inds.reduce(function (a, i) { return a + i.max; }, 0), target;
-    if (term === 1) target = C / mc * tMax;
-    else target = C / mc * all - inds.filter(function (i) { return T.indexOf(i) < 0; }).reduce(function (a, i) { var v = st.scores[i.idx]; return a + (typeof v === 'number' ? v : 0); }, 0);
-    target = Math.round(Math.max(0, Math.min(tMax, target)));
+    var tMax = T.reduce(function (a, i) { return a + i.max; }, 0), all = inds.reduce(function (a, i) { return a + i.max; }, 0);
+    // ใช้สูตรเดียวกับระบบ: คะแนนเก็บ = ตัวชี้วัดที่ได้ ÷ เต็มรวม × คะแนนเก็บเต็ม → ตัวชี้วัดที่ต้องได้ = คะแนนเก็บ ÷ คะแนนเก็บเต็ม × เต็มรวม
+    var other = inds.filter(function (i) { return T.indexOf(i) < 0; }).reduce(function (a, i) { var v = st.scores[i.idx]; return a + (typeof v === 'number' ? v : 0); }, 0);
+    var want = C / mc * all - other, target = Math.round(Math.max(0, Math.min(tMax, want)));
+    var res = { clamped: want > tMax + 0.5 || want < -0.5, maxC: Math.round((tMax + other) / all * mc), minC: Math.round(other / all * mc) };
     var raw = T.map(function (i) { return target * i.max / tMax; }), fl = raw.map(Math.floor), rem = target - fl.reduce(function (a, v) { return a + v; }, 0);
     raw.map(function (v, k) { return { k: k, f: v - fl[k] }; }).sort(function (a, b) { return b.f - a.f; }).forEach(function (x) { if (rem > 0 && fl[x.k] < T[x.k].max) { fl[x.k]++; rem--; } });
     T.forEach(function (i, k) { st.scores[i.idx] = fl[k]; });
+    return res;
   }
   var ACTIONS = {
     fillAll: function (b) {
@@ -424,11 +426,14 @@
       cols.push({ label: 'ปลายภาค', sub: '/' + mx.final, group: 'สรุป', type: 'num', w: 64, max: mx.final, min: 0, req: needT(2), get: function (s) { return s.result.final; }, set: function (s, v) { s.result.final = v; } });
       cols.push({ label: 'ร/มส', group: 'สรุป', type: 'select', options: ['', 'ร', 'มส'], w: 56, get: function (s) { return s.result.rms; }, set: function (s, v) { s.result.rms = v; } });
       cols.push({ label: 'รวมตัวชี้วัด', sub: '/' + (mx.indTotal || 0), group: 'สรุป', type: 'ro', w: 64, get: function (s) { return s.result.indTotal; } });
-      cols.push({ label: 'คะแนนเก็บ', sub: '/' + mx.collect + ' กรอกได้', group: 'สรุป', type: 'num', w: 70, max: mx.collect, min: 0, rerender: true, live: true, cls: 'g-collect',
+      cols.push({ label: 'คะแนนเก็บ', sub: '/' + mx.collect + ' (กรอกได้)', group: 'สรุป', type: 'num', w: 70, max: mx.collect, min: 0, rerender: true, live: true, cls: 'g-collect',
         get: function (s) { return s.result.collect; },
         set: function (s, v) {
           if (v == null) { s.result.collectManual = false; s.result.collect = null; return; }
-          s.result.collect = v; s.result.collectManual = true; spreadCollect(s, v, tn);
+          // เฉลี่ยลงตัวชี้วัดของภาคนี้ แล้วให้ระบบคิดคะแนนเก็บจากตัวชี้วัดตามสูตร (ตรงกันเสมอ)
+          var sp = spreadCollect(s, v, tn);
+          s.result.collectManual = false; s.result.collect = null;
+          if (sp && sp.clamped) ctx.toast('ภาค ' + tn + ' กรอกคะแนนเก็บได้ ' + sp.minC + '–' + sp.maxC + ' คะแนน (คะแนนตัวชี้วัดของภาคอื่นคิดไว้แล้ว) · ระบบใส่ให้เต็มเท่าที่ได้', 'info');
         } });
       cols.push({ label: 'รวม', sub: '/' + mx.total, group: 'สรุป', type: 'ro', w: 54, cls: 'g-strong', get: function (s) { return s.result.total; } });
       cols.push({ label: 'เกรด', group: 'สรุป', type: 'ro', w: 50, cls: 'g-strong', get: function (s) { return s.result.rms || s.result.grade; } });
