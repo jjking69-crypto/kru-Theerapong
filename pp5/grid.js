@@ -157,7 +157,7 @@
       var td = t.parentNode, v = self.get(o.rows[r], c);
       td.classList.toggle('g-bad', !ok || (c.type === 'num' && v != null && ((c.max != null && v > c.max) || (c.min != null && v < c.min))));
       if (o.onChange) o.onChange(o.rows[r], c);
-      self.refresh();
+      if (c.rerender) { self.render(); self.focus(r, ci); } else self.refresh();   // คอลัมน์ที่เปลี่ยนหลายช่องในแถว (เช่น "ทั้งแถว")
     }
     this.el.addEventListener('change', function (e) {
       var t = e.target;

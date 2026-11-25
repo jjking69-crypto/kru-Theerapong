@@ -129,7 +129,8 @@
       var r = s.result = s.result || {};
       var indTotal = sum(vals);
       if (force || r.indTotal == null) r.indTotal = indTotal;
-      if (force || r.collect == null) r.collect = r.indTotal != null && maxSum ? Math.round(r.indTotal / maxSum * mc) : null;
+      // คะแนนเก็บที่ครูกรอกเอง (collectManual) ไม่ถูกคำนวณทับ
+      if ((force && !r.collectManual) || r.collect == null) { r.collect = r.indTotal != null && maxSum ? Math.round(r.indTotal / maxSum * mc) : null; r.collectManual = false; }
       if (force || r.total == null) r.total = r.collect == null && r.final == null ? null : (r.collect || 0) + (num(r.final) || 0);
       if (force || r.grade == null || r.grade === '') {
         var g = r.rms ? null : gradeOf(r.total == null ? null : r.total / (mc + mf) * 100);

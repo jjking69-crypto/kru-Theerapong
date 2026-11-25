@@ -773,3 +773,6 @@ body.sup-page { padding-left: 0 !important; }
 .link-btn { display: block; width: 100%; margin-top: 6px; background: none; border: 0; color: #64748b; font: 13.5px "Sarabun", sans-serif; cursor: pointer; text-decoration: underline; padding: 4px; }
 .link-btn:hover { color: #1d4ed8; }
 .slot.card.empty .slot-empty-t { margin: 6px 0 2px; }
+/* ตารางกรอก: ช่อง "ทั้งแถว" และคะแนนเก็บที่กรอกได้ */
+.g-rowfill select { background: #fef9c3; font-weight: 700; color: #854d0e; }
+td.g-collect input { background: #eff6ff; font-weight: 700; }
