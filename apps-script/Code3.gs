@@ -1,3 +1,98 @@
+/** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
+function api_publish(pin, key, pubJson) {
+  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
+  return withLock_(function () {
+    var pub = JSON.parse(pubJson);
+    if (pub.logo) {
+      if (!props_().getProperty('PUB_LOGO_ID')) props_().setProperty('PUB_LOGO_ID', writeText_(pubFolder_(), 'logo.txt', null, pub.logo));
+      delete pub.logo;
+    }
+    var idx = readIndex_(), old = idx.classes[key];
+    var fileId = writeText_(pubFolder_(), safeName_(key) + '.json', old && old.fileId, JSON.stringify(pub));
+    Object.keys(idx.ids).forEach(function (id) {
+      idx.ids[id] = idx.ids[id].filter(function (k) { return k !== key; });
+      if (!idx.ids[id].length) delete idx.ids[id];
+    });
+    pub.students.forEach(function (s) { (idx.ids[s.id] = idx.ids[s.id] || []).push(key); });
+    idx.classes[key] = {
+      fileId: fileId, year: pub.year, className: pub.className, count: pub.students.length, updatedAt: Date.now(),
+      mid: pub.students.filter(function (s) { return s.mid; }).length, final: pub.students.filter(function (s) { return s.final; }).length
+    };
+    saveIndex_(idx);
+    return idx.classes[key];
+  });
+}
+function api_unpublish(pin, key) {
+  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
+  return withLock_(function () {
+    var idx = readIndex_(), old = idx.classes[key];
+    if (!old) return true;
+    trashById_(old.fileId);
+    delete idx.classes[key];
+    Object.keys(idx.ids).forEach(function (id) {
+      idx.ids[id] = idx.ids[id].filter(function (k) { return k !== key; });
+      if (!idx.ids[id].length) delete idx.ids[id];
+    });
+    saveIndex_(idx);
+    return true;
+  });
+}
+function api_publicStatus(pin) { checkPin_(pin); return readIndex_().classes; }
+function api_getPublicCfg(pin) {
+  checkPin_(pin);
+  var cfg = getCfg_();
+  var u = webUrl_();
+  cfg.url = u ? u.replace(/\?.*$/, '') : '';
+  return cfg;
+}
+function api_savePublicCfg(pin, cfgJson) {
+  noKru_(need_(pin, 'allowPublish'));
+  var cfg = JSON.parse(cfgJson);
+  delete cfg.url;
+  props_().setProperty('PUBLIC_CFG', JSON.stringify(cfg));
+  return true;
+}
+
+// ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
+function api_publicInfo() {
+  var fl = flags_();
+  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo() };
+  var cfg = getCfg_(), idx = readIndex_(), years = {};
+  Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
+  var u = webUrl_();
+  return {
+    title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
+    years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
+    logo: readText_(props_().getProperty('PUB_LOGO_ID')),
+    adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo(), curYear: curYear_()
+  };
+}
+function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }
+function superUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=super' : ''; }
+
+/** ค้นหาผลของนักเรียน 1 คน (คืนเฉพาะข้อมูลของคนนั้น ไม่คืนทั้งห้อง) */
+function api_lookup(id, code) {
+  id = String(id || '').replace(/\s+/g, '');
+  code = String(code || '').replace(/\D/g, '');
+  if (!id || id.length > 20) return { notFound: true };
+  var c = cache_(), fk = 'rlf:' + id, fails = +(c.get(fk) || 0);
+  if (fails >= 8) throw new Error('TRY_LATER');
+  var gk = 'rlg:' + Math.floor(Date.now() / 60000), g = +(c.get(gk) || 0);
+  if (g > 600) throw new Error('TRY_LATER');
+  c.put(gk, String(g + 1), 120);
+  var fl = flags_();
+  if (!fl.publicOpen) throw new Error('CLOSED');
+  var r = timeline_(id, { code: code, publicView: true });
+  if (!r) { c.put(fk, String(fails + 1), 600); return { notFound: true }; }
+  return r;
+}
+/** ประวัติผลการเรียนทุกปี (สำหรับครู/แอดมิน ไม่ต้องยืนยันเลขบัตร) */
+function api_studentHistory(pin, id) {
+  checkPin_(pin);
+  id = String(id || '').replace(/\s+/g, '');
+  return timeline_(id, { publicView: false }) || { notFound: true };
+}
+
 /**
  * ไทม์ไลน์ผลการเรียนของนักเรียน: ปีปัจจุบัน → ย้อนไปถึงตอน ป.1
  *   ปีที่มีผลในระบบ = ผลจริง · ปีที่ครู/แอดมินเพิ่มผลจากโรงเรียนอื่น = external · ไม่มีทั้งคู่ = missing (ไม่ได้เรียนที่โรงเรียนนี้)

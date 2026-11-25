@@ -317,6 +317,63 @@ function api_xpdfStart(pin, b64, name) {
   SpreadsheetApp.openById(id).getSheets().forEach(function (sh) { sheets[sh.getName()] = { gid: sh.getSheetId(), rows: sh.getMaxRows(), cols: sh.getMaxColumns() }; });
   return { id: id, sheets: sheets };
 }
+/** ส่งออกหลายหน้าพร้อมกัน (เร็วกว่าทีละหน้ามาก): jobs = [{ gid, ranges:[[r1,c1,r2,c2]...], portrait }] → [[b64...], ...] ตามลำดับ */
+function xpdfUrl_(id, gid, r, portrait) {
+  return 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/export?format=pdf&gid=' + (+gid) +
+    '&r1=' + (+r[0]) + '&c1=' + (+r[1]) + '&r2=' + (+r[2]) + '&c2=' + (+r[3]) +
+    '&size=A4&portrait=' + (portrait === false ? 'false' : 'true') + '&scale=2&gridlines=false&printtitle=false&sheetnames=false' +
+    '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.3&bottom_margin=0.3&left_margin=0.25&right_margin=0.25';
+}
+function api_xpdfRun(pin, id, jobs) {
+  checkPin_(pin);
+  if (!cache_().get('xpdf:' + id)) throw new Error('หมดเวลาสร้าง PDF กรุณาลองใหม่');
+  var tok = ScriptApp.getOAuthToken(), reqs = [], where = [];
+  (jobs || []).slice(0, 40).forEach(function (j, ji) {
+    (j.ranges || []).slice(0, 30).forEach(function (r, ri) {
+      reqs.push({ url: xpdfUrl_(id, j.gid, r, j.portrait), headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+      where.push([ji, ri]);
+    });
+  });
+  var out = (jobs || []).map(function (j) { return (j.ranges || []).map(function () { return null; }); });
+  var todo = reqs.map(function (q, i) { return i; }), BATCH = 6;
+  for (var round = 0; round < 6 && todo.length; round++) {
+    var next = [];
+    for (var b = 0; b < todo.length; b += BATCH) {
+      var idx = todo.slice(b, b + BATCH), res = UrlFetchApp.fetchAll(idx.map(function (i) { return reqs[i]; }));
+      res.forEach(function (rs, k) {
+        var i = idx[k];
+        if (rs.getResponseCode() === 200) out[where[i][0]][where[i][1]] = Utilities.base64Encode(rs.getBlob().getBytes());
+        else next.push(i);   // ส่งออกถี่เกินไป (429) → ลองใหม่รอบถัดไป
+      });
+    }
+    todo = next;
+    if (todo.length) Utilities.sleep(1500 * (round + 1));
+  }
+  if (todo.length) throw new Error('ส่งออก PDF ไม่สำเร็จ ' + todo.length + ' หน้า (Google ตอบช้า ลองใหม่อีกครั้ง)');
+  return out;
+}
+// เก็บ PDF ที่สร้างแล้วของแต่ละวิชา: ข้อมูลไม่เปลี่ยน (stamp เดิม) → ส่งไฟล์เดิมทันที ไม่ต้องสร้างใหม่
+function api_xpdfCacheGet(pin, key, stamp) {
+  checkPin_(pin);
+  var v = props_().getProperty('xpdfc:' + key);
+  if (!v) return null;
+  try {
+    v = JSON.parse(v);
+    if (v.stamp !== String(stamp)) return null;
+    var f = DriveApp.getFileById(v.fileId);
+    if (f.isTrashed()) return null;
+    return { name: f.getName(), b64: Utilities.base64Encode(f.getBlob().getBytes()), url: f.getUrl() };
+  } catch (e) { return null; }
+}
+function api_xpdfCachePut(pin, key, stamp, b64, name) {
+  checkPin_(pin);
+  var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
+  var old = props_().getProperty('xpdfc:' + key);
+  var f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', safeName_(name)));
+  if (old) try { trashById_(JSON.parse(old).fileId); } catch (e) {}
+  props_().setProperty('xpdfc:' + key, JSON.stringify({ stamp: String(stamp), fileId: f.getId() }));
+  return f.getUrl();
+}
 /** ส่งออกหลายช่วงของชีตเดียว: ranges = [[r1,c1,r2,c2], ...] (เริ่ม 0, ไม่รวมตัวท้าย) → PDF base64 ทีละช่วง */
 function api_xpdfPart(pin, id, gid, ranges, portrait) {
   checkPin_(pin);

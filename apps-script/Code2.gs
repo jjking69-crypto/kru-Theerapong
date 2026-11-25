@@ -15,6 +15,63 @@ function api_xpdfStart(pin, b64, name) {
   SpreadsheetApp.openById(id).getSheets().forEach(function (sh) { sheets[sh.getName()] = { gid: sh.getSheetId(), rows: sh.getMaxRows(), cols: sh.getMaxColumns() }; });
   return { id: id, sheets: sheets };
 }
+/** ส่งออกหลายหน้าพร้อมกัน (เร็วกว่าทีละหน้ามาก): jobs = [{ gid, ranges:[[r1,c1,r2,c2]...], portrait }] → [[b64...], ...] ตามลำดับ */
+function xpdfUrl_(id, gid, r, portrait) {
+  return 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/export?format=pdf&gid=' + (+gid) +
+    '&r1=' + (+r[0]) + '&c1=' + (+r[1]) + '&r2=' + (+r[2]) + '&c2=' + (+r[3]) +
+    '&size=A4&portrait=' + (portrait === false ? 'false' : 'true') + '&scale=2&gridlines=false&printtitle=false&sheetnames=false' +
+    '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.3&bottom_margin=0.3&left_margin=0.25&right_margin=0.25';
+}
+function api_xpdfRun(pin, id, jobs) {
+  checkPin_(pin);
+  if (!cache_().get('xpdf:' + id)) throw new Error('หมดเวลาสร้าง PDF กรุณาลองใหม่');
+  var tok = ScriptApp.getOAuthToken(), reqs = [], where = [];
+  (jobs || []).slice(0, 40).forEach(function (j, ji) {
+    (j.ranges || []).slice(0, 30).forEach(function (r, ri) {
+      reqs.push({ url: xpdfUrl_(id, j.gid, r, j.portrait), headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+      where.push([ji, ri]);
+    });
+  });
+  var out = (jobs || []).map(function (j) { return (j.ranges || []).map(function () { return null; }); });
+  var todo = reqs.map(function (q, i) { return i; }), BATCH = 6;
+  for (var round = 0; round < 6 && todo.length; round++) {
+    var next = [];
+    for (var b = 0; b < todo.length; b += BATCH) {
+      var idx = todo.slice(b, b + BATCH), res = UrlFetchApp.fetchAll(idx.map(function (i) { return reqs[i]; }));
+      res.forEach(function (rs, k) {
+        var i = idx[k];
+        if (rs.getResponseCode() === 200) out[where[i][0]][where[i][1]] = Utilities.base64Encode(rs.getBlob().getBytes());
+        else next.push(i);   // ส่งออกถี่เกินไป (429) → ลองใหม่รอบถัดไป
+      });
+    }
+    todo = next;
+    if (todo.length) Utilities.sleep(1500 * (round + 1));
+  }
+  if (todo.length) throw new Error('ส่งออก PDF ไม่สำเร็จ ' + todo.length + ' หน้า (Google ตอบช้า ลองใหม่อีกครั้ง)');
+  return out;
+}
+// เก็บ PDF ที่สร้างแล้วของแต่ละวิชา: ข้อมูลไม่เปลี่ยน (stamp เดิม) → ส่งไฟล์เดิมทันที ไม่ต้องสร้างใหม่
+function api_xpdfCacheGet(pin, key, stamp) {
+  checkPin_(pin);
+  var v = props_().getProperty('xpdfc:' + key);
+  if (!v) return null;
+  try {
+    v = JSON.parse(v);
+    if (v.stamp !== String(stamp)) return null;
+    var f = DriveApp.getFileById(v.fileId);
+    if (f.isTrashed()) return null;
+    return { name: f.getName(), b64: Utilities.base64Encode(f.getBlob().getBytes()), url: f.getUrl() };
+  } catch (e) { return null; }
+}
+function api_xpdfCachePut(pin, key, stamp, b64, name) {
+  checkPin_(pin);
+  var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
+  var old = props_().getProperty('xpdfc:' + key);
+  var f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'application/pdf', safeName_(name)));
+  if (old) try { trashById_(JSON.parse(old).fileId); } catch (e) {}
+  props_().setProperty('xpdfc:' + key, JSON.stringify({ stamp: String(stamp), fileId: f.getId() }));
+  return f.getUrl();
+}
 /** ส่งออกหลายช่วงของชีตเดียว: ranges = [[r1,c1,r2,c2], ...] (เริ่ม 0, ไม่รวมตัวท้าย) → PDF base64 ทีละช่วง */
 function api_xpdfPart(pin, id, gid, ranges, portrait) {
   checkPin_(pin);
@@ -238,99 +295,4 @@ function readIndex_() {
 function saveIndex_(idx) {
   var id = writeText_(pubFolder_(), 'index.json', props_().getProperty('PUB_INDEX_ID'), JSON.stringify(idx));
   props_().setProperty('PUB_INDEX_ID', id);
-}
-
-/** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
-function api_publish(pin, key, pubJson) {
-  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
-  return withLock_(function () {
-    var pub = JSON.parse(pubJson);
-    if (pub.logo) {
-      if (!props_().getProperty('PUB_LOGO_ID')) props_().setProperty('PUB_LOGO_ID', writeText_(pubFolder_(), 'logo.txt', null, pub.logo));
-      delete pub.logo;
-    }
-    var idx = readIndex_(), old = idx.classes[key];
-    var fileId = writeText_(pubFolder_(), safeName_(key) + '.json', old && old.fileId, JSON.stringify(pub));
-    Object.keys(idx.ids).forEach(function (id) {
-      idx.ids[id] = idx.ids[id].filter(function (k) { return k !== key; });
-      if (!idx.ids[id].length) delete idx.ids[id];
-    });
-    pub.students.forEach(function (s) { (idx.ids[s.id] = idx.ids[s.id] || []).push(key); });
-    idx.classes[key] = {
-      fileId: fileId, year: pub.year, className: pub.className, count: pub.students.length, updatedAt: Date.now(),
-      mid: pub.students.filter(function (s) { return s.mid; }).length, final: pub.students.filter(function (s) { return s.final; }).length
-    };
-    saveIndex_(idx);
-    return idx.classes[key];
-  });
-}
-function api_unpublish(pin, key) {
-  if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');
-  return withLock_(function () {
-    var idx = readIndex_(), old = idx.classes[key];
-    if (!old) return true;
-    trashById_(old.fileId);
-    delete idx.classes[key];
-    Object.keys(idx.ids).forEach(function (id) {
-      idx.ids[id] = idx.ids[id].filter(function (k) { return k !== key; });
-      if (!idx.ids[id].length) delete idx.ids[id];
-    });
-    saveIndex_(idx);
-    return true;
-  });
-}
-function api_publicStatus(pin) { checkPin_(pin); return readIndex_().classes; }
-function api_getPublicCfg(pin) {
-  checkPin_(pin);
-  var cfg = getCfg_();
-  var u = webUrl_();
-  cfg.url = u ? u.replace(/\?.*$/, '') : '';
-  return cfg;
-}
-function api_savePublicCfg(pin, cfgJson) {
-  noKru_(need_(pin, 'allowPublish'));
-  var cfg = JSON.parse(cfgJson);
-  delete cfg.url;
-  props_().setProperty('PUBLIC_CFG', JSON.stringify(cfg));
-  return true;
-}
-
-// ===== API หน้าสาธารณะ (ไม่ต้องใช้รหัสผ่าน) =====
-function api_publicInfo() {
-  var fl = flags_();
-  if (!fl.publicOpen) return { closed: true, title: getCfg_().title, school: getCfg_().school || '', adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo() };
-  var cfg = getCfg_(), idx = readIndex_(), years = {};
-  Object.keys(idx.classes).forEach(function (k) { years[idx.classes[k].year] = 1; });
-  var u = webUrl_();
-  return {
-    title: cfg.title, school: cfg.school || '', announcement: cfg.announcement || '', verify: cfg.verify,
-    years: Object.keys(years).sort().reverse().map(function (y) { var v = cfg.years[y] || { mid: true, final: true }; return { year: +y, mid: !!v.mid && fl.showMid, final: !!v.final && fl.showFinal }; }),
-    logo: readText_(props_().getProperty('PUB_LOGO_ID')),
-    adminUrl: adminUrl_(), superUrl: superUrl_(), pinLen: api_pinInfo(), curYear: curYear_()
-  };
-}
-function adminUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=admin' : ''; }
-function superUrl_() { var u = webUrl_(); return u ? u.replace(/\?.*$/, '') + '?page=super' : ''; }
-
-/** ค้นหาผลของนักเรียน 1 คน (คืนเฉพาะข้อมูลของคนนั้น ไม่คืนทั้งห้อง) */
-function api_lookup(id, code) {
-  id = String(id || '').replace(/\s+/g, '');
-  code = String(code || '').replace(/\D/g, '');
-  if (!id || id.length > 20) return { notFound: true };
-  var c = cache_(), fk = 'rlf:' + id, fails = +(c.get(fk) || 0);
-  if (fails >= 8) throw new Error('TRY_LATER');
-  var gk = 'rlg:' + Math.floor(Date.now() / 60000), g = +(c.get(gk) || 0);
-  if (g > 600) throw new Error('TRY_LATER');
-  c.put(gk, String(g + 1), 120);
-  var fl = flags_();
-  if (!fl.publicOpen) throw new Error('CLOSED');
-  var r = timeline_(id, { code: code, publicView: true });
-  if (!r) { c.put(fk, String(fails + 1), 600); return { notFound: true }; }
-  return r;
-}
-/** ประวัติผลการเรียนทุกปี (สำหรับครู/แอดมิน ไม่ต้องยืนยันเลขบัตร) */
-function api_studentHistory(pin, id) {
-  checkPin_(pin);
-  id = String(id || '').replace(/\s+/g, '');
-  return timeline_(id, { publicView: false }) || { notFound: true };
 }

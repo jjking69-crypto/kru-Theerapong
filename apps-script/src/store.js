@@ -165,6 +165,9 @@
     xpdfStart: async function (blob, name) { return call('api_xpdfStart', [await blobToB64(blob), name]); },
     xpdfPart: function (id, gid, ranges, portrait) { return call('api_xpdfPart', [id, gid, ranges, portrait]); },
     xpdfEnd: function (id) { return call('api_xpdfEnd', [id]); },
+    xpdfRun: function (id, jobs) { return call('api_xpdfRun', [id, jobs]); },
+    xpdfCacheGet: function (key, stamp) { return call('api_xpdfCacheGet', [key, stamp]); },
+    xpdfCachePut: async function (key, stamp, blob, name) { return call('api_xpdfCachePut', [key, stamp, await blobToB64(blob), name]); },
     fontTTF: function () { return call('api_fontTTF'); },
     saveOutput: async function (blob, name) {
       if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');

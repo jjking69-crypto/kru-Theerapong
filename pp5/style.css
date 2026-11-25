@@ -776,3 +776,6 @@ body.sup-page { padding-left: 0 !important; }
 /* ตารางกรอก: ช่อง "ทั้งแถว" และคะแนนเก็บที่กรอกได้ */
 .g-rowfill select { background: #fef9c3; font-weight: 700; color: #854d0e; }
 td.g-collect input { background: #eff6ff; font-weight: 700; }
+/* ปุ่มอื่นของการ์ดวิชา: แสดงครบ เป็นปุ่มเล็ก 2 คอลัมน์ */
+.slot .more-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; padding-top: 0; }
+.slot .more-list .btn { justify-content: center; font-size: 13px; padding: 7px 6px; border-radius: 10px; white-space: normal; line-height: 1.25; }

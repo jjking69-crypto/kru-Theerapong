@@ -289,53 +289,86 @@
     }).catch(function (e) { console.warn('font', e); thsn = null; return false; });
     return thsn;
   }
+  function b64u8(b) { return Uint8Array.from(atob(b), function (ch) { return ch.charCodeAt(0); }); }
+  function u8b64(u8) { var s = '', k = 0x8000; for (var i = 0; i < u8.length; i += k) s += String.fromCharCode.apply(null, u8.subarray(i, i + k)); return btoa(s); }
+  // ลายเซ็นข้อมูลของวิชา: ไม่เปลี่ยน = ใช้ PDF เดิมได้
+  function stampOf(rec) { return [rec.uploadedAt || '', (rec.data.students || []).length, JSON.stringify(rec.data.students.map(function (x) { return [x.no, x.id]; })).length, 'v2'].join('|'); }
+  async function oneExcelPdf(rec, ctx, ld, tag) {
+    var store = ctx.store, stamp = stampOf(rec), id = null;
+    if (store.xpdfCacheGet) {
+      ld.set(tag + 'กำลังตรวจหา PDF ที่สร้างไว้แล้ว...');
+      try { var c = await store.xpdfCacheGet(rec.key, stamp); if (c && c.b64) return { bytes: b64u8(c.b64), cached: true }; } catch (e) {}
+    }
+    ld.set(tag + 'กำลังเตรียมไฟล์ Excel ต้นฉบับ...');
+    var blob = await ctx.build(rec);
+    var zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
+    var lay = await layoutOf(zip);
+    await prepXlsx(zip);
+    var up = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    ld.set(tag + 'กำลังแปลงไฟล์บน Google Drive...');
+    var st = await store.xpdfStart(up, nameOf(rec) + '.xlsm');
+    id = st.id;
+    try {
+      var jobs = [];
+      lay.forEach(function (L) {
+        var g = st.sheets[L.name];
+        if (!g) return;
+        var R = segs(L.rowBrk, L.rows || g.rows), C = segs(L.colBrk, L.cols || g.cols), ranges = [];
+        C.forEach(function (c) { R.forEach(function (r) { ranges.push([r[0], c[0], r[1], c[1]]); }); });   // ลงก่อนแล้วไปขวา (แบบ Excel)
+        jobs.push({ gid: g.gid, ranges: ranges, portrait: L.portrait });
+      });
+      // ส่งเป็นชุด ๆ ละไม่เกิน ~12 หน้า (เซิร์ฟเวอร์ดึงพร้อมกันทีละหลายหน้า)
+      var groups = [], cur = [], n = 0, total = 0;
+      jobs.forEach(function (jb) { if (n + jb.ranges.length > 12 && cur.length) { groups.push(cur); cur = []; n = 0; } cur.push(jb); n += jb.ranges.length; total += jb.ranges.length; });
+      if (cur.length) groups.push(cur);
+      var doc = await window.PDFLib.PDFDocument.create(), done = 0;
+      for (var gi = 0; gi < groups.length; gi++) {
+        ld.set(tag + 'กำลังสร้าง PDF หน้า ' + (done + 1) + '–' + Math.min(total, done + groups[gi].reduce(function (a, jb) { return a + jb.ranges.length; }, 0)) + ' จาก ' + total);
+        var res = store.xpdfRun ? await store.xpdfRun(id, groups[gi]) : await Promise.all(groups[gi].map(function (jb) { return store.xpdfPart(id, jb.gid, jb.ranges, jb.portrait); }));
+        for (var a = 0; a < res.length; a++) for (var k = 0; k < res[a].length; k++) {
+          var src = await window.PDFLib.PDFDocument.load(b64u8(res[a][k]));
+          (await doc.copyPages(src, src.getPageIndices())).forEach(function (pg) { doc.addPage(pg); });
+          done++;
+        }
+      }
+      if (!doc.getPageCount()) throw new Error('ไม่มีหน้าที่พิมพ์ได้ในไฟล์นี้');
+      var bytes = await doc.save();
+      if (store.xpdfCachePut) store.xpdfCachePut(rec.key, stamp, new Blob([bytes], { type: 'application/pdf' }), nameOf(rec) + '_รูปแบบต้นฉบับ.pdf').catch(function () {});
+      return { bytes: bytes, cached: false };
+    } finally {
+      try { await store.xpdfEnd(id); } catch (e3) {}
+    }
+  }
   async function excelPdf(recs, ctx, fileName) {
     if (busy) return; busy = true;
     recs = [].concat(recs);
     var ld = window.PP5PinPad && PP5PinPad.loading ? PP5PinPad.loading('กำลังเตรียมไฟล์ Excel ต้นฉบับ...') : { set: function () {}, done: function () {} };
-    var store = ctx.store, id = null;
+    var t0 = Date.now();
     try {
       await loadLibs();
       if (!window.PDFLib) await loadOne(window.PP5_PDFLIB || ['vendor/pdf-lib.min.js']);
-      var out = await window.PDFLib.PDFDocument.create(), pages = 0;
+      var out = recs.length > 1 ? await window.PDFLib.PDFDocument.create() : null, single = null, nCache = 0;
       for (var ri = 0; ri < recs.length; ri++) {
-      var rec = recs[ri], tag = recs.length > 1 ? '(' + (ri + 1) + '/' + recs.length + ') ' + rec.data.meta.subject + ' · ' : '';
-      ld.set(tag + 'กำลังเตรียมไฟล์ Excel ต้นฉบับ...');
-      var blob = await ctx.build(rec);
-      var zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
-      var lay = await layoutOf(zip);
-      await prepXlsx(zip);
-      var up = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-      ld.set(tag + 'กำลังแปลงไฟล์บน Google Drive...');
-      var st = await store.xpdfStart(up, nameOf(rec) + '.xlsm');
-      id = st.id;
-      for (var i = 0; i < lay.length; i++) {
-        var L = lay[i], g = st.sheets[L.name];
-        if (!g) continue;
-        var R = segs(L.rowBrk, L.rows || g.rows), C = segs(L.colBrk, L.cols || g.cols), ranges = [];
-        C.forEach(function (c) { R.forEach(function (r) { ranges.push([r[0], c[0], r[1], c[1]]); }); });   // ลงก่อนแล้วไปขวา (แบบ Excel)
-        ld.set(tag + 'กำลังสร้าง PDF ชีต ' + (i + 1) + '/' + lay.length + ' : ' + L.name);
-        var parts = await store.xpdfPart(id, g.gid, ranges, L.portrait);
-        for (var k = 0; k < parts.length; k++) {
-          var src = await window.PDFLib.PDFDocument.load(Uint8Array.from(atob(parts[k]), function (ch) { return ch.charCodeAt(0); }));
-          var cp = await out.copyPages(src, src.getPageIndices());
-          cp.forEach(function (pg) { out.addPage(pg); pages++; });
-        }
+        var tag = recs.length > 1 ? '(' + (ri + 1) + '/' + recs.length + ') ' + recs[ri].data.meta.subject + ' · ' : '';
+        var r = await oneExcelPdf(recs[ri], ctx, ld, tag);
+        if (r.cached) nCache++;
+        if (!out) { single = r.bytes; break; }
+        var src = await window.PDFLib.PDFDocument.load(r.bytes);
+        (await out.copyPages(src, src.getPageIndices())).forEach(function (pg) { out.addPage(pg); });
       }
-      try { await store.xpdfEnd(id); } catch (e3) {}
-      id = null;
-      }
-      if (!pages) throw new Error('ไม่มีหน้าที่พิมพ์ได้ในไฟล์นี้');
-      var bytes = await out.save();
-      if (ctx.save) ctx.save(new Blob([bytes], { type: 'application/pdf' }), (recs.length > 1 ? fileSafe(fileName || 'ปพ.5 ทุกวิชา') : nameOf(recs[0])) + '_รูปแบบต้นฉบับ.pdf');
-      if (ctx.toast) ctx.toast('สร้าง PDF ปพ.5 รูปแบบต้นฉบับแล้ว ' + pages + ' หน้า' + (recs.length > 1 ? ' (' + recs.length + ' วิชา)' : ''), 'ok');
+      var bytes = single || await out.save();
+      var pages = single ? (await window.PDFLib.PDFDocument.load(single)).getPageCount() : out.getPageCount();
+      var name = (recs.length > 1 ? fileSafe(fileName || 'ปพ.5 ทุกวิชา') : nameOf(recs[0])) + '_รูปแบบต้นฉบับ.pdf';
+      var blob = new Blob([bytes], { type: 'application/pdf' });
+      // วิชาเดียว: สำเนาใน Drive เก็บไว้แล้วตอนสร้าง → ดาวน์โหลดอย่างเดียว
+      if (recs.length === 1 && ctx.download) ctx.download(blob, name); else if (ctx.save) ctx.save(blob, name);
+      if (ctx.toast) ctx.toast('PDF ปพ.5 รูปแบบต้นฉบับ ' + pages + ' หน้า · ' + Math.round((Date.now() - t0) / 1000) + ' วินาที' + (nCache ? ' (ใช้ไฟล์ที่สร้างไว้แล้ว ' + nCache + ' วิชา)' : ''), 'ok');
     } catch (e) {
       console.error(e);
       var m = e && e.message ? e.message : String(e);
       if (/NEED_DRIVE_API/.test(m)) m = 'ต้องเปิด "Drive API" ในโปรเจกต์ Apps Script ก่อน (เมนูซ้าย "บริการ" กด + เลือก Drive API แล้วกดเพิ่ม)';
       if (ctx.toast) ctx.toast('สร้าง PDF รูปแบบต้นฉบับไม่สำเร็จ: ' + m, 'err');
     } finally {
-      if (id) { try { await store.xpdfEnd(id); } catch (e2) {} }
       ld.done(); busy = false;
     }
   }

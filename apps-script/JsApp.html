@@ -653,6 +653,7 @@
     toast: function (m, k) { toast(m, k); },
     store: DB,
     build: async function (rec) { return (await buildFile('pp5', rec.data)).blob; },
+    download: function (blob, name) { downloadBlob(blob, name); },
     brand: function () { return effBrand(); },
     sig: function (name) { var x = sigs[normName(name)]; return x ? x.img : null; },
     save: function (blob, name) {
@@ -978,17 +979,17 @@
         rosterChip(rec) +
         '<div class="slot-meta">' + (full ? '<span class="badge ok">คะแนนครบทุกตัวชี้วัด</span>' : '<span class="badge warn">กรอกคะแนนแล้ว ' + filledAll + '/' + d.indicators.length + ' ตัวชี้วัด</span>') +
         (dist.rest ? '' : '') + '</div>' +
-        // ปุ่มหลัก 2 ปุ่ม · ที่เหลืออยู่ในเมนู "เพิ่มเติม" (หน้าจอไม่รก)
+        // ปุ่มหลัก 2 ปุ่มใหญ่ · ปุ่มอื่นแสดงครบเป็นปุ่มเล็กด้านล่าง
         '<div class="slot-acts slot-main">' +
         (readOnly() ? '' : '<button class="btn pri" data-act="edit" data-key="' + esc(rec.key) + '">✏️ กรอกคะแนน</button>') +
         '<button class="btn" data-act="open" data-key="' + esc(rec.key) + '">👁 ดูคะแนน</button></div>' +
-        '<details class="slot-more"><summary>⋯ เพิ่มเติม (PDF · Excel · อัปโหลด)</summary><div class="more-list">' +
-        '<button class="btn" data-act="pdf5" data-key="' + esc(rec.key) + '">📄 PDF ปพ.5' + (DB.xpdfStart ? ' (รูปแบบต้นฉบับ)' : '') + '</button>' +
+        '<div class="more-list">' +
+        '<button class="btn" data-act="pdf5" data-key="' + esc(rec.key) + '">📄 PDF ปพ.5' + (DB.xpdfStart ? ' ฉบับเต็ม' : '') + '</button>' +
         (DB.xpdfStart ? '<button class="btn" data-act="pdf5b" data-key="' + esc(rec.key) + '">🧾 PDF สรุปย่อ</button>' : '') +
         '<button class="btn" data-act="download" data-key="' + esc(rec.key) + '">⬇ ดาวน์โหลด Excel</button>' +
         (readOnly() ? '' : '<button class="btn" data-act="replace" data-slot="' + esc(slot) + '">⇪ อัปโหลดไฟล์ใหม่ทับ</button>' +
           '<button class="btn danger" data-act="delete" data-key="' + esc(rec.key) + '">🗑 ลบวิชานี้</button>') +
-        '</div></details></div>';
+        '</div></div>';
     });
     if (!kru || mySlot(state.level, state.room, 'x-')) html += '<div class="slot card empty" data-slot="__extra" tabindex="0" role="button">' +
       '<div class="slot-h"><div class="slot-ic" style="background:' + EXTRA_COLOR + '">+</div><div><div class="slot-n">รายวิชาเพิ่มเติม</div><div class="slot-c">เช่น หน้าที่พลเมือง, คอมพิวเตอร์</div></div></div>' +
