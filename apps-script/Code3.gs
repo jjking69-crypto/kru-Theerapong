@@ -55,31 +55,6 @@ function api_getFile(pin, key) {
   try { var f = DriveApp.getFileById(e.fileId); return { name: f.getName(), b64: Utilities.base64Encode(f.getBlob().getBytes()) }; } catch (er) { return null; }
 }
 
-// ===== เลขประจำตัวจากชื่อ (ไฟล์ ปพ. รุ่นเก่าที่ช่องเลขประจำตัวว่าง) =====
-//   รวมจากผลที่ประกาศแล้วทุกปี + ทะเบียนรายชื่อ · ชื่อซ้ำแต่เลขต่างกัน = ไม่เดา
-function stuKey_(n) { return String(n || '').replace(/\s+/g, '').replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|นาง)/, ''); }
-function api_nameIds(pin) {
-  checkPin_(pin);
-  var c = cache_(), hit = c.get('nameIds');
-  if (hit) return JSON.parse(hit);
-  var map = {}, bad = {};
-  function add(name, id) {
-    var k = stuKey_(name); id = String(id == null ? '' : id).trim();
-    if (!k || !id) return;
-    if (map[k] && map[k] !== id) bad[k] = 1; else map[k] = id;
-  }
-  var idx = readIndex_();
-  Object.keys(idx.classes).forEach(function (key) {
-    var t = readText_(idx.classes[key].fileId);
-    if (t) try { (JSON.parse(t).students || []).forEach(function (s) { add(s.name, s.id); }); } catch (e) {}
-  });
-  var v = props_().getProperty('ROSTER');
-  if (v) try { (JSON.parse(readText_(JSON.parse(v).dataId) || '{}').classes || []).forEach(function (cl) { (cl.students || []).forEach(function (s) { add((s.first || '') + (s.last || ''), s.id); }); }); } catch (e) {}
-  Object.keys(bad).forEach(function (k) { delete map[k]; });
-  var out = JSON.stringify(map);
-  if (out.length < 95000) try { c.put('nameIds', out, 600); } catch (e) {}
-  return map;
-}
 function rosterStudent_(id) {
   var c = cache_(), t = c.get('rosterIdx');
   if (!t) {

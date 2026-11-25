@@ -200,7 +200,7 @@
       '<div class="slot-acts"><button class="btn pri imp-btn" id="supImpBtn">📂 เลือกไฟล์ ปพ.5 / ปพ.6 (เลือกได้หลายไฟล์)</button></div>' +
       '<input type="file" id="supImpFile" accept=".xlsx,.xlsm,.xls" multiple hidden>' +
       (IMP.rows.length ? '<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th class="l">ไฟล์</th><th>ปีการศึกษา</th><th>ชั้น</th><th>นักเรียน</th><th class="l">ผล</th></tr></thead><tbody>' +
-        IMP.rows.map(function (r) { return '<tr><td class="l">' + esc(r.name) + '</td><td>' + esc(r.year || '-') + '</td><td>' + esc(r.cls || '-') + '</td><td>' + esc(r.n == null ? '-' : r.n) + '</td><td class="l ' + (r.ok ? (r.warn ? 'imp-warn' : 'imp-ok') : r.busy ? '' : 'imp-bad') + '">' + esc(r.msg) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+        IMP.rows.map(function (r) { return '<tr><td class="l">' + esc(r.name) + '</td><td>' + esc(r.year || '-') + '</td><td>' + esc(r.cls || '-') + '</td><td>' + esc(r.n == null ? '-' : r.n) + '</td><td class="l ' + (r.ok ? 'imp-ok' : r.busy ? '' : 'imp-bad') + '">' + esc(r.msg) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
       '<h3 class="sup-h3" style="margin-top:14px">ปพ.6 ที่มีในระบบแล้ว</h3>' +
       (yrs.length ? '<div class="imp-years">' + yrs.map(function (y) { return '<div><b>ปี ' + esc(y) + '</b> ' + byYear[y].sort().map(function (c) { return '<span class="chip">' + esc(c) + '</span>'; }).join('') + '</div>'; }).join('') + '</div>' : '<p class="sub">ยังไม่มี</p>') + '</section>';
   }
@@ -231,12 +231,6 @@
           fname = (m.levelName || ('ป.' + m.level)) + '-' + m.room + '_' + (m.code || '') + '_' + (m.subject || '') + '_ปี' + m.year + '.xlsm';
         }
         if (!m.year || !m.level || !m.room) throw new Error('ไม่พบปีการศึกษา/ชั้น/ห้องในไฟล์');
-        // ไฟล์รุ่นเก่าบางไฟล์ไม่มีเลขประจำตัวนักเรียน → เติมจากชื่อ (ผลปีอื่นที่ประกาศแล้ว + ทะเบียน)
-        var idf = null;
-        if (data.students.some(function (s) { return !String(s.id || '').trim(); }) && DB.nameIds) {
-          row.msg = 'กำลังเติมเลขประจำตัวจากชื่อ...'; render();
-          try { idf = PP5Model.fillIds(data.students, await DB.nameIds()); } catch (ie) { idf = PP5Model.fillIds(data.students, {}); }
-        }
         row.year = m.year; row.cls = 'ป.' + m.level + '/' + m.room + (is6 ? ' · ปพ.6' : ' · ' + (m.subject || '')); row.n = data.students.length;
         var key = m.year + '|' + m.level + '|' + m.room + '|' + slot, old = S.entries.filter(function (e) { return e.key === key; })[0];
         var rec = { key: key, year: m.year, level: m.level, room: m.room, slot: slot, data: data, origName: f.name, size: f.size, uploadedAt: Date.now(),
@@ -251,10 +245,7 @@
         cls.push(rec);
         var pub = PP5Publish.compileClass(impCtx(rec, cls.filter(function (x) { return x.data; })));
         if (pub.students.length) await DB.publish(pub.key, pub);
-        row.ok = true; row.busy = false; row.msg = (old ? '✓ แทนที่ของเดิม' : '✓ นำเข้าแล้ว') + ' · ประกาศผล ' + pub.students.length + ' คน' +
-          (idf && idf.filled ? ' · เติมเลขประจำตัวจากชื่อ ' + idf.filled + ' คน' : '') +
-          (idf && idf.missing.length ? ' · ⚠️ ไม่มีเลขประจำตัว ' + idf.missing.length + ' คน (ยังไม่ขึ้นหน้าประกาศผล) — กรอกเลขได้ที่การ์ด "✏️ อัปเดต ปพ.6 ปีเก่า" → ห้องนี้ → ขั้นนักเรียน: ' + idf.missing.slice(0, 5).join(', ') + (idf.missing.length > 5 ? ' …' : '') : '');
-        if (idf && idf.missing.length) row.warn = true;
+        row.ok = true; row.busy = false; row.msg = (old ? '✓ แทนที่ของเดิม' : '✓ นำเข้าแล้ว') + ' · ประกาศผล ' + pub.students.length + ' คน';
       } catch (e) { row.ok = false; row.busy = false; row.msg = '✗ ' + (e && e.message ? e.message : e); }
       render();
     }

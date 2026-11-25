@@ -472,9 +472,6 @@
         c.notInRoster.map(function (d) { return '<li class="bad">ไม่มีในทะเบียน: ' + esc(d.name) + (d.id ? ' (' + esc(d.id) + ')' : '') + '</li>'; }).join('') +
         c.missing.map(function (d) { return '<li class="bad">มีในทะเบียนแต่ไม่มีในไฟล์: เลขที่ ' + esc(d.no) + ' ' + esc(d.name) + '</li>'; }).join('') + '</ul>');
     }
-    var noId = rec.data.students.filter(function (s) { return !String(s.id || '').trim(); });
-    if (noId.length) h += chkItem(false, 'เลขประจำตัวนักเรียน', 'ไม่มีเลขประจำตัว ' + noId.length + ' คน — นักเรียนกลุ่มนี้<b>จะไม่ขึ้นในหน้าประกาศผล</b> · กด "แก้ไขในระบบ" → ขั้น "นักเรียน" → กรอกเลขประจำตัว (หรือกด "เติมเลขประจำตัวจากชื่อ")',
-      '<ul class="chk-list">' + noId.map(function (s) { return '<li class="bad">เลขที่ ' + esc(s.no) + ' ' + esc(s.name) + '</li>'; }).join('') + '</ul>');
     if (rec.virtual) h += chkItem(true, 'คะแนน', 'คำนวณจากไฟล์ ปพ.5 โดยตรง');
     else {
       var cmp = ctx.compare ? ctx.compare(rec) : null;

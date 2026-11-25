@@ -129,7 +129,6 @@
     setCurYear: function (y) { var self = this; return call('api_setCurYear', [y || 0]).then(function (r) { self.curYear = r; return r; }); },
     folderLinks: function () { return call('api_folderLinks'); },
     getLib: function () { return call('api_getLib'); },
-    nameIds: function () { return call('api_nameIds'); },
     saveMe: function (v) { var self = this; return call('api_saveMe', [JSON.stringify(v)]).then(function (r) { self.me = r; return r; }); },
     kruList: function () { return call('api_kruList'); },
     kruSave: function (list) { return call('api_kruSave', [JSON.stringify(list)]); },

@@ -208,7 +208,6 @@ function api_publish(pin, key, pubJson) {
       mid: pub.students.filter(function (s) { return s.mid; }).length, final: pub.students.filter(function (s) { return s.final; }).length
     };
     saveIndex_(idx);
-    try { cache_().remove('nameIds'); } catch (e) {}
     return idx.classes[key];
   });
 }

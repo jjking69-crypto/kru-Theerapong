@@ -730,4 +730,3 @@ body.sup-page { padding-left: 0 !important; }
 .old6 select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font: 700 16px "Prompt", sans-serif; }
 .old6-c { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
 .old6-c .btn.has { border-color: #86efac; background: #f0fdf4; color: #166534; }
-.imp-warn { color: #b45309; font-weight: 600; }

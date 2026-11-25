@@ -249,16 +249,6 @@
     var nk = nameKey(s.name || fullName(s));
     return nk ? list.filter(function (x) { return nameKey(x.name || fullName(x)) === nk; })[0] || null : null;
   }
-  // เติมเลขประจำตัวที่ว่างจากชื่อ (map: ชื่อไม่รวมคำนำหน้า → เลขประจำตัว) → { filled, missing:[ชื่อ] }
-  function fillIds(students, map) {
-    var out = { filled: 0, missing: [] };
-    (students || []).forEach(function (s) {
-      if (String(s.id || '').trim()) return;
-      var id = map && (map[nameKey(s.name || fullName(s))] || map[nameKey((s.first || '') + (s.last || ''))]);
-      if (id) { s.id = id; out.filled++; } else out.missing.push(s.name || fullName(s));
-    });
-    return out;
-  }
   function pp5TermScores(rec, s) {
     var mc = num(rec.meta.maxCollect) == null ? 70 : rec.meta.maxCollect, half = mc / 2, out = { t1: null, t2: null };
     var raw = { 1: 0, 2: 0 }, mx = { 1: 0, 2: 0 }, any = { 1: false, 2: false };
@@ -613,7 +603,7 @@
 
   return {
     newPP5: newPP5, newPP6: newPP6, fillPP5: fillPP5, fillPP6: fillPP6, pp6FromPP5: pp6FromPP5, pp5TermScores: pp5TermScores, findStu: findStu, nameKey: nameKey,
-    exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob, fillIds: fillIds,
+    exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob,
     defaultSubjects: defaultSubjects, subjectDefaults: subjectDefaults, blankStudent: blankStudent, copyRoster: copyRoster,
     gradeOf: gradeOf, fullName: fullName, stageName: stageName,
     CHAR_ITEMS: CHAR_ITEMS, RTW_ITEMS: RTW_ITEMS, COMPETENCY: COMPETENCY, LEVEL_TEXT: LEVEL_TEXT
