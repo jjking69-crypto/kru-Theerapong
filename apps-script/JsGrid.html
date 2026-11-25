@@ -70,6 +70,7 @@
     this.el.innerHTML = h;
     var wrap = this.el.querySelector('.g-wrap');
     if (wrap && (keepL || keepT)) { wrap.scrollLeft = keepL; wrap.scrollTop = keepT; }
+    this.paintSel();
     function head(c, ci) {
       var t = esc(c.label) + (c.sub ? '<small>' + esc(c.sub) + '</small>' : '');
       if (c.fill && c.type === 'select') {
@@ -93,7 +94,7 @@
       inner = '<input data-r="' + r + '" data-c="' + ci + '" value="' + esc(show(v, c)) + '"' + (c.type === 'num' ? ' inputmode="decimal"' : '') + ' autocomplete="off">';
     }
     var req = c.req && (v == null || v === '');   // ช่องที่ยังต้องกรอก (เตือนว่ายังไม่ครบ)
-    return '<td class="g-in ' + (bad ? 'g-bad ' : '') + (req ? 'g-req ' : '') + (c.cls || '') + '"' + st + '>' + inner + '</td>';
+    return '<td class="g-in ' + (bad ? 'g-bad ' : '') + (req ? 'g-req ' : '') + (c.cls || '') + '" data-tr="' + r + '" data-tc="' + ci + '"' + st + '>' + inner + '</td>';
   };
   Grid.prototype.refresh = function () {
     var self = this, o = this.o;
@@ -138,8 +139,133 @@
       if (el.select) el.select();
     }
   };
+
+  // ---------- ลากเมาส์คลุมหลายช่อง (แบบ Excel) ----------
+  // ลากคลุม → พิมพ์ค่าแล้วกด Enter = ใส่ทุกช่องที่เลือก · Delete = ล้าง · Ctrl+C / Ctrl+V ได้ · แถบลอยด้านล่างมีปุ่มค่าให้กด
+  Grid.prototype.selCells = function () {
+    var s = this.sel, out = [];
+    if (!s) return out;
+    var r1 = Math.min(s.r0, s.r1), r2 = Math.max(s.r0, s.r1), c1 = Math.min(s.c0, s.c1), c2 = Math.max(s.c0, s.c1);
+    for (var r = r1; r <= r2; r++) for (var c = c1; c <= c2; c++) if (this.o.cols[c] && this.o.cols[c].type !== 'ro' && this.o.rows[r]) out.push([r, c]);
+    return out;
+  };
+  Grid.prototype.multi = function () { var s = this.sel; return !!s && (s.r0 !== s.r1 || s.c0 !== s.c1); };
+  Grid.prototype.paintSel = function () {
+    var self = this, s = this.sel;
+    Array.prototype.forEach.call(this.el.querySelectorAll('td.g-sel'), function (td) { td.classList.remove('g-sel'); });
+    if (this.multi()) {
+      this.selCells().forEach(function (rc) { var td = self.el.querySelector('td[data-tr="' + rc[0] + '"][data-tc="' + rc[1] + '"]'); if (td) td.classList.add('g-sel'); });
+    }
+    this.selBar();
+  };
+  Grid.prototype.clearSel = function () { if (!this.sel) return; this.sel = null; this.paintSel(); };
+  Grid.prototype.fillSel = function (raw) {
+    var self = this, o = this.o, n = 0;
+    this.selCells().forEach(function (rc) { if (self.setCell(rc[0], rc[1], raw)) { n++; if (o.onChange) o.onChange(o.rows[rc[0]], o.cols[rc[1]]); } });
+    var s = this.sel;
+    this.busy = true;   // กัน change/blur ของช่องที่ถูกลบออกตอนวาดใหม่
+    try { this.render(); } finally { this.busy = false; }
+    if (s) this.focus(Math.min(s.r0, s.r1), Math.min(s.c0, s.c1));
+    if (o.onFill) o.onFill(n, raw);
+    return n;
+  };
+  Grid.prototype.selBar = function () {
+    var self = this, bar = document.getElementById('gSelBar');
+    if (!this.multi() || !document.body.contains(this.el)) { if (bar && bar._g === this) bar.remove(); return; }
+    if (!bar) { bar = document.createElement('div'); bar.id = 'gSelBar'; bar.className = 'g-selbar'; document.body.appendChild(bar); }
+    bar._g = this;
+    var cells = this.selCells(), cols = {}, o = this.o;
+    cells.forEach(function (rc) { cols[rc[1]] = 1; });
+    var ks = Object.keys(cols), c0 = o.cols[+ks[0]], opts = '';
+    var same = ks.every(function (k) { var c = o.cols[+k]; return c.type === 'select' && JSON.stringify(c.options) === JSON.stringify(c0.options); });
+    if (same) opts = c0.options.map(function (op) { var v = typeof op === 'object' ? op.v : op, t = typeof op === 'object' ? op.t : op; return v === '' ? '' : '<button type="button" data-gv="' + esc(v) + '">' + esc(t) + '</button>'; }).join('');
+    else {
+      var mx = ks.map(function (k) { return o.cols[+k]; }).filter(function (c) { return c.type === 'num' && c.max != null; });
+      var allNum = ks.every(function (k) { return o.cols[+k].type === 'num'; });
+      opts = '<input type="text" class="g-sv" placeholder="' + (allNum ? 'ตัวเลข' : 'ข้อความ') + '" inputmode="' + (allNum ? 'decimal' : 'text') + '"><button type="button" data-gok="1">ใส่ทุกช่อง</button>' +
+        (allNum && mx.length === ks.length && mx.every(function (c) { return c.max === mx[0].max; }) ? '<button type="button" data-gv="' + mx[0].max + '">เต็ม ' + mx[0].max + '</button>' : '');
+    }
+    bar.innerHTML = '<b>เลือก ' + cells.length + ' ช่อง</b>' + opts + '<button type="button" class="g-clr" data-gclr="1">ล้าง</button><button type="button" class="g-x" data-gx="1" title="ยกเลิกการเลือก (Esc)">✕</button>';
+    bar.onmousedown = function (e) { if (e.target.tagName !== 'INPUT') e.preventDefault(); };
+    bar.onclick = function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.gx) return self.clearSel();
+      if (b.dataset.gclr) return self.fillSel('');
+      if (b.dataset.gok) { var v = bar.querySelector('.g-sv').value; if (v !== '') self.fillSel(v); return; }
+      if (b.dataset.gv != null) self.fillSel(b.dataset.gv);
+    };
+    var sv = bar.querySelector('.g-sv');
+    if (sv) sv.onkeydown = function (e) { if (e.key === 'Enter' && sv.value !== '') { e.preventDefault(); self.fillSel(sv.value); } else if (e.key === 'Escape') self.clearSel(); };
+  };
+  Grid.prototype.bindSel = function () {
+    var self = this, o = this.o, drag = null;
+    function cellAt(x, y) {
+      var el = document.elementFromPoint(x, y), td = el && el.closest && el.closest('td[data-tr],td.g-ro[data-r]');
+      if (!td || !self.el.contains(td)) return null;
+      return td.dataset.tr != null ? [+td.dataset.tr, +td.dataset.tc] : [+td.dataset.r, +td.dataset.c];
+    }
+    this.el.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      var rc = cellAt(e.clientX, e.clientY);
+      if (!rc) return;
+      if (e.shiftKey && self.sel) { e.preventDefault(); self.sel.r1 = rc[0]; self.sel.c1 = rc[1]; self.paintSel(); return; }
+      self.sel = { r0: rc[0], c0: rc[1], r1: rc[0], c1: rc[1] }; self.paintSel();
+      var t = e.target, isSel = t.tagName === 'SELECT';
+      // ช่องแบบเลือก (dropdown): กันเมนูเด้งตอนเริ่มลาก ถ้าไม่ได้ลากค่อยเปิดเมนูตอนปล่อยเมาส์
+      if (isSel && document.activeElement !== t) { e.preventDefault(); try { t.focus({ preventScroll: true }); } catch (x) { t.focus(); } }
+      drag = { sel: isSel && document.activeElement === t ? t : null, moved: false, prevented: isSel };
+      function mv(ev) {
+        if (!(ev.buttons & 1)) return up();
+        var c = cellAt(ev.clientX, ev.clientY);
+        if (!c || (c[0] === self.sel.r1 && c[1] === self.sel.c1)) return;
+        drag.moved = true; self.sel.r1 = c[0]; self.sel.c1 = c[1];
+        ev.preventDefault(); var ws = window.getSelection && window.getSelection(); if (ws) ws.removeAllRanges();
+        self.paintSel();
+      }
+      function up() {
+        document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true);
+        var d = drag; drag = null;
+        if (!d) return;
+        if (d.moved) {
+          var a = self.el.querySelector('[data-r="' + self.sel.r0 + '"][data-c="' + self.sel.c0 + '"]');
+          if (a && a.tagName === 'INPUT') { try { a.focus({ preventScroll: true }); } catch (x) { a.focus(); } a.select(); }
+        } else if (d.prevented && d.sel && d.sel.showPicker) { try { d.sel.showPicker(); } catch (x) { } }
+      }
+      document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true);
+    });
+    this.el.addEventListener('keydown', function (e) {
+      if (!self.multi()) return;
+      var t = e.target;
+      if (e.key === 'Escape') { self.clearSel(); return; }
+      if (t.dataset.r == null) return;
+      if (e.key === 'Enter' && t.tagName === 'INPUT') { e.preventDefault(); e.stopImmediatePropagation(); self.fillSel(t.value); return; }
+      if (e.key === 'Delete' || (e.key === 'Backspace' && t.tagName === 'INPUT' && t.selectionStart === 0 && t.selectionEnd === t.value.length)) {
+        e.preventDefault(); e.stopImmediatePropagation(); self.fillSel('');
+      }
+    }, true);
+    this.el.addEventListener('change', function (e) {
+      var t = e.target;
+      if (self.busy) { e.stopImmediatePropagation(); return; }
+      if (t.tagName !== 'SELECT' || t.dataset.r == null || !self.multi()) return;
+      e.stopImmediatePropagation(); self.fillSel(t.value);
+    }, true);
+    this.el.addEventListener('copy', function (e) {
+      if (!self.multi()) return;
+      var s = self.sel, r1 = Math.min(s.r0, s.r1), r2 = Math.max(s.r0, s.r1), c1 = Math.min(s.c0, s.c1), c2 = Math.max(s.c0, s.c1), lines = [];
+      for (var r = r1; r <= r2; r++) { var a = []; for (var c = c1; c <= c2; c++) a.push(show(self.get(o.rows[r], o.cols[c]), o.cols[c])); lines.push(a.join('\t')); }
+      e.clipboardData.setData('text/plain', lines.join('\n')); e.preventDefault();
+    });
+    // วางค่าเดียวลงหลายช่องที่เลือก
+    this.el.addEventListener('paste', function (e) {
+      if (!self.multi()) return;
+      var text = (e.clipboardData || window.clipboardData).getData('text').replace(/\r/g, '').replace(/\n$/, '');
+      if (text.indexOf('\t') >= 0 || text.indexOf('\n') >= 0) return;
+      e.preventDefault(); e.stopImmediatePropagation(); self.fillSel(text);
+    }, true);
+  };
   Grid.prototype.bind = function () {
     var self = this, o = this.o;
+    this.bindSel();
     // กันแท็บเล็ต/มือถือเลื่อนตารางกลับซ้ายเองตอนแตะช่อง: จำตำแหน่งก่อนแตะ แล้วคืนค่าถ้าช่องนั้นมองเห็นอยู่แล้ว
     var anchor = null;
     function wrapEl() { return self.el.querySelector('.g-wrap'); }
@@ -216,6 +342,13 @@
       if (o.onPaste) o.onPaste(n);
     });
   };
+
+  // คลิกนอกตาราง → ยกเลิกช่องที่เลือก
+  document.addEventListener('mousedown', function (e) {
+    var bar = document.getElementById('gSelBar');
+    if (!bar || !bar._g || bar.contains(e.target) || bar._g.el.contains(e.target)) return;
+    bar._g.clearSel();
+  }, true);
 
   window.PP5Grid = Grid;
 })();

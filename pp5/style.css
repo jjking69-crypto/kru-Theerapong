@@ -824,3 +824,17 @@ label.wd input[type=checkbox] { accent-color: #2563eb; }
 .wdp { width: 46px !important; }
 .sch-line { width: 100%; margin-top: 4px; font-size: 13.5px; color: #334155; }
 .sch-t b { color: #1e3a8a; }
+
+/* ลากเมาส์คลุมหลายช่อง */
+td.g-sel { background: #dbeafe !important; box-shadow: inset 0 0 0 1px #93c5fd; }
+td.g-sel input, td.g-sel select { background: transparent !important; }
+.g-tbl { user-select: none; -webkit-user-select: none; }
+.g-tbl input { user-select: text; -webkit-user-select: text; }
+.g-selbar { position: fixed; right: 18px; bottom: 18px; z-index: 9000; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: calc(100vw - 32px);
+  background: #1e3a8a; color: #fff; padding: 8px 12px; border-radius: 14px; box-shadow: 0 10px 30px -8px #0008; font-size: 15px; }
+.g-selbar b { margin-right: 4px; }
+.g-selbar button { border: 0; border-radius: 9px; padding: 6px 12px; background: #fff; color: #1e3a8a; font: inherit; font-weight: 700; cursor: pointer; }
+.g-selbar button:hover { background: #dbeafe; }
+.g-selbar .g-clr { background: #fee2e2; color: #b91c1c; }
+.g-selbar .g-x { background: transparent; color: #fff; padding: 6px 8px; }
+.g-selbar .g-sv { width: 90px; border: 0; border-radius: 9px; padding: 6px 8px; font: inherit; }
