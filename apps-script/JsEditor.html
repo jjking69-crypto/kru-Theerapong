@@ -194,6 +194,7 @@
   function rosterSection(el) {
     var d = ed.data;
     el.innerHTML = tools('<button class="btn" data-ed="addStu" data-n="1">+ เพิ่ม 1 คน</button><button class="btn" data-ed="addStu" data-n="10">+ เพิ่ม 10 คน</button>' +
+      (window.PP5_STORE && PP5_STORE.nameIds && d.students.some(function (s) { return !String(s.id || '').trim(); }) ? '<button class="btn pri" data-ed="fillIds">🔎 เติมเลขประจำตัวจากชื่อ</button>' : '') +
       '<button class="btn danger" data-ed="delStu">ลบคนสุดท้าย</button><button class="btn" data-ed="pullRoster">' + (ctx.masterRoster && ctx.masterRoster() ? 'ใช้รายชื่อจากทะเบียน (ข้อมูล ' + esc(ctx.masterRoster().date) + ')' : 'ดึงรายชื่อจากไฟล์อื่นของห้องนี้') + '</button>') +
       hint('เลขประจำตัวนักเรียนใช้ค้นหาผลในหน้าประกาศผล · เลขบัตรประชาชน 4 ตัวท้ายใช้ยืนยันตัวตนผู้ปกครอง (ถ้าเปิดใช้) · คัดลอกหลายแถวจาก Excel มาวางได้' +
         (ed.kind === 'pp6' ? '<br>➕ <b>นักเรียนที่ย้ายมาจากโรงเรียนอื่น</b>: กด "+ เพิ่ม 1 คน" ใส่เลขประจำตัวและชื่อ แล้วกรอกคะแนนจากโรงเรียนเดิมที่ขั้น "คะแนนภาค 1 / ภาค 2" และส่วนอื่น ๆ (เวลาเรียน คุณลักษณะ ฯลฯ) · ตั้งสถานะเป็น "ย้ายเข้า" ได้' : '')) + '<div class="ed-g"></div>';
@@ -222,6 +223,13 @@
       var n = +b.dataset.n, st = ed.data.students;
       for (var i = 0; i < n; i++) st.push(newStudentFor(st.length + 1));
       recompute(); touch(); ctx.rerender();
+    },
+    fillIds: async function () {
+      try {
+        var r = M().fillIds(ed.data.students, await window.PP5_STORE.nameIds());
+        touch(); ctx.rerender();
+        ctx.toast('เติมเลขประจำตัวจากชื่อแล้ว ' + r.filled + ' คน' + (r.missing.length ? ' · ยังไม่พบ ' + r.missing.length + ' คน (กรอกเองในช่อง "เลขประจำตัว")' : '') + ' · อย่าลืมกด "บันทึกในระบบ"', r.missing.length ? 'info' : 'ok');
+      } catch (e) { ctx.toast('เติมเลขไม่สำเร็จ: ' + e.message, 'err'); }
     },
     delStu: function () {
       var st = ed.data.students, last = st[st.length - 1];
