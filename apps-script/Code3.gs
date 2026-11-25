@@ -1,3 +1,52 @@
+/**
+ * ไทม์ไลน์ผลการเรียนของนักเรียน: ปีปัจจุบัน → ย้อนไปถึงตอน ป.1
+ *   ปีที่มีผลในระบบ = ผลจริง · ปีที่ครู/แอดมินเพิ่มผลจากโรงเรียนอื่น = external · ไม่มีทั้งคู่ = missing (ไม่ได้เรียนที่โรงเรียนนี้)
+ */
+function timeline_(id, o) {
+  var fl = flags_(), cfg = getCfg_(), idx = readIndex_(), years = [], who = null, verified = !o.publicView || cfg.verify !== 'id+nid4';
+  var ext = external_()[id] || {};
+  (idx.ids[id] || []).forEach(function (key) {
+    var meta = idx.classes[key];
+    if (!meta) return;
+    var yc0 = cfg.years[meta.year] || { mid: true, final: true };
+    var yc = o.publicView ? { mid: yc0.mid && fl.showMid, final: yc0.final && fl.showFinal } : { mid: true, final: true };
+    if (!yc.mid && !yc.final) return;
+    var t = readText_(meta.fileId);
+    if (!t) return;
+    var pub = JSON.parse(t), s = null;
+    for (var i = 0; i < pub.students.length; i++) if (String(pub.students[i].id) === id) { s = pub.students[i]; break; }
+    if (!s) return;
+    if (o.publicView && cfg.verify === 'id+nid4') { if (!s.nid4 || o.code !== String(s.nid4)) return; verified = true; }
+    who = who || s;
+    var lv = +String(key).split('|')[1] || pub.level;
+    years.push({ year: +pub.year, level: lv, className: pub.className, no: s.no, school: pub.school, mid: yc.mid ? s.mid : null, final: yc.final ? s.final : null, updatedAt: meta.updatedAt || null });
+  });
+  var rs = rosterStudent_(id);
+  if (rs && o.publicView && cfg.verify === 'id+nid4') { if (rs.s.nid4 && o.code === String(rs.s.nid4)) verified = true; else if (!years.length) rs = null; }
+  if (rs && !who) who = { name: ((rs.s.prefix || '') + (rs.s.first || '') + ' ' + (rs.s.last || '')).trim(), first: rs.s.first || '' };
+  if (!who || !verified) return null;
+  // ตำแหน่งอ้างอิง: ชั้นปัจจุบันจากทะเบียน หรือปีล่าสุดที่มีผล
+  var cur = curYear_(), have = {};
+  years.forEach(function (y) { have[y.year] = y; });
+  var anchor = rs && rs.c.stage !== 'อ' ? { year: +rs.c.year, level: +rs.c.level, room: rs.c.room } : null;
+  if (!anchor && years.length) { var lt = years.slice().sort(function (a, b) { return b.year - a.year; })[0]; anchor = { year: lt.year, level: lt.level }; }
+  if (anchor && anchor.level >= 1 && anchor.level <= 6) {
+    var first = anchor.year - (anchor.level - 1), last = Math.min(Math.max(anchor.year, cur), anchor.year + (6 - anchor.level));
+    for (var y = first; y <= last; y++) {
+      var lv = anchor.level - (anchor.year - y);
+      if (lv < 1 || lv > 6 || have[y]) continue;
+      if (y > cur && !(rs && y === anchor.year)) continue;   // ไม่แสดงปีอนาคต (ยกเว้นปีของทะเบียนรายชื่อ)
+      if (ext[y]) years.push({ year: y, level: lv, className: ext[y].className || ('ประถมศึกษาปีที่ ' + lv), school: ext[y].school || '', external: ext[y] });
+      else if (y === anchor.year && rs) years.push({ year: y, level: lv, className: 'ประถมศึกษาปีที่ ' + lv + '/' + rs.c.room, no: rs.s.no, school: cfg.school || '', mid: null, final: null, pending: true });
+      else years.push({ year: y, level: lv, className: 'ประถมศึกษาปีที่ ' + lv, missing: true, school: cfg.school || 'โรงเรียนวัดทุ่งแฝก' });
+    }
+  }
+  // ผลจากโรงเรียนอื่นในปีที่อยู่นอกช่วง (เช่น ย้ายมาตอน ป.4 แต่ครูเพิ่มผล ป.3 จากโรงเรียนเดิม)
+  Object.keys(ext).forEach(function (y) { y = +y; if (!years.some(function (x) { return x.year === y; })) years.push({ year: y, level: ext[y].level, className: ext[y].className || '', school: ext[y].school || '', external: ext[y] }); });
+  years.sort(function (a, b) { return b.year - a.year; });
+  return { id: id, name: who.name, first: who.first, years: years, curYear: cur };
+}
+
 // ===== ผลการเรียนจากโรงเรียนอื่น (นักเรียนย้ายเข้า) — ครู/แอดมินเพิ่มได้ =====
 function external_() { var t = readText_(props_().getProperty('EXT_ID')); try { return t ? JSON.parse(t) : {}; } catch (e) { return {}; } }
 function api_saveExternal(pin, id, year, json) {

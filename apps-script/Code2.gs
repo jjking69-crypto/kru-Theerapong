@@ -1,3 +1,57 @@
+// ===== แม่แบบรูปแบบต้นฉบับ (ปพ.5 ครูหนุ่ม / ปพ.6 ของโรงเรียน) =====
+// คีย์แม่แบบ: "pp5|ชั้น|วิชา" / "pp6|ชั้น" (แม่แบบของห้อง/วิชานั้นจากโฟลเดอร์ต้นฉบับ) หรือ "pp5" / "pp6" (ใช้ได้ทุกชั้น)
+// ===== ปพ.5 เป็น PDF "รูปแบบไฟล์ Excel ต้นฉบับ" (แปลงไฟล์ผ่าน Google Sheets แล้วส่งออกทีละหน้า) =====
+//   ต้องเปิด "บริการ Drive API" ในโปรเจกต์ Apps Script (เมนู บริการ + → Drive API) — ใช้แปลง .xlsm เป็น Google Sheets ชั่วคราว
+var XPDF_FOLDER_NAME = '_ไฟล์ชั่วคราว PDF (ลบได้)';
+function api_xpdfStart(pin, b64, name) {
+  checkPin_(pin);
+  if (typeof Drive === 'undefined' || !Drive.Files) throw new Error('NEED_DRIVE_API');
+  var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'application/vnd.ms-excel.sheet.macroEnabled.12', safeName_(name || 'pp5.xlsm'));
+  var folder = subFolder_(rootFolder_(), XPDF_FOLDER_NAME);
+  var f = Drive.Files.create({ name: 'ชั่วคราว ' + safeName_(name || 'ปพ.5'), mimeType: 'application/vnd.google-apps.spreadsheet', parents: [folder.getId()] }, blob);
+  var id = f.id || f.getId && f.getId();
+  cache_().put('xpdf:' + id, '1', 3600);
+  var sheets = {};
+  SpreadsheetApp.openById(id).getSheets().forEach(function (sh) { sheets[sh.getName()] = { gid: sh.getSheetId(), rows: sh.getMaxRows(), cols: sh.getMaxColumns() }; });
+  return { id: id, sheets: sheets };
+}
+/** ส่งออกหลายช่วงของชีตเดียว: ranges = [[r1,c1,r2,c2], ...] (เริ่ม 0, ไม่รวมตัวท้าย) → PDF base64 ทีละช่วง */
+function api_xpdfPart(pin, id, gid, ranges, portrait) {
+  checkPin_(pin);
+  if (!cache_().get('xpdf:' + id)) throw new Error('หมดเวลาสร้าง PDF กรุณาลองใหม่');
+  var tok = ScriptApp.getOAuthToken(), out = [];
+  (ranges || []).slice(0, 30).forEach(function (r) {
+    var url = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/export?format=pdf&gid=' + (+gid) +
+      '&r1=' + (+r[0]) + '&c1=' + (+r[1]) + '&r2=' + (+r[2]) + '&c2=' + (+r[3]) +
+      '&size=A4&portrait=' + (portrait === false ? 'false' : 'true') + '&scale=2&gridlines=false&printtitle=false&sheetnames=false' +
+      '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.3&bottom_margin=0.3&left_margin=0.25&right_margin=0.25';
+    var res = null;
+    for (var t = 0; t < 5; t++) {
+      res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) break;
+      Utilities.sleep(1200 * (t + 1));   // ส่งออกถี่เกินไป (429) → รอแล้วลองใหม่
+    }
+    if (res.getResponseCode() !== 200) throw new Error('ส่งออก PDF ไม่สำเร็จ (รหัส ' + res.getResponseCode() + ')');
+    out.push(Utilities.base64Encode(res.getBlob().getBytes()));
+  });
+  return out;
+}
+/** ฟอนต์ TH Sarabun New ที่ผู้ใช้อัปโหลดไว้ใน Google Drive (ไฟล์ THSarabunNew.ttf / THSarabunNew Bold.ttf) */
+function api_fontTTF(pin) {
+  checkPin_(pin);
+  function get(name) {
+    var it = DriveApp.getFilesByName(name);
+    while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) return Utilities.base64Encode(f.getBlob().getBytes()); }
+    return null;
+  }
+  return { regular: get('THSarabunNew.ttf'), bold: get('THSarabunNew Bold.ttf') };
+}
+function api_xpdfEnd(pin, id) {
+  checkPin_(pin);
+  if (cache_().get('xpdf:' + id)) { trashById_(id); cache_().remove('xpdf:' + id); }
+  return true;
+}
+
 var TPL_KEY_RE = /^pp[56](\|\d{1,2}(\|[A-Za-z0-9_\-]{1,40})?)?$/;
 function tplInfo_() {
   var all = props_().getProperties(), out = {};
@@ -281,53 +335,4 @@ function api_studentHistory(pin, id) {
   checkPin_(pin);
   id = String(id || '').replace(/\s+/g, '');
   return timeline_(id, { publicView: false }) || { notFound: true };
-}
-
-/**
- * ไทม์ไลน์ผลการเรียนของนักเรียน: ปีปัจจุบัน → ย้อนไปถึงตอน ป.1
- *   ปีที่มีผลในระบบ = ผลจริง · ปีที่ครู/แอดมินเพิ่มผลจากโรงเรียนอื่น = external · ไม่มีทั้งคู่ = missing (ไม่ได้เรียนที่โรงเรียนนี้)
- */
-function timeline_(id, o) {
-  var fl = flags_(), cfg = getCfg_(), idx = readIndex_(), years = [], who = null, verified = !o.publicView || cfg.verify !== 'id+nid4';
-  var ext = external_()[id] || {};
-  (idx.ids[id] || []).forEach(function (key) {
-    var meta = idx.classes[key];
-    if (!meta) return;
-    var yc0 = cfg.years[meta.year] || { mid: true, final: true };
-    var yc = o.publicView ? { mid: yc0.mid && fl.showMid, final: yc0.final && fl.showFinal } : { mid: true, final: true };
-    if (!yc.mid && !yc.final) return;
-    var t = readText_(meta.fileId);
-    if (!t) return;
-    var pub = JSON.parse(t), s = null;
-    for (var i = 0; i < pub.students.length; i++) if (String(pub.students[i].id) === id) { s = pub.students[i]; break; }
-    if (!s) return;
-    if (o.publicView && cfg.verify === 'id+nid4') { if (!s.nid4 || o.code !== String(s.nid4)) return; verified = true; }
-    who = who || s;
-    var lv = +String(key).split('|')[1] || pub.level;
-    years.push({ year: +pub.year, level: lv, className: pub.className, no: s.no, school: pub.school, mid: yc.mid ? s.mid : null, final: yc.final ? s.final : null, updatedAt: meta.updatedAt || null });
-  });
-  var rs = rosterStudent_(id);
-  if (rs && o.publicView && cfg.verify === 'id+nid4') { if (rs.s.nid4 && o.code === String(rs.s.nid4)) verified = true; else if (!years.length) rs = null; }
-  if (rs && !who) who = { name: ((rs.s.prefix || '') + (rs.s.first || '') + ' ' + (rs.s.last || '')).trim(), first: rs.s.first || '' };
-  if (!who || !verified) return null;
-  // ตำแหน่งอ้างอิง: ชั้นปัจจุบันจากทะเบียน หรือปีล่าสุดที่มีผล
-  var cur = curYear_(), have = {};
-  years.forEach(function (y) { have[y.year] = y; });
-  var anchor = rs && rs.c.stage !== 'อ' ? { year: +rs.c.year, level: +rs.c.level, room: rs.c.room } : null;
-  if (!anchor && years.length) { var lt = years.slice().sort(function (a, b) { return b.year - a.year; })[0]; anchor = { year: lt.year, level: lt.level }; }
-  if (anchor && anchor.level >= 1 && anchor.level <= 6) {
-    var first = anchor.year - (anchor.level - 1), last = Math.min(Math.max(anchor.year, cur), anchor.year + (6 - anchor.level));
-    for (var y = first; y <= last; y++) {
-      var lv = anchor.level - (anchor.year - y);
-      if (lv < 1 || lv > 6 || have[y]) continue;
-      if (y > cur && !(rs && y === anchor.year)) continue;   // ไม่แสดงปีอนาคต (ยกเว้นปีของทะเบียนรายชื่อ)
-      if (ext[y]) years.push({ year: y, level: lv, className: ext[y].className || ('ประถมศึกษาปีที่ ' + lv), school: ext[y].school || '', external: ext[y] });
-      else if (y === anchor.year && rs) years.push({ year: y, level: lv, className: 'ประถมศึกษาปีที่ ' + lv + '/' + rs.c.room, no: rs.s.no, school: cfg.school || '', mid: null, final: null, pending: true });
-      else years.push({ year: y, level: lv, className: 'ประถมศึกษาปีที่ ' + lv, missing: true, school: cfg.school || 'โรงเรียนวัดทุ่งแฝก' });
-    }
-  }
-  // ผลจากโรงเรียนอื่นในปีที่อยู่นอกช่วง (เช่น ย้ายมาตอน ป.4 แต่ครูเพิ่มผล ป.3 จากโรงเรียนเดิม)
-  Object.keys(ext).forEach(function (y) { y = +y; if (!years.some(function (x) { return x.year === y; })) years.push({ year: y, level: ext[y].level, className: ext[y].className || '', school: ext[y].school || '', external: ext[y] }); });
-  years.sort(function (a, b) { return b.year - a.year; });
-  return { id: id, name: who.name, first: who.first, years: years, curYear: cur };
 }

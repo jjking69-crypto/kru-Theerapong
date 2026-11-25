@@ -326,7 +326,7 @@ function api_xpdfPart(pin, id, gid, ranges, portrait) {
     var url = 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/export?format=pdf&gid=' + (+gid) +
       '&r1=' + (+r[0]) + '&c1=' + (+r[1]) + '&r2=' + (+r[2]) + '&c2=' + (+r[3]) +
       '&size=A4&portrait=' + (portrait === false ? 'false' : 'true') + '&scale=2&gridlines=false&printtitle=false&sheetnames=false' +
-      '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.4&bottom_margin=0.4&left_margin=0.35&right_margin=0.35';
+      '&pagenum=UNDEFINED&fzr=false&horizontal_alignment=CENTER&top_margin=0.3&bottom_margin=0.3&left_margin=0.25&right_margin=0.25';
     var res = null;
     for (var t = 0; t < 5; t++) {
       res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + tok }, muteHttpExceptions: true });
@@ -337,6 +337,16 @@ function api_xpdfPart(pin, id, gid, ranges, portrait) {
     out.push(Utilities.base64Encode(res.getBlob().getBytes()));
   });
   return out;
+}
+/** ฟอนต์ TH Sarabun New ที่ผู้ใช้อัปโหลดไว้ใน Google Drive (ไฟล์ THSarabunNew.ttf / THSarabunNew Bold.ttf) */
+function api_fontTTF(pin) {
+  checkPin_(pin);
+  function get(name) {
+    var it = DriveApp.getFilesByName(name);
+    while (it.hasNext()) { var f = it.next(); if (!f.isTrashed()) return Utilities.base64Encode(f.getBlob().getBytes()); }
+    return null;
+  }
+  return { regular: get('THSarabunNew.ttf'), bold: get('THSarabunNew Bold.ttf') };
 }
 function api_xpdfEnd(pin, id) {
   checkPin_(pin);

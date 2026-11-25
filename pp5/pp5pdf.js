@@ -46,7 +46,11 @@
     '.p5pg .sigs{display:grid;grid-template-columns:1fr 1fr;gap:18px 30px;margin-top:22px;font-size:15px}' +
     '.p5pg .sig{text-align:center}.p5pg .sig .ln{height:46px;display:flex;align-items:flex-end;justify-content:center}.p5pg .sig img{max-height:46px;max-width:180px}' +
     '.p5pg .sig.full{grid-column:1/-1}.p5pg .appr{margin:6px 0;font-size:15px}' +
-    '.p5pg .fail{color:#c00;font-weight:700}';
+    '.p5pg .fail{color:#c00;font-weight:700}' +
+    // TH Sarabun New ตัวเล็กกว่า Sarabun ที่ขนาดเดียวกัน → ขยายขนาดให้อ่านง่ายเท่าเดิม
+    '.p5pg.thsn{font-family:THSarabunNew,Sarabun,sans-serif;font-size:19px;line-height:1.15}' +
+    '.p5pg.thsn .p5hd,.p5pg.thsn .p5no{font-size:17px}.p5pg.thsn h1{font-size:32px}.p5pg.thsn h2{font-size:25px}' +
+    '.p5pg.thsn .sm{font-size:15px}.p5pg.thsn .cv-info{font-size:23px;line-height:1.6}.p5pg.thsn .sigs,.p5pg.thsn .appr{font-size:20px}';
   function injectCss() { if (document.getElementById('p5pdf-css')) return; var s = document.createElement('style'); s.id = 'p5pdf-css'; s.textContent = CSS; document.head.appendChild(s); }
 
   // ---------- สร้างหน้า ----------
@@ -169,7 +173,7 @@
     var el = stage(), isFirst = first;
     for (var i = 0; i < pages.length; i++) {
       var p = pages[i], sz = PX[p.o];
-      el.innerHTML = '<div class="p5pg" style="width:' + sz.w + 'px;height:' + sz.h + 'px"><div class="p5fit">' + p.html + '</div><div class="p5no">หน้า ' + (i + 1) + '/' + pages.length + '</div></div>';
+      el.innerHTML = '<div class="p5pg' + (useTH ? ' thsn' : '') + '" style="width:' + sz.w + 'px;height:' + sz.h + 'px"><div class="p5fit">' + p.html + '</div><div class="p5no">หน้า ' + (i + 1) + '/' + pages.length + '</div></div>';
       var imgs = el.querySelectorAll('img');
       await Promise.all(Array.prototype.map.call(imgs, function (im) { return im.complete ? 0 : new Promise(function (r) { im.onload = im.onerror = r; }); }));
       fit(el.firstChild, p.o);
@@ -184,12 +188,13 @@
   }
   function fileSafe(s) { return String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim(); }
   function nameOf(rec) { var m = rec.data.meta; return fileSafe('ปพ.5_' + (m.levelName || 'ป.' + m.level) + '-' + m.room + '_' + m.code + '_' + m.subject + '_ปี' + m.year); }
-  var busy = false;
+  var busy = false, useTH = false;
   async function run(recs, ctx, fileName) {
     if (busy) return; busy = true;
     var ld = window.PP5PinPad && PP5PinPad.loading ? PP5PinPad.loading('กำลังเตรียมสร้าง PDF ปพ.5...') : { set: function () {}, done: function () {} };
     try {
       if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      useTH = await loadTHSN(ctx.store);
       await loadLibs();
       var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }), first = true, total = 0;
       for (var r = 0; r < recs.length; r++) {
@@ -248,6 +253,42 @@
     });
     zip.file('xl/styles.xml', x);
   }
+  // เตรียมไฟล์ก่อนแปลง: (1) ลบปุ่ม/ไอคอนที่ Excel ตั้งไว้ "ไม่พิมพ์" (เช่น ปุ่มเครื่องมือมุมขวาบน)
+  //                     (2) ขยายความกว้างคอลัมน์ — Google Sheets แปลงความกว้างแคบกว่า Excel ทำให้ตารางดูบีบ
+  var COL_K = 1.25;
+  async function prepXlsx(zip) {
+    await fixFonts(zip);
+    var names = Object.keys(zip.files);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i], f = zip.file(n);
+      if (!f) continue;
+      if (/^xl\/drawings\/drawing\d+\.xml$/.test(n)) {
+        var d = await f.async('string');
+        var d2 = d.replace(/<xdr:(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b[\s\S]*?<\/xdr:\1>/g, function (a) { return /fPrintsWithSheet="0"/.test(a) ? '' : a; });
+        if (d2 !== d) zip.file(n, d2);
+      } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(n)) {
+        var x = await f.async('string');
+        x = x.replace(/(<col\b[^>]*\bwidth=")([\d.]+)"/g, function (q, a, w) { return a + (+w * COL_K).toFixed(3) + '"'; })
+          .replace(/(<sheetFormatPr\b[^>]*\bdefaultColWidth=")([\d.]+)"/, function (q, a, w) { return a + (+w * COL_K).toFixed(3) + '"'; });
+        zip.file(n, x);
+      }
+    }
+  }
+  // ฟอนต์ TH Sarabun New จาก Google Drive (ใช้กับ PDF สรุปย่อ)
+  var thsn = null;
+  function loadTHSN(store) {
+    if (thsn) return thsn;
+    if (!store || !store.fontTTF) return Promise.resolve(false);
+    // ใช้กฎ @font-face แบบ data URL (html2canvas คัดลอกหน้าไปวาดใหม่ — ฟอนต์ที่เพิ่มด้วย FontFace API จะไม่ติดไป ทำให้คำห่างกัน)
+    thsn = store.fontTTF().then(function (r) {
+      if (!r || !r.regular) return false;
+      var css = "@font-face{font-family:'THSarabunNew';src:url(data:font/ttf;base64," + r.regular + ") format('truetype');font-weight:400;font-style:normal}";
+      if (r.bold) css += "@font-face{font-family:'THSarabunNew';src:url(data:font/ttf;base64," + r.bold + ") format('truetype');font-weight:700;font-style:normal}";
+      var st = document.createElement('style'); st.id = 'p5-thsn'; st.textContent = css; document.head.appendChild(st);
+      return Promise.all([document.fonts.load('400 20px THSarabunNew', 'ก'), r.bold ? document.fonts.load('700 20px THSarabunNew', 'ก') : 0]).then(function () { return true; });
+    }).catch(function (e) { console.warn('font', e); thsn = null; return false; });
+    return thsn;
+  }
   async function excelPdf(recs, ctx, fileName) {
     if (busy) return; busy = true;
     recs = [].concat(recs);
@@ -263,7 +304,7 @@
       var blob = await ctx.build(rec);
       var zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
       var lay = await layoutOf(zip);
-      await fixFonts(zip);
+      await prepXlsx(zip);
       var up = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
       ld.set(tag + 'กำลังแปลงไฟล์บน Google Drive...');
       var st = await store.xpdfStart(up, nameOf(rec) + '.xlsm');
