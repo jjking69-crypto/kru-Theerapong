@@ -229,9 +229,9 @@
       if (T2) {
         c = count(function (s) { var r = s.result || {}; return [r.rms ? 0 : r.final]; }); add('scores', 'คะแนนสอบปลายภาค', 2, c[0], c[1]);
         c = count(function (s) { return (d.characteristicItems || []).map(function (it) { return ((s.characteristics || {}).items || {})[it.no]; }); }); add('char', 'คุณลักษณะอันพึงประสงค์', 2, c[0], c[1]);
+        // กิจกรรมพัฒนาผู้เรียน: เตือนตั้งแต่ภาค 2 (1 ก.พ.) · ชื่อชุมนุม/ชื่อกิจกรรม + ผลประเมิน
+        c = count(function (s) { var a = s.activities || {}; return [a.clubName, a.socialName, a.guidance, a.scout, a.club, a.social]; }); add('act', 'กิจกรรมพัฒนาผู้เรียน (ชุมนุม/เพื่อสังคมฯ)', 2, c[0], c[1]);
       }
-      // กิจกรรมพัฒนาผู้เรียน (แนะแนว ลูกเสือ ชุมนุม เพื่อสังคมฯ) เตือนตั้งแต่ภาค 1: ชื่อชุมนุม/ชื่อกิจกรรม + ผลประเมิน
-      c = count(function (s) { var a = s.activities || {}; return [a.clubName, a.socialName, a.guidance, a.scout, a.club, a.social]; }); add('act', 'กิจกรรมพัฒนาผู้เรียน (ชุมนุม/เพื่อสังคมฯ)', 1, c[0], c[1]);
     } else {
       var subs = d.subjects || [];
       [1, 2].forEach(function (tm) {

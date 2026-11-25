@@ -511,12 +511,12 @@
       var rf = rowFill(['ผ.', 'มผ.'], function (st, v) { A.forEach(function (a) { st.activities[a[0]] = v; st.activities.hours[a[0]] = v === 'ผ.' ? AH[a[0]] : 0; }); });
       el.innerHTML = tools('<b>ชั่วโมงเต็ม:</b> ' + A.map(function (a) { return a[1] + ' <input data-f="activityHours.' + a[0] + '" type="number" class="ed-mini" value="' + esc(AH[a[0]]) + '">'; }).join(' · ') + ' ชม.') + fillAllTools() +
         hint('<b>กรอกคนแรกคนเดียว คนอื่นจะเหมือนคนแรกอัตโนมัติ</b> แล้วค่อยแก้เฉพาะคนที่ต่างไป · กรอก "ชั่วโมงเข้าร่วม" ระบบประเมินให้ (ร้อยละ 80 ขึ้นไป = ผ.) หรือเลือก ผ./มผ. เอง · ชื่อชุมนุม/ชื่อกิจกรรมเพื่อสังคมฯ บันทึกลงไฟล์ Excel ด้วย') + '<div class="ed-g"></div>';
-      var cols = [rf, { label: 'ชื่อชุมนุม', group: 'ชุมนุม', type: 'text', w: 120, req: true, get: function (s) { return s.activities.clubName; }, set: function (s, v) { s.activities.clubName = v; } }];
+      var cols = [rf, { label: 'ชื่อชุมนุม', group: 'ชุมนุม', type: 'text', w: 120, req: needT(2), get: function (s) { return s.activities.clubName; }, set: function (s, v) { s.activities.clubName = v; } }];
       A.forEach(function (a) {
-        if (a[0] === 'social') cols.push({ label: 'ชื่อกิจกรรม', group: a[1], type: 'text', w: 120, req: true, get: function (s) { return s.activities.socialName; }, set: function (s, v) { s.activities.socialName = v; } });
+        if (a[0] === 'social') cols.push({ label: 'ชื่อกิจกรรม', group: a[1], type: 'text', w: 120, req: needT(2), get: function (s) { return s.activities.socialName; }, set: function (s, v) { s.activities.socialName = v; } });
         cols.push({ label: 'ชม.เข้าร่วม', sub: '/' + AH[a[0]], group: a[1], type: 'num', w: 64, min: 0, max: AH[a[0]], rerender: true, get: function (s) { return s.activities.hours[a[0]]; },
           set: function (s, v) { s.activities.hours[a[0]] = v; if (v != null && AH[a[0]]) s.activities[a[0]] = v / AH[a[0]] * 100 >= 80 ? 'ผ.' : 'มผ.'; } });
-        cols.push({ label: 'ผล', group: a[1], type: 'select', options: ACT_OPT, fill: true, w: 70, req: true, get: function (s) { return s.activities[a[0]]; }, set: function (s, v) { s.activities[a[0]] = v; } });
+        cols.push({ label: 'ผล', group: a[1], type: 'select', options: ACT_OPT, fill: true, w: 70, req: needT(2), get: function (s) { return s.activities[a[0]]; }, set: function (s, v) { s.activities[a[0]] = v; } });
       });
       // กรอกคนแรก → คนอื่นเหมือนคนแรก (เฉพาะคนที่ยังว่าง หรือยังเหมือนค่าเดิมของคนแรก) · แก้รายคนได้ภายหลัง
       cols.slice(1).forEach(function (c) {
