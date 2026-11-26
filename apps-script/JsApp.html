@@ -1980,10 +1980,10 @@
     el.innerHTML = (home ? '<a class="tb home-tb" href="' + esc(home) + '" target="_top">🏠 หน้าหลัก</a>' : '') +
       '<div class="sw-wrap"><button class="tb role sw-btn" data-top="switch" aria-haspopup="true">' + cur + ' <span aria-hidden="true">▾</span></button>' +
       '<div class="sw-menu" hidden><div class="sw-h">สลับไปใช้ระบบ</div>' +
-      '<button data-to="kru"' + (kru ? ' class="on"' : '') + '>👤 ระบบครู (รายบุคคล)<small>เฉพาะวิชาที่ตัวเองสอน · รหัสเบอร์โทร 4 ตัวท้าย</small></button>' +
-      '<button data-to="teacher"' + (!adm && !dir && !kru ? ' class="on"' : '') + '>🏫 ระบบโรงเรียน<small>แก้ได้ทุกชั้น ทุกวิชา (สอนแทน)</small></button>' +
-      '<button data-to="director"' + (dir ? ' class="on"' : '') + '>👔 ระบบผู้อำนวยการ<small>ติดตามงาน · ดูอย่างเดียว</small></button>' +
-      '<button data-to="admin">🛡 ระบบแอดมิน<small>ผู้ดูแลระบบ (ใช้รหัสแอดมิน)</small></button></div></div>' +
+      '<button data-to="kru"' + (kru ? ' class="on"' : '') + '>👤 ระบบครู (รายบุคคล)</button>' +
+      '<button data-to="teacher"' + (!adm && !dir && !kru ? ' class="on"' : '') + '>🏫 ระบบโรงเรียน</button>' +
+      '<button data-to="director"' + (dir ? ' class="on"' : '') + '>👔 ระบบผู้อำนวยการ</button>' +
+      '<button data-to="admin">🛡 ระบบแอดมิน</button></div></div>' +
       '<button class="tb out-tb" data-top="logout">↪ ออกจากระบบ</button>';
     $('upBtn').hidden = !adm;   // ปุ่มอัปโหลดรวม: เฉพาะแอดมิน
   }

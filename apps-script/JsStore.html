@@ -54,10 +54,10 @@
   function askPin(msg) {
     if (asking) return asking;
     asking = getPinLen().then(function (pl) { return window.PP5PinPad.ask({
-      digits: (window.PP5_NEED_ADMIN ? pl.admin : 0) || 0,   // หน้าครู: รหัสครู 4 หลัก / ระบบโรงเรียน 8 หลัก / ผอ. → กดแล้วกดตกลง
+      digits: (window.PP5_NEED_ADMIN ? pl.admin : 0) || 0,   // หน้าครู: ความยาวรหัสต่างกันตามบทบาท → กดแล้วกดตกลง
       home: window.PP5_HOME || '',
       title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : wantRole() ? 'เข้าสู่' + (wantRole() === 'kru' ? 'ระบบครู' : ROLE_TH[wantRole()] === 'ระบบโรงเรียน' ? 'ระบบโรงเรียน' : 'ระบบ' + ROLE_TH[wantRole()]) : 'เข้าสู่ระบบ',
-      sub: msg || (wantRole() === 'kru' ? 'กดรหัสครู (เบอร์โทร 4 ตัวท้าย)' : wantRole() && wantRole() !== 'admin' ? 'กดรหัส' + ROLE_TH[wantRole()] : 'ครู: เบอร์โทร 4 ตัวท้าย · ระบบโรงเรียน / ผู้อำนวยการ: รหัสของระบบ'), length: 12, autoSubmit: false,
+      sub: msg || 'กรอกรหัสผ่าน', length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {
           google.script.run.withSuccessHandler(function (r) {
