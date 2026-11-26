@@ -1,0 +1,681 @@
+/*
+ * แบบข้อมูล ปพ.5 / ปพ.6: สร้างข้อมูลใหม่ คำนวณผล และส่งออกเป็นไฟล์ Excel (รูปแบบของระบบ)
+ * ไฟล์ Excel ที่ส่งออกออกแบบให้ parser.js / pp6parser.js อ่านกลับได้ทันที
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory;
+  else root.PP5Model = factory(root.XLSX);
+})(typeof self !== 'undefined' ? self : this, function (XLSX) {
+  'use strict';
+
+  // ---------- ค่าเริ่มต้น ----------
+  var CHAR_ITEMS = ['รักชาติ ศาสน์ กษัตริย์', 'ซื่อสัตย์สุจริต', 'มีวินัย', 'ใฝ่เรียนรู้', 'อยู่อย่างพอเพียง', 'มุ่งมั่นในการทำงาน', 'รักความเป็นไทย', 'มีจิตสาธารณะ'];
+  var RTW_ITEMS = [
+    { name: 'อ่าน หาประสบการณ์จากบทเรียนและสื่อที่หลากหลาย', max: 40, short: 'การอ่าน' },
+    { name: 'วิเคราะห์ จับประเด็น แสดงความคิดเห็นจากเรื่องที่อ่าน', max: 30, short: 'คิดวิเคราะห์' },
+    { name: 'เขียนถ่ายทอดความคิดที่อ่านได้', max: 30, short: 'การเขียน' }
+  ];
+  var COMPETENCY = [
+    { name: 'ความสามารถในการสื่อสาร', items: ['เข้าใจและใช้ภาษาในการสื่อสาร', 'การรับ - ส่งสารข้อมูลอย่างสร้างสรรค์', 'การปฏิบัติตามกฎระเบียบของโรงเรียน'] },
+    { name: 'ความสามารถในการคิด', items: ['การคิดวิเคราะห์', 'การคิดสังเคราะห์', 'การคิดสร้างสรรค์', 'การคิดอย่างมีระบบ'] },
+    { name: 'ความสามารถในการแก้ปัญหา', items: ['การใช้เหตุผล', 'การใช้คุณธรรมอย่างเหมาะสม', 'การใช้ข้อมูลสารสนเทศ'] },
+    { name: 'ความสามารถในการใช้ทักษะชีวิต', items: ['การเรียนรู้ด้วยตนเอง', 'ความขยันอดทนทำงานร่วมกับผู้อื่น', 'มนุษย์สัมพันธ์', 'มีความรับผิดชอบ'] },
+    { name: 'ความสามารถในการใช้เทคโนโลยี', items: ['ทักษะในการเลือกใช้เทคโนโลยี', 'การสร้างสรรค์งานโดยใช้เทคโนโลยี', 'การใช้เทคโนโลยีพัฒนาตนเองและสังคม'] }
+  ];
+  var REASON = 'เป็นผู้ที่ผ่านเกณฑ์การประเมินตามหลักสูตรแกนกลางของสำนักคณะกรรมการการศึกษาขั้นพื้นฐาน';
+  // รายวิชาพื้นฐานประถม: [ตัวอักษร, ชื่อ, ชม.ป1-3, นก.ป1-3, ชม.ป4-6, นก.ป4-6, เลขท้ายรหัส]
+  var SUBJECTS = [
+    ['ท', 'ภาษาไทย', 200, 5, 160, 4, '101'], ['ค', 'คณิตศาสตร์', 160, 4, 160, 4, '101'],
+    ['ว', 'วิทยาศาสตร์และเทคโนโลยี', 80, 2, 120, 3, '101'], ['ส', 'สังคมศึกษา ศาสนา และวัฒนธรรม', 40, 1, 80, 2, '101'],
+    ['ส', 'ประวัติศาสตร์', 40, 1, 40, 1, '102'], ['พ', 'สุขศึกษาและพลศึกษา', 40, 1, 80, 2, '101'],
+    ['ศ', 'ศิลปะ', 40, 1, 80, 2, '101'], ['ง', 'การงานอาชีพ', 40, 1, 40, 1, '101'],
+    ['อ', 'ภาษาอังกฤษพื้นฐาน', 200, 5, 120, 3, '101']
+  ];
+  var LEVEL_TEXT = ['ไม่ผ่าน', 'ผ่าน', 'ดี', 'ดีเยี่ยม'];
+
+  function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+  function sum(arr) { var s = 0, n = 0; arr.forEach(function (v) { if (num(v) != null) { s += v; n++; } }); return n ? s : null; }
+  function mean(arr) { var s = sum(arr), n = arr.filter(function (v) { return num(v) != null; }).length; return n ? s / n : null; }
+  function round(v, d) { if (v == null) return null; var p = Math.pow(10, d == null ? 2 : d); return Math.round(v * p) / p; }
+  function gradeOf(pct) {
+    if (pct == null) return null;
+    return pct >= 80 ? 4 : pct >= 75 ? 3.5 : pct >= 70 ? 3 : pct >= 65 ? 2.5 : pct >= 60 ? 2 : pct >= 55 ? 1.5 : pct >= 50 ? 1 : 0;
+  }
+  function levelOfScore(score, max) {
+    if (score == null || !max) return null;
+    var p = score / max * 100;
+    return p >= 80 ? 3 : p >= 70 ? 2 : p >= 50 ? 1 : 0;
+  }
+  function levelOfAvg(a) { return a == null ? null : a >= 2.5 ? 3 : a >= 1.5 ? 2 : a >= 1 ? 1 : 0; }
+  function rtwText(total) { return total == null ? '' : total >= 80 ? 'ดีเยี่ยม' : total >= 70 ? 'ดี' : total >= 50 ? 'ผ่าน' : 'ไม่ผ่าน'; }
+  function mode(arr) {
+    var c = {}, best = '', bn = 0;
+    arr.forEach(function (v) { if (v) { c[v] = (c[v] || 0) + 1; if (c[v] > bn) { bn = c[v]; best = v; } } });
+    return best;
+  }
+  function fullName(s) { return ((s.prefix || '') + (s.first || '') + ' ' + (s.last || '')).trim(); }
+  function stageName(stage, level) { return (stage === 'ม' ? 'มัธยมศึกษาปีที่ ' : 'ประถมศึกษาปีที่ ') + level; }
+
+  function defaultSubjects(level) {
+    var hi = level >= 4;
+    var list = SUBJECTS.map(function (s) {
+      return { code: s[0] + '1' + level + s[6], name: s[1], hours: hi ? s[4] : s[2], credit: hi ? s[5] : s[3], basic: true };
+    });
+    list.push({ code: 'ส1210' + level, name: 'การป้องกันการทุจริต', hours: 40, credit: 1, basic: false });
+    return list;
+  }
+  function subjectDefaults(letter, tail, level) {
+    var hi = level >= 4;
+    var s = SUBJECTS.filter(function (x) { return x[0] === letter && (!tail || x[6].slice(-String(tail).length) === String(tail)); })[0];
+    if (!s) return null;
+    return { code: s[0] + '1' + level + s[6], name: s[1], hours: hi ? s[4] : s[2], credit: hi ? s[5] : s[3] };
+  }
+
+  function blankStudent(no) { return { no: no, id: '', prefix: '', first: '', last: '', name: '', sex: '', status: 'ปกติ', nid4: '' }; }
+  function copyRoster(list) {
+    return (list || []).map(function (s) {
+      return { no: s.no, id: s.id || '', prefix: s.prefix || '', first: s.first || '', last: s.last || '', name: s.name || fullName(s), sex: s.sex || '', status: s.status || 'ปกติ', nid4: s.nid4 || '' };
+    });
+  }
+
+  // ---------- ปพ.5 (รายวิชา) ----------
+  function newPP5(o) {
+    var hours = o.hours || 80;
+    var data = {
+      format: 'pp5-indicator', version: 1, source: 'online',
+      meta: {
+        year: o.year, school: o.school || '', gradeName: stageName(o.stage || 'ป', o.level), room: o.room, group: o.group || o.subject,
+        code: o.code, subject: o.subject, hours: hours, credit: o.credit, type: o.type || 'พื้นฐาน',
+        maxCollect: o.maxCollect || 70, maxFinal: o.maxFinal == null ? 30 : o.maxFinal, teacher: o.teacher || '',
+        stage: o.stage || 'ป', level: o.level, levelName: (o.stage || 'ป') + '.' + o.level
+      },
+      indicators: [],
+      characteristicItems: CHAR_ITEMS.map(function (n, i) { return { no: i + 1, max: 3, name: n }; }),
+      maxima: {}, hours: { t1: Math.round(hours / 2), t2: hours - Math.round(hours / 2), year: hours },
+      students: copyRoster(o.students).map(function (s) {
+        return Object.assign(s, { scores: {}, levels: {}, filled: 0, result: { final: null, rms: '' }, attendance: { t1: {}, t2: {}, year: {} }, characteristics: { items: {} }, rtw: { t1: {}, t2: {} }, activities: { clubName: '', guidance: '', scout: '', club: '', social: '' } });
+      })
+    };
+    return fillPP5(data, true);
+  }
+
+  // force = true: คำนวณใหม่ทั้งหมด (ข้อมูลที่กรอกในระบบ) / false: เติมเฉพาะค่าที่ยังว่าง (ไฟล์ที่อัปโหลด)
+  function fillPP5(data, force) {
+    var m = data.meta, inds = data.indicators || [];
+    var maxSum = sum(inds.map(function (i) { return i.max; })) || 0;
+    var mc = num(m.maxCollect) == null ? 70 : m.maxCollect, mf = num(m.maxFinal) == null ? 30 : m.maxFinal;
+    data.maxima = data.maxima || {};
+    var mx = { indTotal: maxSum || null, collect: mc, final: mf, total: mc + mf };
+    for (var k in mx) if (force || data.maxima[k] == null) data.maxima[k] = mx[k];
+    data.hours = data.hours || {};
+    if (force || data.hours.year == null) {
+      if (data.hours.t1 != null || data.hours.t2 != null) data.hours.year = (data.hours.t1 || 0) + (data.hours.t2 || 0);
+      else data.hours.year = m.hours || null;
+    }
+    data.indicatorTotal = inds.length;
+    (data.students || []).forEach(function (s) {
+      s.name = s.name || fullName(s);
+      s.scores = s.scores || {}; s.levels = s.levels || {};
+      var vals = inds.map(function (i) { return num(s.scores[i.idx]); });
+      s.filled = vals.filter(function (v) { return v != null; }).length;
+      inds.forEach(function (i) {
+        var v = num(s.scores[i.idx]);
+        if (force || !s.levels[i.idx] || s.levels[i.idx].level == null) {
+          var l = levelOfScore(v, i.max);
+          s.levels[i.idx] = { level: l, pass: l == null ? null : l >= 1 };
+        }
+      });
+      var r = s.result = s.result || {};
+      var indTotal = sum(vals);
+      if (force || r.indTotal == null) r.indTotal = indTotal;
+      // คะแนนเก็บที่ครูกรอกเอง (collectManual) ไม่ถูกคำนวณทับ
+      if ((force && !r.collectManual) || r.collect == null) { r.collect = r.indTotal != null && maxSum ? Math.round(r.indTotal / maxSum * mc) : null; r.collectManual = false; }
+      if (force || r.total == null) r.total = r.collect == null && r.final == null ? null : (r.collect || 0) + (num(r.final) || 0);
+      if (force || r.grade == null || r.grade === '') {
+        var g = r.rms ? null : gradeOf(r.total == null ? null : r.total / (mc + mf) * 100);
+        r.grade = g == null || (r.final == null && mf > 0) ? '' : String(g);
+      }
+      if (force || r.pass == null) r.pass = r.grade === '' ? null : parseFloat(r.grade) >= 1;
+      r.rms = r.rms || '';
+
+      var sm = s.indSummary;
+      if (force || !sm || sm.pass == null) {
+        var lv = inds.map(function (i) { return s.levels[i.idx] && s.levels[i.idx].level; }).filter(function (l) { return l != null; });
+        var pass = lv.filter(function (l) { return l >= 1; }).length, fail = lv.length - pass;
+        s.indSummary = { pass: lv.length ? pass : null, fail: lv.length ? fail : null, result: !lv.length ? '' : fail ? 'ไม่ผ่าน' : 'ผ่าน' };
+      }
+
+      var a = s.attendance = s.attendance || {};
+      ['t1', 't2'].forEach(function (t) {
+        var x = a[t] = a[t] || {}, h = data.hours[t];
+        if ((force || x.present == null) && h != null) { // ช่องว่าง = ไม่ขาด (เหมือนสูตรในไฟล์)
+          x.present = h - (num(x.sick) || 0) - (num(x.leave) || 0) - (num(x.absent) || 0);
+        }
+        if ((force || x.pct == null) && x.present != null && h) x.pct = round(x.present / h * 100, 2);
+      });
+      var y = a.year = a.year || {};
+      if (force || y.present == null) {
+        ['sick', 'leave', 'absent', 'present'].forEach(function (k) { y[k] = sum([a.t1[k], a.t2[k]]); });
+      }
+      if ((force || y.pct == null) && y.present != null && data.hours.year) y.pct = round(y.present / data.hours.year * 100, 2);
+      if (force || !a.result) a.result = y.pct == null ? '' : y.pct >= 80 ? 'ผ่าน' : 'ไม่ผ่าน';
+
+      var c = s.characteristics = s.characteristics || { items: {} };
+      c.items = c.items || {};
+      if (force || c.avg == null) c.avg = round(mean((data.characteristicItems || []).map(function (it) { return num(c.items[it.no]); })), 2);
+      if (force || c.level == null) c.level = levelOfAvg(c.avg);
+      if (force || !c.text) c.text = c.level == null ? '' : LEVEL_TEXT[c.level];
+
+      var w = s.rtw = s.rtw || {};
+      ['t1', 't2'].forEach(function (t) {
+        var x = w[t] = w[t] || {};
+        if (force || x.avg == null) x.avg = round(mean([num(x.read), num(x.think), num(x.write)]), 2);
+      });
+      if (force || w.avg == null) w.avg = round(mean([w.t1.avg, w.t2.avg]), 2);
+      if (force || w.level == null) w.level = levelOfAvg(w.avg);
+      if (force || !w.text) w.text = w.level == null ? '' : LEVEL_TEXT[w.level];
+      var ac = s.activities = s.activities || { clubName: '', guidance: '', scout: '', club: '', social: '' };
+      ac.hours = ac.hours || {};
+      // มีชั่วโมงเข้าร่วม → ผลประเมินตามสูตรในไฟล์ (80% ขึ้นไป = ผ.)
+      var AH = data.activityHours || {};
+      ['guidance', 'scout', 'club', 'social'].forEach(function (k) {
+        var h = num(ac.hours[k]), mx = num(AH[k]);
+        if (h != null && mx) { if (force || !ac[k]) ac[k] = h / mx * 100 >= 80 ? 'ผ.' : 'มผ.'; }
+      });
+    });
+    return data;
+  }
+
+  // ---------- วันเรียนตามวันเปิด-ปิดภาคเรียน ----------
+  // span = { s: 'YYYY-MM-DD', e: 'YYYY-MM-DD' } · days = { 1: คาบ, 3: คาบ } (0 = อาทิตย์) · off = ['YYYY-MM-DD'] วันหยุด
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function termDays(span) {
+    if (!span || !span.s || !span.e) return [];
+    var p = span.s.split('-'), q = span.e.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]), end = new Date(+q[0], +q[1] - 1, +q[2]), out = [];
+    while (d <= end && out.length < 400) { out.push(new Date(d)); d.setDate(d.getDate() + 1); }
+    return out;
+  }
+  function teachHours(span, days, off) {
+    if (!span || !span.s || !span.e || !days) return null;
+    var offs = off || [], n = 0, cnt = 0;
+    termDays(span).forEach(function (d) { var k = num(+days[d.getDay()]); if (k && offs.indexOf(ymd(d)) < 0) { n += k; cnt++; } });
+    return { hours: n, days: cnt };
+  }
+
+  // ---------- ความครบถ้วนของข้อมูล (ใช้ทั้งข้อมูลที่กรอกในระบบและไฟล์ที่อัปโหลด) ----------
+  // ภาคเรียนที่ 2 นับตั้งแต่ 1 ก.พ. ของปีการศึกษานั้น · ก่อนหน้านั้นไม่เตือนช่องของภาค 2 / ผลปลายปี
+  function activeTerm(year, now) { var g = (+year || 0) - 543; return g > 0 && (now || Date.now()) >= new Date(g + 1, 1, 1).getTime() ? 2 : 1; }
+  function blankV(v) { return v == null || v === '' || (typeof v === 'number' && !isFinite(v)); }
+  function completeness(kind, d, now) {
+    var out = { term: activeTerm(d && d.meta && d.meta.year, now), items: [], missing: 0, total: 0, bySec: {} };
+    if (!d || !d.students) return out;
+    var st = d.students.filter(function (s) { return s.name || s.first; }), T2 = out.term >= 2;
+    function add(sec, label, term, miss, tot) {
+      if (!tot) return;
+      out.items.push({ sec: sec, label: label, term: term, missing: miss, total: tot });
+      out.missing += miss; out.total += tot; out.bySec[sec] = (out.bySec[sec] || 0) + miss;
+    }
+    function count(fn) { var m = 0, t = 0; st.forEach(function (s) { fn(s).forEach(function (v) { t++; if (blankV(v)) m++; }); }); return [m, t]; }
+    var c;
+    if (kind === 'pp5') {
+      var inds = d.indicators || [];
+      [1, 2].forEach(function (tm) {
+        if (tm === 2 && !T2) return;
+        var ii = inds.filter(function (i) { return (i.term || 1) === tm; });
+        c = count(function (s) { return ii.map(function (i) { return (s.scores || {})[i.idx]; }); }); add('scores', 'คะแนนตัวชี้วัด ภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { return ['read', 'think', 'write'].map(function (k) { return ((s.rtw || {})['t' + tm] || {})[k]; }); }); add('rtw', 'อ่าน คิด เขียน ภาค ' + tm, tm, c[0], c[1]);
+      });
+      if (T2) {
+        c = count(function (s) { var r = s.result || {}; return [r.rms ? 0 : r.final]; }); add('scores', 'คะแนนสอบปลายภาค', 2, c[0], c[1]);
+        c = count(function (s) { return (d.characteristicItems || []).map(function (it) { return ((s.characteristics || {}).items || {})[it.no]; }); }); add('char', 'คุณลักษณะอันพึงประสงค์', 2, c[0], c[1]);
+        // กิจกรรมพัฒนาผู้เรียน: เตือนตั้งแต่ภาค 2 (1 ก.พ.) · ชื่อชุมนุม/ชื่อกิจกรรม + ผลประเมิน
+        c = count(function (s) { var a = s.activities || {}; return [a.clubName, a.socialName, a.guidance, a.scout, a.club, a.social]; }); add('act', 'กิจกรรมพัฒนาผู้เรียน (ชุมนุม/เพื่อสังคมฯ)', 2, c[0], c[1]);
+      }
+    } else {
+      var subs = d.subjects || [];
+      [1, 2].forEach(function (tm) {
+        if (tm === 2 && !T2) return;
+        var t = 't' + tm;
+        c = count(function (s) { var o = []; subs.forEach(function (sub) { var x = (s[t] || {})[sub.code] || {}; o.push(x.collect, x.exam); }); return o; }); add(t, 'คะแนนภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { var a = (s.attendance || {})[t] || {}; return [a.total, a.present]; }); add('att', 'เวลาเรียน ภาค ' + tm, tm, c[0], c[1]);
+        c = count(function (s) { var h = (s.health || {})[t] || {}; return [h.w, h.h]; }); add('health', 'น้ำหนัก/ส่วนสูง ภาค ' + tm, tm, c[0], c[1]);
+      });
+      if (T2) {
+        c = count(function (s) { return (d.rtwItems || []).map(function (it, i) { return ((s.rtw || {}).scores || [])[i]; }); }); add('rtw', 'อ่าน คิดวิเคราะห์ และเขียน', 2, c[0], c[1]);
+        c = count(function (s) { return (d.characteristicItems || []).map(function (n, i) { return ((s.characteristics || {}).items || [])[i]; }); }); add('char', 'คุณลักษณะอันพึงประสงค์', 2, c[0], c[1]);
+        c = count(function (s) { var o = []; (d.competencyGroups || []).forEach(function (g, gi) { g.items.forEach(function (x, ii) { o.push(((s.competencies || [])[gi] || [])[ii]); }); }); return o; }); add('comp', 'สมรรถนะของผู้เรียน', 2, c[0], c[1]);
+      }
+    }
+    return out;
+  }
+
+  // ---------- ปพ.6 (ทั้งห้อง) ----------
+  function newPP6(o) {
+    var subjects = (o.subjects && o.subjects.length ? o.subjects : defaultSubjects(o.level)).map(function (s) { return Object.assign({}, s); });
+    var indicatorTable = {};
+    subjects.forEach(function (s) { if (s.basic) indicatorTable[s.name.replace(/\s+/g, '')] = { total: null, passed: null }; });
+    var data = {
+      format: 'pp6', version: 1, source: 'online',
+      meta: {
+        year: o.year, className: stageName(o.stage || 'ป', o.level) + '/' + o.room, stage: o.stage || 'ป', level: o.level, room: o.room,
+        levelName: (o.stage || 'ป') + '.' + o.level, teacher: o.teacher || '', school: o.school || '',
+        signers: { teacher: { name: o.teacher || '', position: 'ครูประจำชั้น' }, deputy: { name: '', position: 'รองผู้อำนวยการ' + (o.school || 'โรงเรียน') }, director: { name: '', position: 'ผู้อำนวยการ' + (o.school || 'โรงเรียน') } },
+        reason: REASON, termMax: 50
+      },
+      subjects: subjects, indicatorTable: indicatorTable,
+      rtwItems: RTW_ITEMS.map(function (x) { return Object.assign({}, x); }),
+      characteristicItems: CHAR_ITEMS.slice(),
+      competencyGroups: COMPETENCY.map(function (g) { return { name: g.name, items: g.items.slice() }; }),
+      images: {}, allImages: [],
+      students: copyRoster(o.students).map(function (s) {
+        return Object.assign(s, {
+          t1: {}, t2: {}, attendance: { t1: {}, t2: {}, year: {} }, health: { t1: {}, t2: {}, behavior: '' },
+          rtw: { scores: [], total: null, result: '' }, characteristics: { items: [], summary: '' }, competencies: COMPETENCY.map(function (g) { return g.items.map(function () { return ''; }); })
+        });
+      })
+    };
+    return fillPP6(data, true);
+  }
+
+  function fillPP6(data, force) {
+    (data.students || []).forEach(function (s) {
+      s.name = s.name || fullName(s);
+      ['t1', 't2'].forEach(function (t) {
+        s[t] = s[t] || {};
+        data.subjects.forEach(function (sub) {
+          var x = s[t][sub.code];
+          if (!x) { s[t][sub.code] = null; return; }
+          if (x.collect == null && x.exam == null && (force || x.total == null)) { s[t][sub.code] = null; return; }
+          if (force || x.total == null) x.total = (num(x.collect) || 0) + (num(x.exam) || 0);
+        });
+      });
+      var a = s.attendance = s.attendance || {};
+      a.t1 = a.t1 || {}; a.t2 = a.t2 || {};
+      var y = a.year = a.year || {};
+      if (force || y.total == null) y.total = sum([a.t1.total, a.t2.total]);
+      if (force || y.present == null) y.present = sum([a.t1.present, a.t2.present]);
+      if ((force || y.pct == null) && y.total) y.pct = y.present == null ? null : round(y.present / y.total * 100, 2);
+      var w = s.rtw = s.rtw || { scores: [] };
+      w.scores = w.scores || [];
+      if (force || w.total == null) w.total = w.scores.length && w.scores.every(function (v) { return num(v) != null; }) ? sum(w.scores) : (force ? null : w.total);
+      if (force || !w.result) w.result = rtwText(w.total);
+      var c = s.characteristics = s.characteristics || { items: [] };
+      if (force || !c.summary) c.summary = mode(c.items || []);
+      s.health = s.health || { t1: {}, t2: {}, behavior: '' };
+    });
+    return data;
+  }
+
+  // ---------- สร้าง ปพ.6 จาก ปพ.5 ของห้อง (ใช้เมื่อยังไม่มีไฟล์ ปพ.6) ----------
+  // คะแนนเก็บรายภาค = คะแนนตัวชี้วัดของภาคนั้น เทียบเป็นครึ่งหนึ่งของคะแนนเก็บ (ภาค 2 ปรับให้รวมแล้วเท่ากับคะแนนเก็บใน ปพ.5)
+  // คะแนนสอบปลายภาคใน ปพ.5 แบ่งครึ่งให้ภาค 1 / ภาค 2  — ตรงกับวิธีที่โรงเรียนใช้ในไฟล์ ปพ.6
+  var LV_TEXT = { 3: 'ดีเยี่ยม', 2: 'ดี', 1: 'ผ่าน', 0: 'ไม่ผ่าน' };
+  function nameKey(s) { return String(s || '').replace(/\s+/g, '').replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|นาง)/, ''); }
+  function findStu(list, s) {
+    if (!s) return null;
+    var id = s.id != null ? String(s.id).trim() : '';
+    var hit = id ? list.filter(function (x) { return String(x.id || '').trim() === id; })[0] : null;
+    if (hit) return hit;
+    var nk = nameKey(s.name || fullName(s));
+    return nk ? list.filter(function (x) { return nameKey(x.name || fullName(x)) === nk; })[0] || null : null;
+  }
+  function pp5TermScores(rec, s) {
+    var mc = num(rec.meta.maxCollect) == null ? 70 : rec.meta.maxCollect, half = mc / 2, out = { t1: null, t2: null };
+    var raw = { 1: 0, 2: 0 }, mx = { 1: 0, 2: 0 }, any = { 1: false, 2: false };
+    (rec.indicators || []).forEach(function (i) {
+      var t = i.term === 2 ? 2 : 1;
+      mx[t] += i.max || 0;
+      var v = num(s.scores && s.scores[i.idx]);
+      if (v != null) { raw[t] += v; any[t] = true; }
+    });
+    var r = s.result || {}, fin = num(r.final), col = num(r.collect);
+    var e1 = fin == null ? null : Math.floor(fin / 2), e2 = fin == null ? null : fin - Math.floor(fin / 2);
+    var c1 = any[1] && mx[1] ? Math.round(raw[1] / mx[1] * half) : null;
+    var c2 = any[2] && mx[2] ? Math.round(raw[2] / mx[2] * half) : null;
+    if (col != null && c1 != null && c2 != null) c2 = col - c1;
+    if (c1 != null || e1 != null) out.t1 = { collect: c1, exam: e1, total: (c1 || 0) + (e1 || 0) };
+    if (c2 != null) out.t2 = { collect: c2, exam: e2, total: (c2 || 0) + (e2 || 0) };
+    return out;
+  }
+  function pp6FromPP5(o) {
+    var recs = (o.records || []).filter(function (d) { return d && d.students; });
+    var subjects = recs.map(function (d) {
+      var m = d.meta;
+      return { code: m.code, name: m.subject, hours: m.hours, credit: m.credit != null ? m.credit : (m.hours ? m.hours / 40 : null), basic: m.type !== 'เพิ่มเติม' };
+    });
+    var studs = o.students && o.students.length ? o.students : [];
+    if (!studs.length) {
+      var seen = {};
+      recs.forEach(function (d) { d.students.forEach(function (s) { var k = s.id || nameKey(s.name); if (k && !seen[k]) { seen[k] = 1; studs.push(s); } }); });
+      studs.sort(function (a, b) { return (a.no || 0) - (b.no || 0); });
+    }
+    var data = newPP6({ year: o.year, level: o.level, room: o.room, stage: o.stage, school: o.school, teacher: o.teacher, subjects: subjects, students: studs });
+    data.source = 'pp5';
+    recs.forEach(function (d) {
+      var key = d.meta.subject.replace(/\s+/g, '');
+      if (data.indicatorTable[key]) data.indicatorTable[key] = { total: (d.indicators || []).length || null, passed: null };
+    });
+    // ชั่วโมงเรียนรายภาค: ใช้วิชาที่มีชั่วโมงมากที่สุด
+    var hrs = recs.slice().sort(function (a, b) { return ((b.hours && b.hours.year) || 0) - ((a.hours && a.hours.year) || 0); })[0];
+    data.students.forEach(function (st) {
+      var found = recs.map(function (d) { return { d: d, s: findStu(d.students, st) }; });
+      found.forEach(function (f) {
+        if (!f.s) return;
+        var ts = pp5TermScores(f.d, f.s);
+        st.t1[f.d.meta.code] = ts.t1; st.t2[f.d.meta.code] = ts.t2;
+      });
+      var hs = hrs ? findStu(hrs.students, st) : null;
+      if (hs && hs.attendance) {
+        ['t1', 't2'].forEach(function (t) {
+          var a = hs.attendance[t] || {};
+          var tot = hrs.hours && num(hrs.hours[t]);
+          if (a.present != null || tot) st.attendance[t] = { total: tot, present: num(a.present) };
+        });
+      }
+      var rt = found.filter(function (f) { return f.s && f.s.rtw && f.s.rtw.t1; })[0];
+      if (rt) {
+        var w = rt.s.rtw, lv = function (k) { var a = num(w.t1 && w.t1[k]), b = num(w.t2 && w.t2[k]); return a != null && b != null ? (a + b) / 2 : a != null ? a : b; };
+        st.rtw.scores = ['read', 'think', 'write'].map(function (k, i) { var v = lv(k); return v == null ? null : Math.round(v / 3 * data.rtwItems[i].max); });
+      }
+      var ch = found.filter(function (f) { return f.s && f.s.characteristics && f.s.characteristics.items; })[0];
+      if (ch) st.characteristics.items = data.characteristicItems.map(function (n, i) { var v = num(ch.s.characteristics.items[i + 1]); return v == null ? '' : LV_TEXT[Math.round(v)] || ''; });
+    });
+    return fillPP6(data, true);
+  }
+
+  // ---------- เขียนไฟล์ Excel ----------
+  function enc(r, c) { return XLSX.utils.encode_cell({ r: r, c: c }); }
+  function col(c) { return XLSX.utils.encode_col(c); }
+  function makeSheet(rows, opts) {
+    var ws = {}, maxC = 0;
+    rows.forEach(function (row, r) {
+      (row || []).forEach(function (v, c) {
+        if (v == null || v === '') return;
+        var cell;
+        if (typeof v === 'object') {
+          cell = { f: v.f };
+          if (v.v != null && v.v !== '') { cell.v = v.v; cell.t = typeof v.v === 'number' ? 'n' : 's'; }
+          else { cell.t = 's'; cell.v = ''; }
+        } else cell = typeof v === 'number' ? { t: 'n', v: v } : { t: 's', v: String(v) };
+        ws[enc(r, c)] = cell;
+        if (c > maxC) maxC = c;
+      });
+    });
+    ws['!ref'] = 'A1:' + enc(Math.max(rows.length - 1, 0), maxC);
+    if (opts && opts.cols) ws['!cols'] = opts.cols.map(function (w) { return { wch: w }; });
+    if (opts && opts.merges) ws['!merges'] = opts.merges.map(function (m) { return XLSX.utils.decode_range(m); });
+    return ws;
+  }
+  function q(name) { return "'" + name + "'"; }
+  function blank(v) { return v == null ? null : v; }
+
+  function exportPP5(data) {
+    data = fillPP5(JSON.parse(JSON.stringify(data)), false);
+    var m = data.meta, wb = XLSX.utils.book_new();
+    var inds = data.indicators.slice().sort(function (a, b) { return a.idx - b.idx; });
+    var N = Math.min(60, Math.max(20, inds.length + 10));
+    var slots = [];
+    for (var i = 0; i < N; i++) slots.push(inds[i] || { idx: (inds.length ? inds[inds.length - 1].idx : 0) + (i - inds.length) + 1 });
+    var studs = data.students.slice();
+    var nRows = Math.max(studs.length, 40);
+
+    XLSX.utils.book_append_sheet(wb, makeSheet([
+      ['ไฟล์ ปพ.5 รูปแบบของระบบวิเคราะห์ผลการเรียน'],
+      ['วิชา ' + m.code + ' ' + m.subject + '  ชั้น ' + m.gradeName + '/' + m.room + '  ปีการศึกษา ' + m.year],
+      [],
+      ['วิธีกรอก'],
+      ['1. ชีต "ตั้งค่า": ตรวจรหัสวิชา ชื่อวิชา หน่วยกิต คะแนนเก็บ/ปลายภาค'],
+      ['2. ชีต "รายชื่อนักเรียน": กรอกเลขประจำตัวนักเรียน (ใช้ค้นหาผลในหน้าประกาศผล) และเลขบัตรประชาชน 4 ตัวท้าย'],
+      ['3. ชีต "คะแนนเก็บตามตัวชี้วัด": แถวหัวตาราง กรอก ภาคเรียน มาตรฐาน รหัสตัวชี้วัด และคะแนนเต็ม แล้วกรอกคะแนนของนักเรียน'],
+      ['4. ชีต "ตัวชี้วัด": คำอธิบายตัวชี้วัด (ลำดับที่ต้องตรงกับชีตคะแนน)'],
+      ['5. ชีต "ประเมินผลการเรียน": กรอกคะแนนปลายภาค และ ร/มส (ถ้ามี) ระบบคำนวณคะแนนเก็บ รวม และเกรดให้เอง'],
+      ['6. ชีตอื่น: เวลาเรียน (ป่วย/ลา/ขาด) คุณลักษณะ (0-3) อ่านคิดเขียน (0-3) กิจกรรม (ผ. / มผ.)'],
+      ['7. บันทึกไฟล์ แล้วอัปโหลดกลับเข้าระบบได้เลย (ห้ามเปลี่ยนชื่อชีต และห้ามลบแถวหัวตาราง)']
+    ], { cols: [100] }), 'คำแนะนำ');
+
+    XLSX.utils.book_append_sheet(wb, makeSheet([
+      ['ตั้งค่า ปพ.5'], [],
+      [null, 'ปีการศึกษา', m.year], [null, 'โรงเรียน', m.school], [null, 'ชั้น', m.gradeName], [null, 'ห้อง', m.room],
+      [null, 'กลุ่มสาระ', m.group || m.subject], [null, 'รหัสวิชา', m.code], [null, 'วิชา', m.subject],
+      [null, 'หน่วยกิต', m.credit], [null, 'ประเภทวิชา', m.type], [null, 'เวลาเรียน 1 ปีการศึกษา', data.hours.year || m.hours],
+      [null, 'คะแนนเก็บระหว่างภาคเรียน', data.maxima.collect], [null, 'คะแนนปลายภาค', data.maxima.final], [null, 'ครูผู้สอน', m.teacher]
+    ], { cols: [4, 28, 40] }), 'ตั้งค่า');
+
+    var roster = [['รายชื่อนักเรียน'], ['ที่', 'เลขประจำตัวนักเรียน', 'เลขประจำตัวประชาชน (4 ตัวท้าย)', 'คำนำหน้า', 'ชื่อ', 'นามสกุล', 'เพศ', 'สถานะ']];
+    for (var r = 0; r < nRows; r++) {
+      var s = studs[r] || {};
+      roster.push([r + 1, blank(s.id), blank(s.nid4), blank(s.prefix), blank(s.first), blank(s.last), blank(s.sex), s.first ? (s.status || 'ปกติ') : null]);
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(roster, { cols: [5, 18, 16, 10, 16, 18, 7, 9] }), 'รายชื่อนักเรียน');
+
+    var it = [['ตัวชี้วัด วิชา ' + m.code + ' ' + m.subject], ['ที่', 'ภาคเรียนที่', 'มาตรฐานที่', 'ตัวชี้วัดที่', 'ตัวชี้วัด']];
+    slots.forEach(function (x) { it.push([x.idx, blank(x.term), blank(x.std), blank(x.code), blank(x.text)]); });
+    XLSX.utils.book_append_sheet(wb, makeSheet(it, { cols: [5, 10, 10, 10, 80] }), 'ตัวชี้วัด');
+
+    var S = 'คะแนนเก็บตามตัวชี้วัด', HR = 2, D0 = 8, C0 = 3, lastC = col(C0 + N - 1);
+    var sc = [['คะแนนเก็บตามตัวชี้วัด วิชา ' + m.code + ' ' + m.subject + ' ปีการศึกษา ' + m.year], ['กรอกหัวตาราง (ภาคเรียน มาตรฐาน ตัวชี้วัด คะแนนเต็ม) ก่อน แล้วกรอกคะแนนของนักเรียน ช่องที่ไม่มีคะแนนเต็มระบบจะไม่นับ']];
+    sc[HR] = ['ที่', 'ชื่อ-สกุล', 'ลำดับที่'].concat(slots.map(function (x) { return x.idx; }));
+    sc[HR + 1] = [null, null, 'ภาคเรียนที่'].concat(slots.map(function (x) { return blank(x.term); }));
+    sc[HR + 2] = [null, null, 'มาตรฐาน'].concat(slots.map(function (x) { return blank(x.std); }));
+    sc[HR + 3] = [null, null, 'ตัวชี้วัด'].concat(slots.map(function (x) { return blank(x.code); }));
+    sc[HR + 4] = [null, null, 'คะแนนเต็ม'].concat(slots.map(function (x) { return blank(x.max); }));
+    sc[HR + 5] = [null, null, 'คะแนน'].concat(slots.map(function () { return 'ได้'; }));
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      sc[D0 + r] = [r + 1, s.first ? fullName(s) : { f: 'IF(' + q('รายชื่อนักเรียน') + '!E' + (r + 3) + '="","",' + q('รายชื่อนักเรียน') + '!D' + (r + 3) + '&' + q('รายชื่อนักเรียน') + '!E' + (r + 3) + '&" "&' + q('รายชื่อนักเรียน') + '!F' + (r + 3) + ')' }, null]
+        .concat(slots.map(function (x) { return s.scores ? blank(num(s.scores[x.idx])) : null; }));
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(sc, { cols: [5, 28, 10].concat(slots.map(function () { return 7; })) }), S);
+
+    var R = [['ประเมินผลการเรียน วิชา ' + m.code + ' ' + m.subject], ['ที่', 'ชื่อ-สกุล', 'รวมคะแนนตัวชี้วัด', 'คะแนนเก็บ', 'ปลายภาค', 'รวม', 'ผลการเรียน ร,มส', 'ผลการเรียน (เกรด)']];
+    R[2] = [null, 'คะแนนเต็ม', { f: 'SUM(' + q(S) + '!D' + (HR + 5) + ':' + lastC + (HR + 5) + ')', v: data.maxima.indTotal }, data.maxima.collect, data.maxima.final, { f: 'D3+E3', v: data.maxima.total }];
+    R[3] = [null, 'คะแนน', 'ได้', 'ได้', 'กรอก', 'ได้', 'กรอก', 'ได้'];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var res = s.result || {}, er = r + 5, sr = D0 + r + 1;
+      R[4 + r] = [r + 1, { f: q(S) + '!B' + sr, v: s.first ? fullName(s) : '' },
+        { f: 'IF(COUNT(' + q(S) + '!D' + sr + ':' + lastC + sr + ')=0,"",SUM(' + q(S) + '!D' + sr + ':' + lastC + sr + '))', v: res.indTotal },
+        { f: 'IF(C' + er + '="","",IF($C$3=0,"",ROUND(C' + er + '/$C$3*$D$3,0)))', v: res.collect },
+        blank(num(res.final)),
+        { f: 'IF(AND(D' + er + '="",E' + er + '=""),"",N(D' + er + ')+N(E' + er + '))', v: res.total },
+        blank(res.rms || null),
+        { f: 'IF(OR(F' + er + '="",E' + er + '="",G' + er + '<>""),"",IF(F' + er + '/$F$3*100>=80,4,IF(F' + er + '/$F$3*100>=75,3.5,IF(F' + er + '/$F$3*100>=70,3,IF(F' + er + '/$F$3*100>=65,2.5,IF(F' + er + '/$F$3*100>=60,2,IF(F' + er + '/$F$3*100>=55,1.5,IF(F' + er + '/$F$3*100>=50,1,0))))))))', v: res.grade === '' || res.grade == null ? '' : parseFloat(res.grade) }];
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(R, { cols: [5, 28, 12, 10, 10, 8, 10, 10] }), 'ประเมินผลการเรียน');
+
+    var h = data.hours;
+    var A = [['สรุปเวลาเรียน วิชา ' + m.code + ' ' + m.subject + ' (กรอก ป่วย ลา ขาด เป็นชั่วโมง)'],
+      ['ที่', 'ชื่อ-สกุล', 'ภาคเรียนที่ 1', null, null, null, null, 'ภาคเรียนที่ 2', null, null, null, null, 'รวม 1 ปีการศึกษา', null, null, null, null, 'ผลการประเมิน'],
+      [null, null, 'เวลาเรียน', null, null, blank(h.t1), 'ชม.', 'เวลาเรียน', null, null, blank(h.t2), 'ชม.', 'เวลาเรียน', null, null, { f: 'N(F3)+N(K3)', v: h.year }, 'ชม.'],
+      [null, null, 'ป่วย', 'ลา', 'ขาด', 'มาเรียน', 'ร้อยละ', 'ป่วย', 'ลา', 'ขาด', 'มาเรียน', 'ร้อยละ', 'ป่วย', 'ลา', 'ขาด', 'มาเรียน', 'ร้อยละ']];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var at = s.attendance || {}, a1 = at.t1 || {}, a2 = at.t2 || {}, ay = at.year || {}, ar = r + 5;
+      var name = { f: q(S) + '!B' + (D0 + r + 1), v: s.first ? fullName(s) : '' };
+      A[4 + r] = [r + 1, name, blank(a1.sick), blank(a1.leave), blank(a1.absent),
+        { f: 'IF($F$3="","",$F$3-N(C' + ar + ')-N(D' + ar + ')-N(E' + ar + '))', v: a1.present }, { f: 'IF(F' + ar + '="","",ROUND(F' + ar + '/$F$3*100,2))', v: a1.pct },
+        blank(a2.sick), blank(a2.leave), blank(a2.absent),
+        { f: 'IF($K$3="","",$K$3-N(H' + ar + ')-N(I' + ar + ')-N(J' + ar + '))', v: a2.present }, { f: 'IF(K' + ar + '="","",ROUND(K' + ar + '/$K$3*100,2))', v: a2.pct },
+        { f: 'N(C' + ar + ')+N(H' + ar + ')', v: ay.sick }, { f: 'N(D' + ar + ')+N(I' + ar + ')', v: ay.leave }, { f: 'N(E' + ar + ')+N(J' + ar + ')', v: ay.absent },
+        { f: 'N(F' + ar + ')+N(K' + ar + ')', v: ay.present }, { f: 'IF($P$3=0,"",ROUND(P' + ar + '/$P$3*100,2))', v: ay.pct },
+        { f: 'IF(Q' + ar + '="","",IF(Q' + ar + '>=80,"ผ่าน","ไม่ผ่าน"))', v: at.result || '' }];
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(A, { cols: [5, 26].concat(new Array(16).fill(7)) }), 'สรุปเวลาเรียน');
+
+    var items = data.characteristicItems;
+    XLSX.utils.book_append_sheet(wb, makeSheet([['คุณลักษณะอันพึงประสงค์'], [], [], [], ['ที่', 'รายการคุณลักษณะอันพึงประสงค์']]
+      .concat(items.map(function (x) { return [x.no, x.name]; })), { cols: [5, 40] }), 'คุณลักษณะอันพึงประสงค์');
+    var lc = col(2 + items.length - 1), tc = col(2 + items.length), ac = col(3 + items.length), lv = col(4 + items.length);
+    var C = [['ประเมินคุณลักษณะอันพึงประสงค์ (กรอก 0-3)'], [],
+      ['ที่', 'ชื่อ-สกุล', 'คุณลักษณะอันพึงประสงค์ข้อที่'].concat(new Array(items.length - 1).fill(null)).concat(['รวม', 'คะแนนเฉลี่ย', 'ผลการประเมิน']),
+      [null, null].concat(items.map(function (x) { return x.no; })),
+      [null, null].concat(items.map(function () { return 'เต็ม'; })),
+      [null, null].concat(items.map(function (x) { return x.max; })).concat([{ f: 'SUM(C6:' + lc + '6)', v: items.length * 3 }]),
+      [null, null].concat(items.map(function () { return 'ได้'; }))];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var ch = s.characteristics || { items: {} }, cr = r + 8;
+      C[7 + r] = [r + 1, { f: q(S) + '!B' + (D0 + r + 1), v: s.first ? fullName(s) : '' }]
+        .concat(items.map(function (x) { return blank(num(ch.items && ch.items[x.no])); }))
+        .concat([{ f: 'IF(COUNT(C' + cr + ':' + lc + cr + ')=0,"",SUM(C' + cr + ':' + lc + cr + '))', v: ch.avg == null ? '' : null },
+          { f: 'IF(' + tc + cr + '="","",ROUND(' + tc + cr + '/COUNT(C' + cr + ':' + lc + cr + '),2))', v: ch.avg },
+          { f: 'IF(' + ac + cr + '="","",IF(' + ac + cr + '>=2.5,3,IF(' + ac + cr + '>=1.5,2,IF(' + ac + cr + '>=1,1,0))))', v: ch.level },
+          { f: 'IF(' + lv + cr + '="","",CHOOSE(' + lv + cr + '+1,"ไม่ผ่าน","ผ่าน","ดี","ดีเยี่ยม"))', v: ch.text || '' }]);
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(C, { cols: [5, 26].concat(items.map(function () { return 6; })).concat([7, 10, 10, 10]) }), 'ประเมินคุณลักษณะ');
+
+    var W = [['สรุปประเมินการอ่าน คิดวิเคราะห์ เขียนสื่อความ (กรอก 0-3)'],
+      ['ที่', 'ชื่อ-สกุล', 'คะแนนเฉลี่ย', null, null, null, null, null, null, null, 'คะแนนเฉลี่ย', 'ผลการประเมิน'],
+      [null, null, 'ภาคเรียนที่ 1', null, null, null, 'ภาคเรียนที่ 2'],
+      [null, null, 'อ่าน', 'คิด', 'เขียน', 'เฉลี่ย', 'อ่าน', 'คิด', 'เขียน', 'เฉลี่ย']];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var w = s.rtw || {}, w1 = w.t1 || {}, w2 = w.t2 || {}, wr = r + 5;
+      W[4 + r] = [r + 1, { f: q(S) + '!B' + (D0 + r + 1), v: s.first ? fullName(s) : '' },
+        blank(num(w1.read)), blank(num(w1.think)), blank(num(w1.write)), { f: 'IF(COUNT(C' + wr + ':E' + wr + ')=0,"",ROUND(AVERAGE(C' + wr + ':E' + wr + '),2))', v: w1.avg },
+        blank(num(w2.read)), blank(num(w2.think)), blank(num(w2.write)), { f: 'IF(COUNT(G' + wr + ':I' + wr + ')=0,"",ROUND(AVERAGE(G' + wr + ':I' + wr + '),2))', v: w2.avg },
+        { f: 'IF(COUNT(F' + wr + ',J' + wr + ')=0,"",ROUND(AVERAGE(F' + wr + ',J' + wr + '),2))', v: w.avg },
+        { f: 'IF(K' + wr + '="","",IF(K' + wr + '>=2.5,3,IF(K' + wr + '>=1.5,2,IF(K' + wr + '>=1,1,0))))', v: w.level }];
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(W, { cols: [5, 26, 7, 7, 7, 7, 7, 7, 7, 7, 10, 10] }), 'สรุปประเมินอ่านคิดเขียน');
+
+    var G = [['ประเมินกิจกรรมพัฒนาผู้เรียน (กรอก ผ. หรือ มผ.)'], ['ที่', 'ชื่อ-สกุล', 'ชื่อชุมนุม', 'สรุปผล'], [null, null, null, 'แนะแนว', 'ลูกเสือ-เนตรนารี', 'ชุมนุม', 'กิจกรรมเพื่อสังคม']];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var ac2 = s.activities || {};
+      G[3 + r] = [r + 1, { f: q(S) + '!B' + (D0 + r + 1), v: s.first ? fullName(s) : '' }, blank(ac2.clubName), blank(ac2.guidance), blank(ac2.scout), blank(ac2.club), blank(ac2.social)];
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(G, { cols: [5, 26, 18, 10, 14, 10, 14] }), 'ประเมินกิจกรรมพัฒนาผู้เรียน');
+    return wb;
+  }
+
+  function exportPP6(data) {
+    data = fillPP6(JSON.parse(JSON.stringify(data)), false);
+    var m = data.meta, wb = XLSX.utils.book_new(), subs = data.subjects, studs = data.students;
+    var nRows = Math.max(studs.length, 40);
+    var cls = m.className || (stageName(m.stage, m.level) + '/' + m.room);
+
+    XLSX.utils.book_append_sheet(wb, makeSheet([
+      ['ไฟล์ ปพ.6 รูปแบบของระบบวิเคราะห์ผลการเรียน'], ['ชั้น ' + cls + '  ปีการศึกษา ' + m.year], [],
+      ['วิธีกรอก'],
+      ['1. ชีต "ผลสัมฤทธิ์ฯ เทอม 1" และ "เทอม 2": กรอกคะแนนเก็บและคะแนนสอบของแต่ละวิชา (รวม 2 ภาค = 100 คะแนน) ช่องรวมคำนวณให้เอง'],
+      ['2. รายชื่อนักเรียนกรอกในชีต "ผลสัมฤทธิ์ฯ เทอม 1" ชีตอื่นจะดึงชื่อไปเอง (กรอกเลขประจำตัวนักเรียนด้วย เพื่อใช้ค้นหาผล)'],
+      ['3. ชีต "ข้อมูลทั้งหมด": รายวิชาและหน่วยกิต ถ้าเพิ่ม/ลบวิชา ให้แก้หัวตารางในชีตผลสัมฤทธิ์ให้ตรงกันด้วย'],
+      ['4. ชีตเวลาเรียน สุขภาพ อ่านคิดเขียน คุณลักษณะ สมรรถนะ กรอกตามหัวตาราง'],
+      ['5. ชีต "ใบรายงานผลการเรียน รายบุคคล": ชื่อผู้ลงนาม (ในวงเล็บ) และจำนวนตัวชี้วัดแต่ละกลุ่มสาระ'],
+      ['6. บันทึกไฟล์ แล้วอัปโหลดกลับเข้าระบบได้เลย (ห้ามเปลี่ยนชื่อชีต และห้ามลบแถวหัวตาราง)']
+    ], { cols: [110] }), 'คำแนะนำ');
+
+    ['t1', 't2'].forEach(function (t, ti) {
+      var hdr = ['เลขที่', 'เลขประจำตัวนักเรียน', 'ชื่อ-สกุล', null, null], codes = [null, null, null, null, null], lab = [null, null, 'คำนำหน้า', 'ชื่อ', 'นามสกุล'];
+      subs.forEach(function (s) { hdr.push(s.name, null, null); codes.push(s.code, null, null); lab.push('เก็บ', 'สอบ', 'รวม'); });
+      var rows = [['แบบบันทึกผลสัมฤทธิ์ทางการเรียน', 'ปีการศึกษา', m.year, 'ภาคเรียนที่', ti + 1, 'ชั้น', cls, 'ครูประจำชั้น', m.teacher || ''], hdr, codes, lab];
+      for (var r = 0; r < nRows; r++) {
+        var s = studs[r] || {}, rr = r + 5, row;
+        if (ti === 0) row = [r + 1, blank(s.id), blank(s.prefix), blank(s.first), blank(s.last)];
+        else row = [r + 1].concat(['B', 'C', 'D', 'E'].map(function (c) { return { f: 'IF(' + q('ผลสัมฤทธิ์ฯ เทอม 1') + '!' + c + rr + '="",""," "&' + q('ผลสัมฤทธิ์ฯ เทอม 1') + '!' + c + rr + ')', v: s[{ B: 'id', C: 'prefix', D: 'first', E: 'last' }[c]] || '' }; }));
+        subs.forEach(function (sub, i) {
+          var x = (s[t] || {})[sub.code] || {}, c0 = 5 + i * 3;
+          row.push(blank(num(x.collect)), blank(num(x.exam)), { f: 'IF(AND(' + col(c0) + rr + '="",' + col(c0 + 1) + rr + '=""),"",N(' + col(c0) + rr + ')+N(' + col(c0 + 1) + rr + '))', v: x.total });
+        });
+        rows.push(row);
+      }
+      XLSX.utils.book_append_sheet(wb, makeSheet(rows, { cols: [6, 12, 9, 14, 16].concat(new Array(subs.length * 3).fill(6)) }), 'ผลสัมฤทธิ์ฯ เทอม ' + (ti + 1));
+    });
+
+    var nm = function (r) { return { f: q('ผลสัมฤทธิ์ฯ เทอม 1') + '!D' + (r + 5) + '&" "&' + q('ผลสัมฤทธิ์ฯ เทอม 1') + '!E' + (r + 5), v: studs[r] ? (studs[r].first || '') + ' ' + (studs[r].last || '') : '' }; };
+    var idf = function (r, c) { return { f: q('ผลสัมฤทธิ์ฯ เทอม 1') + '!' + c + (r + 5), v: studs[r] ? studs[r][{ B: 'id', C: 'prefix', D: 'first', E: 'last' }[c]] || '' : '' }; };
+
+    var info = [['ข้อมูลทั้งหมด'], [], ['ตารางคิดหน่วยกิตชั้น' + stageName(m.stage, m.level) + ' - ' + m.level], ['วิชา', 'จำนวนชั่วโมงต่อปี', 'จำนวนหน่วยกิต', 'รหัสวิชา', 'ประเภท']];
+    subs.forEach(function (s) { info.push([s.name, blank(s.hours), blank(s.credit), s.code, s.basic ? 'พื้นฐาน' : 'เพิ่มเติม']); });
+    info.push(['รวม', sum(subs.map(function (s) { return s.hours; })), sum(subs.map(function (s) { return s.credit; }))]);
+    XLSX.utils.book_append_sheet(wb, makeSheet(info, { cols: [34, 16, 14, 12, 10] }), 'ข้อมูลทั้งหมด');
+
+    var A = [['แบบบันทึกเวลาเรียน', 'ชั้น', cls, 'ปีการศึกษา', m.year],
+      ['เลขที่', 'เลขประจำตัวนักเรียน', 'ชื่อ-สกุล', null, null, 'ภาคเรียนที่ 1', null, 'ภาคเรียนที่ 2', null, 'สรุปเวลาเรียนตลอดปี'],
+      [null, null, null, null, null, 'เวลาเรียน', 'มาเรียน', 'เวลาเรียน', 'มาเรียน', 'เวลาเรียน', 'มาเรียน', 'คิดเป็นร้อยละ']];
+    for (var r = 0; r < nRows; r++) {
+      var s = studs[r] || {}, a = s.attendance || {}, a1 = a.t1 || {}, a2 = a.t2 || {}, y = a.year || {}, rr = r + 4;
+      A.push([r + 1, idf(r, 'B'), idf(r, 'C'), idf(r, 'D'), idf(r, 'E'), blank(a1.total), blank(a1.present), blank(a2.total), blank(a2.present),
+        { f: 'IF(AND(F' + rr + '="",H' + rr + '=""),"",N(F' + rr + ')+N(H' + rr + '))', v: y.total }, { f: 'IF(AND(G' + rr + '="",I' + rr + '=""),"",N(G' + rr + ')+N(I' + rr + '))', v: y.present },
+        { f: 'IF(N(J' + rr + ')=0,"",ROUND(K' + rr + '/J' + rr + '*100,2))', v: y.pct }]);
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(A, { cols: [6, 12, 9, 14, 16, 9, 9, 9, 9, 9, 9, 11] }), 'บันทึกเวลาเรียน');
+
+    var H = [['แบบบันทึกสุขภาพและพฤติกรรมนักเรียน', 'ปีการศึกษา', m.year],
+      ['เลขที่', 'เลขประจำตัวนักเรียน', 'ชื่อ-สกุล', null, null, 'ภาคเรียนที่ 1', null, 'ภาคเรียนที่ 2', null, 'พฤติกรรมนักเรียน (ความคิดเห็นครู)'],
+      [null, null, null, null, null, 'น้ำหนัก', 'ส่วนสูง', 'น้ำหนัก', 'ส่วนสูง']];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var hl = s.health || {}, h1 = hl.t1 || {}, h2 = hl.t2 || {};
+      H.push([r + 1, idf(r, 'B'), idf(r, 'C'), idf(r, 'D'), idf(r, 'E'), blank(h1.w), blank(h1.h), blank(h2.w), blank(h2.h), blank(hl.behavior || null)]);
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(H, { cols: [6, 12, 9, 14, 16, 8, 8, 8, 8, 70] }), 'บันทึกสุขภาพและพฤติกรรมนักเรียน');
+
+    var it = data.rtwItems, tc = col(4 + it.length), rc = col(5 + it.length), lc = col(3 + it.length);
+    var W = [['แบบบันทึกผลการประเมินการอ่าน คิดวิเคราะห์ และเขียน', 'ชั้น', cls, 'ปีการศึกษา', m.year],
+      ['เลขที่', 'ชื่อ', null, null, 'ตัวชี้วัด'].concat(new Array(it.length - 1).fill(null)).concat(['รวม', 'ผลการประเมิน']),
+      [null, null, null, null].concat(it.map(function (x) { return x.name; })),
+      [null, null, null, null].concat(it.map(function (x) { return x.max + ' คะแนน'; })).concat([sum(it.map(function (x) { return x.max; })) + ' คะแนน'])];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var w = s.rtw || { scores: [] }, rr2 = r + 5;
+      W.push([r + 1, idf(r, 'C'), idf(r, 'D'), idf(r, 'E')].concat(it.map(function (x, i) { return blank(num(w.scores && w.scores[i])); }))
+        .concat([{ f: 'IF(COUNT(E' + rr2 + ':' + lc + rr2 + ')<' + it.length + ',"",SUM(E' + rr2 + ':' + lc + rr2 + '))', v: w.total },
+          { f: 'IF(' + tc + rr2 + '="","",IF(' + tc + rr2 + '>=80,"ดีเยี่ยม",IF(' + tc + rr2 + '>=70,"ดี",IF(' + tc + rr2 + '>=50,"ผ่าน","ไม่ผ่าน"))))', v: w.result || '' }]));
+    }
+    void rc;
+    XLSX.utils.book_append_sheet(wb, makeSheet(W, { cols: [6, 9, 14, 16].concat(it.map(function () { return 14; })).concat([8, 12]) }), 'การคิดวิเคราะห์และเขียน');
+
+    var ci = data.characteristicItems;
+    var C = [['แบบบันทึกคุณลักษณะอันพึงประสงค์ (ดีเยี่ยม / ดี / ผ่าน / ไม่ผ่าน)', 'ชั้น', cls, 'ปีการศึกษา', m.year],
+      ['เลขที่', 'ชื่อ', null, null, 'คุณลักษณะอันพึงประสงค์'].concat(new Array(ci.length - 1).fill(null)).concat(['สรุป']),
+      [null, null, null, null].concat(ci.map(function (n, i) { return 'ข้อ ' + (i + 1) + ' ' + n; }))];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var ch = s.characteristics || { items: [] };
+      C.push([r + 1, idf(r, 'C'), idf(r, 'D'), idf(r, 'E')].concat(ci.map(function (n, i) { return blank(ch.items && ch.items[i] || null); })).concat([blank(ch.summary || null)]));
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(C, { cols: [6, 9, 14, 16].concat(ci.map(function () { return 12; })).concat([10]) }), 'คุณลักษณะอันพึงประสงค์');
+
+    var groups = data.competencyGroups, gh = ['เลขที่', 'ชื่อ', null, null], gi = [null, null, null, null];
+    groups.forEach(function (g) { g.items.forEach(function (x, i) { gh.push(i === 0 ? g.name : null); gi.push(x); }); });
+    var P = [['แบบบันทึกสมรรถนะของผู้เรียน (ดีเยี่ยม / ดี / พอใช้ / ปรับปรุง)', 'ชั้น', cls, 'ปีการศึกษา', m.year], gh, gi];
+    for (r = 0; r < nRows; r++) {
+      s = studs[r] || {};
+      var row2 = [r + 1, idf(r, 'C'), idf(r, 'D'), idf(r, 'E')];
+      groups.forEach(function (g, a2i) { g.items.forEach(function (x, i) { row2.push(blank(s.competencies && s.competencies[a2i] && s.competencies[a2i][i] || null)); }); });
+      P.push(row2);
+    }
+    XLSX.utils.book_append_sheet(wb, makeSheet(P, { cols: [6, 9, 14, 16].concat(gi.slice(4).map(function () { return 12; })) }), 'สมรรถนะของผู้เรียน');
+
+    var sg = m.signers || {}, rep = [['ข้อมูลสำหรับใบรายงาน ปพ.6 (แก้ชื่อในวงเล็บ และตำแหน่งได้)'], []];
+    [['ครูประจำชั้น', sg.teacher || { name: m.teacher, position: 'ครูประจำชั้น' }], ['รองผู้อำนวยการ', sg.deputy || {}], ['ผู้อำนวยการ', sg.director || {}]].forEach(function (p) {
+      rep.push([p[0], '(' + (p[1].name || '') + ')']);
+      rep.push([null, 'ตำแหน่ง ' + (p[1].position || p[0])]);
+      rep.push([]);
+    });
+    rep.push(['สาเหตุที่ได้เลื่อนชั้น', m.reason || REASON], []);
+    rep.push(['กลุ่มสาระการเรียนรู้', 'ตัวชี้วัดทั้งหมด', 'ตัวชี้วัดที่ผ่าน']);
+    subs.filter(function (s) { return s.basic; }).forEach(function (s) {
+      var x = data.indicatorTable[s.name.replace(/\s+/g, '')] || {};
+      rep.push([s.name, blank(x.total), blank(x.passed)]);
+    });
+    rep.push(['รวม']);
+    XLSX.utils.book_append_sheet(wb, makeSheet(rep, { cols: [30, 50, 16] }), 'ใบรายงานผลการเรียน รายบุคคล');
+    return wb;
+  }
+
+  function toBlob(wb) {
+    var out = XLSX.write(wb, { bookType: 'xlsx', type: 'array', compression: true });
+    return typeof Blob !== 'undefined' ? new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) : out;
+  }
+
+  return {
+    newPP5: newPP5, newPP6: newPP6, fillPP5: fillPP5, fillPP6: fillPP6, pp6FromPP5: pp6FromPP5, pp5TermScores: pp5TermScores, findStu: findStu, nameKey: nameKey,
+    exportPP5: exportPP5, exportPP6: exportPP6, toBlob: toBlob, completeness: completeness, activeTerm: activeTerm, termDays: termDays, teachHours: teachHours, ymd: ymd,
+    defaultSubjects: defaultSubjects, subjectDefaults: subjectDefaults, blankStudent: blankStudent, copyRoster: copyRoster,
+    gradeOf: gradeOf, fullName: fullName, stageName: stageName,
+    CHAR_ITEMS: CHAR_ITEMS, RTW_ITEMS: RTW_ITEMS, COMPETENCY: COMPETENCY, LEVEL_TEXT: LEVEL_TEXT
+  };
+});

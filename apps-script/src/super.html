@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="light only">
+  <meta name="theme-color" content="#7f1d1d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <?!= include('Css') ?>
+</head>
+<body class="sup-page">
+  <div id="bootLoader" class="boot" role="status" aria-live="polite"><div class="pp-load-box"><div class="pp-spin"></div><b id="bootText">กำลังเข้าสู่ระบบแอดมิน...</b><small>กรุณารอสักครู่</small></div></div>
+  <header class="top sup-top">
+    <div class="top-in">
+      <div class="brand">
+        <h1>🛡 ระบบผู้ดูแล (แอดมิน)</h1>
+        <p>โรงเรียนวัดทุ่งแฝก · ควบคุมการเปิด-ปิดระบบ ทะเบียนนักเรียน และภาพรวมข้อมูล</p>
+      </div>
+      <div class="top-acts" id="supActs"></div>
+    </div>
+  </header>
+  <main class="wrap" id="sup"><div class="card empty-state"><b>กำลังโหลด...</b></div></main>
+  <div id="toasts" aria-live="polite"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>window.PP5_PIN_KEY = 'pp5-admin-pin'; window.PP5_NEED_ADMIN = true; window.PP5_HOME = <?!= JSON.stringify(homeUrl || '') ?>;</script>
+  <?!= include('JsPinPad') ?>
+  <?!= include('JsStore') ?>
+  <?!= include('JsRoster') ?>
+  <?!= include('JsImg') ?>
+  <?!= include('JsTeachers') ?>
+  <?!= include('JsHistory') ?>
+  <?!= include('JsParser') ?>
+  <?!= include('JsPP6Parser') ?>
+  <?!= include('JsModel') ?>
+  <?!= include('JsReconcile') ?>
+  <?!= include('JsReport') ?>
+  <?!= include('JsPublish') ?>
+  <?!= include('JsLibrary') ?>
+  <?!= include('JsSuper') ?>
+</body>
+</html>

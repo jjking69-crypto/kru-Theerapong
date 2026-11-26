@@ -1,0 +1,254 @@
+<script>
+/* ที่เก็บข้อมูลรุ่น Apps Script: เรียกฟังก์ชันใน Code.gs ผ่าน google.script.run แล้วเก็บไฟล์ใน Google Drive */
+(function () {
+  'use strict';
+
+  // ไลบรารีสร้าง PDF โหลดจาก CDN (Apps Script เก็บไฟล์ใหญ่ไม่สะดวก)
+  window.PP5_PDFLIB = ['https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js'];
+  window.PP5_LIBS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+  ];
+  function b64ToBytes(b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+
+  // รหัสผ่าน: ครูรายบุคคล = จำไว้ในเครื่อง (localStorage) จนกว่าจะกดออก/เปลี่ยนคน
+  //          ระบบโรงเรียน / ผู้อำนวยการ / แอดมิน = จำเฉพาะแท็บนี้ (sessionStorage) และต้องกดรหัสทุกครั้งที่สลับเข้า
+  var PIN_KEY = window.PP5_PIN_KEY || 'pp5-pin', KRU_KEY = 'pp5-kru-pin', ADMIN_PAGE = !!window.PP5_NEED_ADMIN;
+  function sGet(k) { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function sSet(k, v) { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch (e) {} }
+  function lGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+  // รหัสแบบเก่าที่เคยจำไว้ถาวร (ทุกบทบาท) → ลบทิ้ง
+  try { localStorage.removeItem('pp5-pin'); localStorage.removeItem('pp5-admin-pin'); } catch (e) {}
+  function wantRole() { return ADMIN_PAGE ? 'admin' : sGet('pp5-want'); }
+  function getPin() {
+    if (window.__pp5pin != null) return window.__pp5pin;
+    var p = sGet(PIN_KEY), w = wantRole();
+    if (!p && !ADMIN_PAGE && (!w || w === 'kru')) p = lGet(KRU_KEY);   // ครู: ใช้รหัสที่จำไว้
+    return p;
+  }
+  function setPin(v, role) {
+    window.__pp5pin = v || null; sSet(PIN_KEY, v);
+    if (v && role === 'kru' && !ADMIN_PAGE) { lSet(KRU_KEY, v); sSet('pp5-want', 'kru'); }
+  }
+  var ROLE_TH = { kru: 'ครู', teacher: 'ระบบโรงเรียน', director: 'ผู้อำนวยการ', admin: 'แอดมิน' };
+
+  function raw(fn, args) {
+    return new Promise(function (res, rej) {
+      var runner = google.script.run.withSuccessHandler(res).withFailureHandler(function (e) {
+        rej(e instanceof Error ? e : new Error(e && e.message ? e.message : String(e)));
+      });
+      runner[fn].apply(runner, [getPin()].concat(args || []));
+    });
+  }
+  // ขอรหัสด้วยแป้นตัวเลขบนจอ (ครู 8 หลัก / ผู้ดูแลระบบหลัก)
+  var asking = null, pinLen = null;
+  function getPinLen() {
+    if (pinLen) return Promise.resolve(pinLen);
+    return new Promise(function (res) {
+      google.script.run.withSuccessHandler(function (r) { pinLen = r || {}; res(pinLen); }).withFailureHandler(function () { res({}); }).api_pinInfo();
+    });
+  }
+  var gotRole = null;
+  function askPin(msg) {
+    if (asking) return asking;
+    asking = getPinLen().then(function (pl) { return window.PP5PinPad.ask({
+      digits: (window.PP5_NEED_ADMIN ? pl.admin : 0) || 0,   // หน้าครู: ความยาวรหัสต่างกันตามบทบาท → กดแล้วกดตกลง
+      home: window.PP5_HOME || '',
+      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : wantRole() ? 'เข้าสู่' + (wantRole() === 'kru' ? 'ระบบครู' : ROLE_TH[wantRole()] === 'ระบบโรงเรียน' ? 'ระบบโรงเรียน' : 'ระบบ' + ROLE_TH[wantRole()]) : 'เข้าสู่ระบบ',
+      sub: msg || 'กรอกรหัสผ่าน', length: 12, autoSubmit: false,
+      check: function (p) {
+        return new Promise(function (res) {
+          google.script.run.withSuccessHandler(function (r) {
+            if (r && r.role && window.PP5_NEED_ADMIN && r.role !== 'admin') return res('รหัสนี้ไม่ใช่รหัสผู้ดูแลระบบ');
+            var w = wantRole();
+            if (r && r.role && w && w !== r.role && !(w === 'teacher' && r.role === 'admin')) return res('รหัสนี้เป็นรหัส' + (ROLE_TH[r.role] || '') + ' ไม่ใช่รหัส' + ROLE_TH[w]);
+            if (r && r.role) gotRole = r.role;
+            res(r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'));
+          })
+            .withFailureHandler(function () { res('เชื่อมต่อไม่สำเร็จ ลองใหม่'); }).api_checkPin(p);
+        });
+      }
+    }); }).then(function (p) {
+      asking = null;
+      if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน');
+      setPin(p, gotRole);
+      var bl = document.getElementById('bootText'); if (bl) bl.textContent = 'รหัสถูกต้อง กำลังเปิดระบบ...';
+      return p;
+    });
+    return asking;
+  }
+  function call(fn, args, tries) {
+    return raw(fn, args).catch(function (err) {
+      var m = err && err.message || '';
+      if (/PIN_LOCKED/.test(m)) throw new Error('ใส่รหัสผิดหลายครั้ง ระบบพักการเข้าใช้ 10 นาที');
+      if (/PIN_REQUIRED/.test(m) && (tries || 0) < 3) {
+        return askPin(tries ? 'รหัสเดิมใช้ไม่ได้แล้ว กรุณากรอกใหม่' : '').then(function () { return call(fn, args, (tries || 0) + 1); });
+      }
+      throw err;
+    });
+  }
+  // ออกจากระบบ → ล้างรหัสทั้งหมด (รวมรหัสครูที่จำไว้) แล้วกลับหน้าแรก
+  // switchOnly = ล้างรหัสของแท็บนี้แล้วโหลดใหม่ (กดรหัสใหม่)
+  window.PP5_LOGOUT = function (switchOnly) {
+    window.__pp5pin = null; sSet(PIN_KEY, ''); sSet('pp5-want', '');
+    if (!switchOnly) { lSet(KRU_KEY, ''); sSet('pp5-pin', ''); sSet('pp5-admin-pin', ''); }
+    if (!switchOnly && window.PP5_HOME) { window.open(window.PP5_HOME, '_top'); return; }
+    location.reload();
+  };
+  // สลับระบบ: ครู = ใช้รหัสที่จำไว้ (ถ้ามี) · ระบบอื่น = ต้องกดรหัสใหม่ทุกครั้ง
+  window.PP5_SWITCH = function (want, adminUrl) {
+    window.__pp5pin = null;
+    sSet('pp5-pin', ''); sSet('pp5-admin-pin', '');
+    if (want === 'admin') { if (adminUrl) window.open(adminUrl, '_top'); return; }
+    sSet('pp5-want', want);
+    location.reload();
+  };
+
+  function blobToB64(blob) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(String(fr.result).replace(/^data:[^,]*,/, '')); };
+      fr.onerror = function () { rej(fr.error); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  var MAX_UPLOAD = 40 * 1024 * 1024;
+
+  // แคชข้อมูลคะแนนในเบราว์เซอร์ (IndexedDB): เปิดห้องเดิมซ้ำ = ไม่ต้องโหลดจาก Drive ใหม่ (ถ้าไฟล์ไม่เปลี่ยน)
+  var IDB = (function () {
+    var dbp = null;
+    function db() {
+      if (dbp) return dbp;
+      dbp = new Promise(function (res) {
+        try { var rq = indexedDB.open('pp5-cache', 1); rq.onupgradeneeded = function () { rq.result.createObjectStore('d'); }; rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { res(null); }; }
+        catch (e) { res(null); }
+      });
+      return dbp;
+    }
+    function tx(mode, fn) { return db().then(function (d) { return new Promise(function (res) { if (!d) return res(null); try { var r = fn(d.transaction('d', mode).objectStore('d')); r.onsuccess = function () { res(r.result || null); }; r.onerror = function () { res(null); }; } catch (e) { res(null); } }); }); }
+    return { get: function (k) { return tx('readonly', function (s) { return s.get(k); }); }, put: function (k, v) { return tx('readwrite', function (s) { return s.put(v, k); }); } };
+  })();
+  var inflight = {};
+
+  window.PP5_STORE = {
+    rootUrl: null,
+    open: function () {
+      var self = this;
+      return call('api_ping').then(function (r) {
+        self.rootUrl = r && r.rootUrl;
+        self.role = r && r.role; self.flags = (r && r.flags) || {}; self.flagDefs = (r && r.flagDefs) || {};
+        self.publicUrl = r && r.publicUrl; self.curYear = r && r.curYear; self.curYearFixed = r && r.curYearFixed;
+        self.me = (r && r.me) || null;   // ครูรายบุคคล: { name, subs, pp6 }
+        var link = document.getElementById('driveLink');
+        if (link && self.rootUrl) { link.href = self.rootUrl; link.hidden = false; }
+      });
+    },
+    all: function () { return call('api_list'); },
+    put: async function (rec) {
+      if (rec.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินไป (เกิน 40 MB)');
+      var b64 = await blobToB64(rec.blob);
+      var entry = {
+        key: rec.key, year: rec.year, level: rec.level, room: rec.room, stage: rec.data && rec.data.meta.stage,
+        slot: rec.slot, fileName: rec.fileName, origName: rec.origName, size: rec.size, uploadedAt: rec.uploadedAt,
+        mime: rec.blob.type || 'application/octet-stream', school: rec.data && rec.data.meta.school || '',
+        settings: rec.settings || null, auto: !!rec.auto
+      };
+      var saved = await call('api_save', [entry, b64, JSON.stringify(rec.data)]);
+      if (saved && rec.data) IDB.put(rec.key, { at: saved.uploadedAt || 0, data: rec.data });
+      delete rec.blob; // ไฟล์อยู่ใน Drive แล้ว
+      return saved;
+    },
+    ensureData: async function (recs) {
+      var miss = [], waits = [];
+      for (var i = 0; i < recs.length; i++) {
+        var r = recs[i];
+        if (r.data) continue;
+        if (inflight[r.key]) { waits.push(inflight[r.key].then(function (rr) { return function (d) { if (d && !rr.data) rr.data = d; }; }(r))); continue; }
+        var c = await IDB.get(r.key);
+        if (c && c.at === (r.uploadedAt || 0) && c.data) r.data = c.data; else miss.push(r);
+      }
+      if (miss.length) {
+        var req = call('api_getData', [miss.map(function (r) { return r.key; })]);
+        miss.forEach(function (r) {
+          inflight[r.key] = req.then(function (map) {
+            var d = map && map[r.key] ? JSON.parse(map[r.key]) : null;
+            if (d) { r.data = d; IDB.put(r.key, { at: r.uploadedAt || 0, data: d }); }
+            return d;
+          }).finally(function () { delete inflight[r.key]; });
+          waits.push(inflight[r.key]);
+        });
+      }
+      await Promise.all(waits);
+    },
+    saveSettings: function (rec) { return call('api_saveSettings', [rec.key, JSON.stringify(rec.settings || {})]); },
+    del: function (key) { return call('api_delete', [key]); },
+    clear: function () { return call('api_clear'); },
+    download: function (rec) {
+      if (rec.url) window.open(rec.url, '_blank', 'noopener');
+      else alert('ไม่พบลิงก์ไฟล์ใน Drive');
+    },
+    templateInfo: function () { return call('api_templateInfo'); },
+    setFlags: function (f) { var self = this; return call('api_setFlags', [JSON.stringify(f)]).then(function (r) { self.flags = r; return r; }); },
+    getFile: async function (key) { var t = await call('api_getFile', [key]); return t ? { name: t.name, bytes: b64ToBytes(t.b64) } : null; },
+    studentHistory: function (id) { return call('api_studentHistory', [id]); },
+    saveExternal: function (id, year, v) { return call('api_saveExternal', [id, year, v ? JSON.stringify(v) : null]); },
+    setCurYear: function (y) { var self = this; return call('api_setCurYear', [y || 0]).then(function (r) { self.curYear = r; return r; }); },
+    folderLinks: function () { return call('api_folderLinks'); },
+    getLib: function () { return call('api_getLib'); },
+    getTerms: function () { return call('api_getTerms'); },
+    saveTerms: function (year, v) { return call('api_saveTerms', [year, v ? JSON.stringify(v) : null]); },
+    saveMe: function (v) { var self = this; return call('api_saveMe', [JSON.stringify(v)]).then(function (r) { self.me = r; return r; }); },
+    kruList: function () { return call('api_kruList'); },
+    kruSave: function (list) { return call('api_kruSave', [JSON.stringify(list)]); },
+    saveLib: function (key, v) { return call('api_saveLib', [key, JSON.stringify(v)]); },
+    getBrand: function () { return call('api_getBrand'); },
+    saveBrand: function (b) { return call('api_saveBrand', [JSON.stringify(b)]); },
+    getSigs: function () { return call('api_getSigs'); },
+    saveSig: function (name, img) { return call('api_saveSig', [name, img]); },
+    clearSourceCache: function () { return call('api_clearSourceCache'); },
+    sourceList: function () { return call('api_sourceList'); },
+    sourceFile: async function (id) { var t = await call('api_sourceFile', [id]); return { name: t.name, bytes: b64ToBytes(t.b64) }; },
+    getRoster: async function () {
+      var r = await call('api_getRoster');
+      return r ? { fileName: r.fileName, url: r.url, uploadedAt: r.uploadedAt, data: JSON.parse(r.data) } : null;
+    },
+    putRoster: async function (r) {
+      var d = r.data, dt = d.date ? d.date.display : (d.dateText || '');
+      var info = await call('api_saveRoster', [await blobToB64(new Blob([r.bytes])), r.fileName, JSON.stringify(d), dt]);
+      return { fileName: info.fileName, url: info.url, uploadedAt: info.uploadedAt, data: d };
+    },
+    getTemplate: async function (kind) {
+      var t = await call('api_getTemplate', [kind]);
+      return t ? { name: t.name, bytes: b64ToBytes(t.b64) } : null;
+    },
+    putTemplate: async function (kind, bytes, name) {
+      return call('api_saveTemplate', [kind, await blobToB64(new Blob([bytes])), name]);
+    },
+    publish: function (key, pub) { return call('api_publish', [key, JSON.stringify(pub)]); },
+    unpublish: function (key) { return call('api_unpublish', [key]); },
+    publicStatus: function () { return call('api_publicStatus'); },
+    getPublicCfg: function () { return call('api_getPublicCfg'); },
+    savePublicCfg: function (cfg) { return call('api_savePublicCfg', [JSON.stringify(cfg)]); },
+    // PDF รูปแบบไฟล์ Excel ต้นฉบับ (แปลงผ่าน Google Sheets บนเซิร์ฟเวอร์)
+    xpdfStart: async function (blob, name) { return call('api_xpdfStart', [await blobToB64(blob), name]); },
+    xpdfPart: function (id, gid, ranges, portrait) { return call('api_xpdfPart', [id, gid, ranges, portrait]); },
+    xpdfEnd: function (id) { return call('api_xpdfEnd', [id]); },
+    xpdfRun: function (id, jobs) { return call('api_xpdfRun', [id, jobs]); },
+    xpdfCacheGet: function (key, stamp) { return call('api_xpdfCacheGet', [key, stamp]); },
+    xpdfCachePut: async function (key, stamp, blob, name) { return call('api_xpdfCachePut', [key, stamp, await blobToB64(blob), name]); },
+    fontTTF: function () { return call('api_fontTTF'); },
+    versions: function (key) { return call('api_versions', [key]); },
+    restore: function (key, i) { return call('api_restore', [key, i]); },
+    log: function (n) { return call('api_log', [n || 300]); },
+    sheetXlsx: function (id) { return call('api_sheetXlsx', [id]).then(function (b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }); },
+    saveOutput: async function (blob, name) {
+      if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');
+      return call('api_saveOutput', [name, await blobToB64(blob), blob.type || 'application/pdf']);
+    }
+  };
+})();
+
+</script>

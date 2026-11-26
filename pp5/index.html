@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="light only">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>วิเคราะห์ผล ปพ.5 / ปพ.6</title>
+  <meta name="description" content="อัปโหลดไฟล์ ปพ.5 แต่ละวิชา แล้วดูคะแนนตามตัวชี้วัดและเกรดรายบุคคล">
+  <meta name="theme-color" content="#1767ee">
+  <link rel="icon" type="image/png" href="../favicon.png?v=2">
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png?v=2">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="report.css">
+  <link rel="stylesheet" href="public.css">
+</head>
+<body>
+  <div id="bootLoader" class="boot" role="status" aria-live="polite"><div class="pp-load-box"><div class="pp-spin"></div><b id="bootText">กำลังเข้าสู่ระบบครู...</b><small>กรุณารอสักครู่</small></div></div>
+  <!-- แถบเมนูด้านซ้าย (จอคอม: ค้างไว้ · มือถือ: กด ☰) -->
+  <div class="side-scrim" id="sideScrim" hidden></div>
+  <aside class="side-nav" id="sideNav" aria-label="เมนูหลัก"></aside>
+  <button type="button" class="side-open" id="sideOpen" aria-label="เปิดเมนู" aria-controls="sideNav"><span></span><span></span><span></span></button>
+  <header class="top">
+    <div class="top-in">
+      <a class="home" href="../" title="กลับหน้าแอปห้องเรียน">‹</a>
+      <img id="topLogo" class="top-logo" alt="ตราโรงเรียน" hidden>
+      <div class="brand">
+        <h1>ระบบ ปพ.5 / ปพ.6 โรงเรียนวัดทุ่งแฝก</h1>
+        <p id="schoolLine">อัปโหลดไฟล์ ปพ.5 ของแต่ละวิชา แล้วดูผลรายบุคคล</p>
+      </div>
+      <div class="top-acts" id="topActs"></div>
+    </div>
+      <svg class="top-scene" viewBox="0 0 520 150" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
+        <g opacity=".95"><circle cx="40" cy="118" r="22" fill="#4ade80"/><circle cx="62" cy="108" r="26" fill="#22c55e"/><rect x="56" y="118" width="6" height="26" fill="#a16207"/>
+        <rect x="96" y="70" width="170" height="74" rx="3" fill="#fde2e4"/><path d="M90 74 L181 40 L272 74 Z" fill="#fca5a5"/><rect x="166" y="104" width="30" height="40" fill="#93c5fd"/>
+        <g fill="#bfdbfe"><rect x="108" y="84" width="20" height="14"/><rect x="134" y="84" width="20" height="14"/><rect x="206" y="84" width="20" height="14"/><rect x="232" y="84" width="20" height="14"/><rect x="108" y="110" width="20" height="14"/><rect x="134" y="110" width="20" height="14"/><rect x="206" y="110" width="20" height="14"/><rect x="232" y="110" width="20" height="14"/></g>
+        <line x1="181" y1="10" x2="181" y2="42" stroke="#64748b" stroke-width="2"/><rect x="182" y="10" width="20" height="4" fill="#ef4444"/><rect x="182" y="14" width="20" height="3" fill="#fff"/><rect x="182" y="17" width="20" height="5" fill="#1d4ed8"/><rect x="182" y="22" width="20" height="3" fill="#fff"/><rect x="182" y="25" width="20" height="4" fill="#ef4444"/>
+        <rect x="290" y="84" width="150" height="60" rx="3" fill="#e0f2fe"/><path d="M284 88 L365 58 L446 88 Z" fill="#7dd3fc"/><g fill="#bae6fd"><rect x="302" y="98" width="18" height="14"/><rect x="326" y="98" width="18" height="14"/><rect x="386" y="98" width="18" height="14"/><rect x="410" y="98" width="18" height="14"/></g><rect x="352" y="112" width="26" height="32" fill="#7dd3fc"/>
+        <circle cx="470" cy="112" r="24" fill="#22c55e"/><circle cx="496" cy="120" r="20" fill="#4ade80"/><rect x="466" y="120" width="6" height="24" fill="#a16207"/>
+        <rect x="0" y="142" width="520" height="8" fill="#bbf7d0"/></g>
+      </svg>
+  </header>
+
+  <main class="wrap">
+    <section class="picker card" id="picker">
+      <button type="button" class="pk-bar" id="pkBar" aria-expanded="false" aria-controls="pkBody">
+        <span class="pk-bi">🎓</span><span class="pk-bt"><small>ห้องเรียน</small><b id="pkCls">ยังไม่ได้เลือกห้อง</b></span>
+        <span class="pk-by" id="pkYear"></span><span class="pk-bc">เปลี่ยนห้อง <i>▾</i></span>
+      </button>
+      <div class="pk-body" id="pkBody">
+      <div class="field pk-year">
+        <label for="yearSel">ปีการศึกษา</label>
+        <div class="pk-ysel"><span aria-hidden="true">📅</span><select id="yearSel"></select></div>
+      </div>
+      <div class="field grow">
+        <span class="lbl pv-sr">ชั้นเรียน · กดเลือกห้องได้เลย</span>
+        <select id="classSel" class="big-sel" hidden aria-hidden="true"></select>
+        <div class="cls-chips" id="classChips" role="tablist" aria-label="เลือกชั้นเรียน"></div>
+      </div>
+      <div class="field">
+        <button class="btn pri up-btn" id="upBtn" type="button" title="เลือกไฟล์ ปพ.5 / ปพ.6 / รายชื่อ (.docx) ได้หลายไฟล์ หรือลากไฟล์มาวางที่ใดก็ได้บนหน้านี้">⇪ อัปโหลดไฟล์<small class="up-sub">ปพ.5 · ปพ.6 · รายชื่อ</small></button>
+        <input type="file" id="fileAll" accept=".xlsm,.xlsx,.xls,.docx" multiple hidden>
+      </div>
+      </div>
+    </section>
+
+    <section id="rosterBar"></section>
+
+    <nav class="tabs" role="tablist">
+      <button data-tab="track" role="tab" class="track-tab" style="--tc:#b45309" hidden><span class="ti">📋</span>ติดตามงาน</button>
+      <button data-tab="check" role="tab" style="--tc:#0f766e"><span class="ti">🔎</span>ตรวจสอบ</button>
+      <button data-tab="subjects" role="tab" style="--tc:#1d5bd8"><span class="ti">📘</span>รายวิชา (ปพ.5)</button>
+      <button data-tab="report" role="tab" style="--tc:#0b7285"><span class="ti">📗</span>ใบรายงาน (ปพ.6)</button>
+      <button data-tab="summary" role="tab" style="--tc:#5f3dc4"><span class="ti">📊</span>สรุปทั้งห้อง</button>
+      <button data-tab="student" role="tab" style="--tc:#c2255c"><span class="ti">🧒</span>รายบุคคล</button>
+      <button data-tab="publish" role="tab" style="--tc:#2b8a3e"><span class="ti">📢</span>ประกาศผล</button>
+    </nav>
+
+    <section id="banner" aria-live="polite"></section>
+    <section id="view"></section>
+
+    <p class="privacy">ไฟล์และคะแนนเก็บไว้ในเบราว์เซอร์ของเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต ระบบเก็บเฉพาะเลขบัตรประชาชน 4 ตัวท้าย (ใช้ยืนยันตัวตนผู้ปกครอง)
+      · <button class="link" id="clearAll">ล้างข้อมูลทั้งหมด</button></p>
+  </main>
+
+  <dialog id="modal">
+    <div class="modal-h">
+      <h2 id="modalTitle"></h2>
+      <button class="x" id="modalClose" aria-label="ปิด">×</button>
+    </div>
+    <div id="modalBody"></div>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+  <input type="file" id="fileOne" accept=".xlsm,.xlsx,.xls" hidden>
+  <input type="file" id="fileRoster" accept=".docx" hidden>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="vendor/jszip.min.js"></script>
+  <script src="parser.js"></script>
+  <script src="pp6parser.js"></script>
+  <script src="model.js"></script>
+  <script src="xlsxfill.js"></script>
+  <script src="templates.js"></script>
+  <script src="roster.js"></script>
+  <script src="pinpad.js"></script>
+  <script src="imgtools.js"></script>
+  <script src="teachers.js"></script>
+  <script src="reconcile.js"></script>
+  <script src="library.js"></script>
+  <script src="grid.js"></script>
+  <script src="quick.js"></script>
+  <script src="history.js"></script>
+  <script src="editor.js"></script>
+  <script src="public.js"></script>
+  <script src="publish.js"></script>
+  <script src="report.js"></script>
+  <script src="pp5pdf.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

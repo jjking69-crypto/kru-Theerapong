@@ -1,0 +1,406 @@
+<script>
+/*
+ * ปพ.5 เป็น PDF ทั้งเล่ม (ทุกหน้า ไม่ตกขอบ)
+ *   หน้าปก + สรุปผล · รายการตัวชี้วัด · คะแนนตามตัวชี้วัด (แยกภาคเรียน) · สรุปผลการเรียนรายคน
+ *   ทุกหน้าย่อขนาดอัตโนมัติให้พอดีกระดาษ A4 (ตารางกว้าง = แนวนอน)
+ *   PP5Pdf.subject(rec, ctx) · PP5Pdf.classBook(recs, ctx, fileName)
+ *   ctx: { brand(), sig(name), toast(msg, kind), save(blob, name) }
+ */
+(function () {
+  'use strict';
+  var LIBS = window.PP5_LIBS || ['vendor/html2canvas.min.js', 'vendor/jspdf.umd.min.js'];
+  var PX = { p: { w: 794, h: 1123 }, l: { w: 1123, h: 794 } }, PAD = 34;
+  function esc(v) { return v == null ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function n(v, d) { if (v == null || v === '') return ''; if (typeof v !== 'number') return esc(v); return d != null ? v.toFixed(d) : String(Math.round(v * 100) / 100); }
+  function chunk(a, k) { var o = []; for (var i = 0; i < a.length; i += k) o.push(a.slice(i, i + k)); return o.length ? o : [[]]; }
+
+  var libsReady = null;
+  function loadLibs() {
+    if (window.html2canvas && window.jspdf) return Promise.resolve();
+    if (libsReady) return libsReady;
+    libsReady = LIBS.filter(function (s) { return !/jszip/.test(s); }).reduce(function (p, src) {
+      return p.then(function () {
+        return new Promise(function (res, rej) {
+          var s = document.createElement('script'); s.src = src; s.onload = res;
+          s.onerror = function () { rej(new Error('โหลด ' + src + ' ไม่สำเร็จ')); };
+          document.head.appendChild(s);
+        });
+      });
+    }, Promise.resolve());
+    libsReady.catch(function () { libsReady = null; });
+    return libsReady;
+  }
+
+  var CSS = '#p5Stage{position:fixed;left:-20000px;top:0;z-index:-1}' +
+    '.p5pg{background:#fff;color:#000;overflow:hidden;position:relative;box-sizing:border-box;font-family:Sarabun,"TH Sarabun New",sans-serif;font-size:14px;line-height:1.35}' +
+    '.p5pg .p5fit{transform-origin:0 0;position:absolute;left:' + PAD + 'px;top:' + PAD + 'px}' +
+    '.p5pg .p5hd{display:flex;justify-content:space-between;border-bottom:1.5px solid #000;padding-bottom:4px;margin-bottom:8px;font-size:13px;white-space:nowrap;gap:20px}' +
+    '.p5pg .p5no{position:absolute;right:' + PAD + 'px;bottom:14px;font-size:12px;color:#333}' +
+    '.p5pg h1{font-size:24px;text-align:center;margin:4px 0}.p5pg h2{font-size:18px;text-align:center;margin:2px 0 8px}' +
+    '.p5pg table{border-collapse:collapse;width:100%}' +
+    '.p5pg th,.p5pg td{border:1px solid #000;padding:2px 4px;text-align:center;vertical-align:middle}' +
+    '.p5pg th{background:#eef2f7;font-weight:700}' +
+    '.p5pg td.l,.p5pg th.l{text-align:left}.p5pg td.nm{text-align:left;white-space:nowrap}' +
+    '.p5pg .sm{font-size:11px;font-weight:400}' +
+    '.p5pg .cv{text-align:center;margin-top:10px}.p5pg .cv img{width:96px;height:96px;object-fit:contain}' +
+    '.p5pg .cv-info{margin:14px auto;font-size:17px;line-height:1.9;text-align:left;width:88%}.p5pg .cv-info b{font-weight:700}' +
+    '.p5pg .sigs{display:grid;grid-template-columns:1fr 1fr;gap:18px 30px;margin-top:22px;font-size:15px}' +
+    '.p5pg .sig{text-align:center}.p5pg .sig .ln{height:46px;display:flex;align-items:flex-end;justify-content:center}.p5pg .sig img{max-height:46px;max-width:180px}' +
+    '.p5pg .sig.full{grid-column:1/-1}.p5pg .appr{margin:6px 0;font-size:15px}' +
+    '.p5pg .fail{color:#c00;font-weight:700}' +
+    // TH Sarabun New ตัวเล็กกว่า Sarabun ที่ขนาดเดียวกัน → ขยายขนาดให้อ่านง่ายเท่าเดิม
+    '.p5pg.thsn{font-family:THSarabunNew,Sarabun,sans-serif;font-size:19px;line-height:1.15}' +
+    '.p5pg.thsn .p5hd,.p5pg.thsn .p5no{font-size:17px}.p5pg.thsn h1{font-size:32px}.p5pg.thsn h2{font-size:25px}' +
+    '.p5pg.thsn .sm{font-size:15px}.p5pg.thsn .cv-info{font-size:23px;line-height:1.6}.p5pg.thsn .sigs,.p5pg.thsn .appr{font-size:20px}';
+  function injectCss() { if (document.getElementById('p5pdf-css')) return; var s = document.createElement('style'); s.id = 'p5pdf-css'; s.textContent = CSS; document.head.appendChild(s); }
+
+  // ---------- สร้างหน้า ----------
+  function header(d) {
+    var m = d.meta;
+    return '<div class="p5hd"><span>ปพ.5 · ' + esc(m.code) + ' ' + esc(m.subject) + '</span><span>ชั้น' + esc(m.gradeName || ('ป.' + m.level)) + '/' + esc(m.room) + ' · ปีการศึกษา ' + esc(m.year) + '</span><span>' + esc(/^โรงเรียน/.test(m.school || '') ? m.school : 'โรงเรียน' + (m.school || '')) + '</span></div>';
+  }
+  function page(orient, body) { return { o: orient, html: body }; }
+  function counts(list, f) { var o = {}; list.forEach(function (s) { var k = f(s); if (k != null && k !== '') o[k] = (o[k] || 0) + 1; }); return o; }
+  function sigBlock(img, name, pos) {
+    return '<div class="sig"><div class="ln">' + (img ? '<img src="' + img + '" alt="">' : '') + '</div>ลงชื่อ ..................................................<br>( ' + esc(name || '..................................................') + ' )<br>' + esc(pos || '') + '</div>';
+  }
+  function cover(d, ctx) {
+    var m = d.meta, st = d.students, br = (ctx.brand && ctx.brand()) || {};
+    var sex = counts(st, function (s) { return /หญิง|ญ/.test(s.prefix || s.sex || '') ? 'f' : 'm'; });
+    var G = ['4', '3.5', '3', '2.5', '2', '1.5', '1', '0'], gc = counts(st, function (s) { var r = s.result || {}; if (r.rms) return r.rms; if (r.grade == null || r.grade === '') return null; var g = parseFloat(r.grade); return isFinite(g) ? String(g) : String(r.grade); });
+    var tot = st.length || 1;
+    var cols = G.concat(['ร', 'มส']);
+    var gt = '<table><tr><th>ระดับผลการเรียน</th>' + cols.map(function (g) { return '<th>' + g + '</th>'; }).join('') + '<th>รวม</th></tr>' +
+      '<tr><td>จำนวน (คน)</td>' + cols.map(function (g) { return '<td>' + (gc[g] || 0) + '</td>'; }).join('') + '<td>' + st.length + '</td></tr>' +
+      '<tr><td>ร้อยละ</td>' + cols.map(function (g) { return '<td>' + ((gc[g] || 0) / tot * 100).toFixed(2) + '</td>'; }).join('') + '<td>100</td></tr></table>';
+    var L = ['ดีเยี่ยม', 'ดี', 'ผ่าน', 'ไม่ผ่าน'];
+    var ch = counts(st, function (s) { return s.characteristics && s.characteristics.text; }), rw = counts(st, function (s) { return s.rtw && s.rtw.text; });
+    var et = '<table style="margin-top:10px"><tr><th>ผลการประเมิน</th>' + L.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>' +
+      '<tr><td class="l">คุณลักษณะอันพึงประสงค์</td>' + L.map(function (x) { return '<td>' + (ch[x] || 0) + '</td>'; }).join('') + '</tr>' +
+      '<tr><td class="l">การอ่าน คิดวิเคราะห์ และเขียน</td>' + L.map(function (x) { return '<td>' + (rw[x] || 0) + '</td>'; }).join('') + '</tr></table>';
+    var dir = br.director || {}, dep = br.deputy || {};
+    var sig = function (nm) { return ctx.sig ? ctx.sig(nm) : null; };
+    var school = /^โรงเรียน/.test(m.school || '') ? m.school : 'โรงเรียน' + (m.school || '');
+    return page('p', '<div class="cv">' + (br.logo ? '<img src="' + br.logo + '" alt="">' : '') + '<h1>แบบบันทึกผลการพัฒนาคุณภาพผู้เรียนรายวิชา</h1><h2>(ปพ.5)</h2></div>' +
+      '<div class="cv-info">' +
+      '<div><b>' + esc(school) + '</b> ' + (m.district ? 'อำเภอ' + esc(m.district) + ' ' : '') + (m.province ? 'จังหวัด' + esc(m.province) : '') + '</div>' +
+      (m.office ? '<div>' + esc(m.office) + '</div>' : '') +
+      '<div>กลุ่มสาระการเรียนรู้ <b>' + esc(m.group || '-') + '</b></div>' +
+      '<div>รายวิชา<b>' + esc(m.type || '') + '</b> รหัสวิชา <b>' + esc(m.code) + '</b> ชื่อวิชา <b>' + esc(m.subject) + '</b></div>' +
+      '<div>ชั้น <b>' + esc(m.gradeName || ('ประถมศึกษาปีที่ ' + m.level)) + '/' + esc(m.room) + '</b> ปีการศึกษา <b>' + esc(m.year) + '</b></div>' +
+      '<div>เวลาเรียน <b>' + n(m.hours) + '</b> ชั่วโมง/ปี · <b>' + n(m.credit, 1) + '</b> หน่วยกิต · ครูผู้สอน <b>' + esc(m.teacher || '-') + '</b></div>' +
+      '<div>จำนวนนักเรียน <b>' + st.length + '</b> คน (ชาย ' + (sex.m || 0) + ' · หญิง ' + (sex.f || 0) + ')</div></div>' +
+      '<div style="font-weight:700;margin:6px 0 4px">สรุปผลการเรียน</div>' + gt + et +
+      '<div class="sigs">' + sigBlock(sig(m.teacher), m.teacher, 'ครูผู้สอน') + sigBlock(sig(dep.name), dep.name, dep.position || 'รองผู้อำนวยการโรงเรียน') +
+      '<div class="sig full"><div class="appr">☐ อนุมัติ &nbsp;&nbsp;&nbsp; ☐ ไม่อนุมัติ</div>' + sigBlock(dir.img || sig(dir.name), dir.name, dir.position || 'ผู้อำนวยการโรงเรียน').replace(/^<div class="sig">|<\/div>$/g, '') + '</div></div>');
+  }
+  function indicatorPages(d) {
+    var inds = d.indicators || [];
+    if (!inds.length) return [];
+    return chunk(inds, 16).map(function (part, i) {
+      return page('p', header(d) + '<div style="font-weight:700;margin-bottom:6px">รายการตัวชี้วัด' + (i ? ' (ต่อ)' : '') + ' · ทั้งหมด ' + inds.length + ' ตัวชี้วัด</div>' +
+        '<table><tr><th>ที่</th><th>ภาคเรียน</th><th>มาตรฐาน</th><th>ตัวชี้วัด</th><th class="l">รายละเอียด</th><th>คะแนนเต็ม</th></tr>' +
+        part.map(function (x) { return '<tr><td>' + x.idx + '</td><td>' + esc(x.term || '') + '</td><td>' + esc(x.std) + '</td><td style="white-space:nowrap">' + esc(x.code) + '</td><td class="l">' + esc(x.text) + '</td><td>' + n(x.max) + '</td></tr>'; }).join('') + '</table>');
+    });
+  }
+  function scorePages(d) {
+    var inds = d.indicators || [], st = d.students, groups = {};
+    inds.forEach(function (x) { var k = x.term || 0; (groups[k] = groups[k] || []).push(x); });
+    var out = [];
+    Object.keys(groups).sort().forEach(function (k) {
+      var cols = chunk(groups[k], 15);
+      cols.forEach(function (cs, ci) {
+        var last = ci === cols.length - 1, all = groups[k];
+        chunk(st, 30).forEach(function (rows, ri) {
+          var title = 'คะแนนเก็บตามตัวชี้วัด' + (+k ? ' ภาคเรียนที่ ' + k : '') + (cols.length > 1 ? ' (ส่วนที่ ' + (ci + 1) + '/' + cols.length + ')' : '') + (ri ? ' (ต่อ)' : '');
+          var maxSum = all.reduce(function (a, x) { return a + (x.max || 0); }, 0);
+          out.push(page('l', header(d) + '<div style="font-weight:700;margin-bottom:6px">' + title + '</div>' +
+            '<table><tr><th rowspan="2">เลขที่</th><th rowspan="2" class="l">ชื่อ - สกุล</th>' + cs.map(function (x) { return '<th>' + x.idx + '<div class="sm">' + esc(x.code) + '</div></th>'; }).join('') + (last ? '<th rowspan="2">รวม' + (+k ? '<br>ภาค ' + k : '') + '</th>' : '') + '</tr>' +
+            '<tr>' + cs.map(function (x) { return '<th class="sm">' + n(x.max) + '</th>'; }).join('') + '</tr>' +
+            rows.map(function (s) {
+              var sum = null;
+              if (last) all.forEach(function (x) { var v = s.scores && s.scores[x.idx]; if (typeof v === 'number') sum = (sum || 0) + v; });
+              return '<tr><td>' + esc(s.no) + '</td><td class="nm">' + esc(s.name) + '</td>' + cs.map(function (x) { var v = s.scores && s.scores[x.idx]; return '<td>' + n(v) + '</td>'; }).join('') +
+                (last ? '<td><b>' + n(sum) + '</b><span class="sm">/' + maxSum + '</span></td>' : '') + '</tr>';
+            }).join('') + '</table>'));
+        });
+      });
+    });
+    return out;
+  }
+  function summaryPages(d) {
+    var mx = d.maxima || {}, st = d.students;
+    return chunk(st, 30).map(function (rows, ri) {
+      return page('l', header(d) + '<div style="font-weight:700;margin-bottom:6px">สรุปผลการประเมินรายวิชา' + (ri ? ' (ต่อ)' : '') + '</div>' +
+        '<table><tr><th rowspan="2">เลขที่</th><th rowspan="2">เลขประจำตัว</th><th rowspan="2" class="l">ชื่อ - สกุล</th>' +
+        '<th>คะแนนตัวชี้วัด</th><th>คะแนนเก็บ</th><th>สอบปลายปี</th><th>รวม</th><th rowspan="2">ระดับ<br>ผลการเรียน</th>' +
+        '<th colspan="2">ตัวชี้วัด</th><th colspan="3">เวลาเรียน (%)</th><th rowspan="2">คุณลักษณะ<br>อันพึงประสงค์</th><th rowspan="2">อ่าน คิด<br>วิเคราะห์ เขียน</th></tr>' +
+        '<tr><th class="sm">' + n(mx.indTotal) + '</th><th class="sm">' + n(mx.collect) + '</th><th class="sm">' + n(mx.final) + '</th><th class="sm">' + n(mx.total) + '</th>' +
+        '<th class="sm">ผ่าน</th><th class="sm">ไม่ผ่าน</th><th class="sm">ภาค 1</th><th class="sm">ภาค 2</th><th class="sm">ทั้งปี</th></tr>' +
+        rows.map(function (s) {
+          var r = s.result || {}, a = s.attendance || {}, is = s.indSummary || {}, g = r.rms || r.grade;
+          var bad = g === '0' || g === 'ร' || g === 'มส';
+          return '<tr><td>' + esc(s.no) + '</td><td>' + esc(s.id) + '</td><td class="nm">' + esc(s.name) + '</td><td>' + n(r.indTotal) + '</td><td>' + n(r.collect) + '</td><td>' + n(r.final) + '</td><td><b>' + n(r.total) + '</b></td>' +
+            '<td' + (bad ? ' class="fail"' : '') + '><b>' + esc(g == null ? '' : g) + '</b></td><td>' + n(is.pass) + '</td><td>' + n(is.fail) + '</td>' +
+            '<td>' + n(a.t1 && a.t1.pct, 0) + '</td><td>' + n(a.t2 && a.t2.pct, 0) + '</td><td>' + n(a.year && a.year.pct, 0) + '</td>' +
+            '<td>' + esc(s.characteristics && s.characteristics.text) + '</td><td>' + esc(s.rtw && s.rtw.text) + '</td></tr>';
+        }).join('') + '</table>');
+    });
+  }
+  function pagesOf(rec, ctx) {
+    var d = rec.data;
+    if (window.PP5Model && PP5Model.fillPP5) { try { d = PP5Model.fillPP5(JSON.parse(JSON.stringify(d))); } catch (e) { d = rec.data; } }
+    return [cover(d, ctx)].concat(indicatorPages(d), scorePages(d), summaryPages(d));
+  }
+
+  // ---------- จับภาพทีละหน้า (ย่อให้พอดีกระดาษ) ----------
+  function stage() { var el = document.getElementById('p5Stage'); if (!el) { el = document.createElement('div'); el.id = 'p5Stage'; document.body.appendChild(el); } return el; }
+  function fit(pg, o) {
+    var f = pg.querySelector('.p5fit'), W = PX[o].w - PAD * 2, H = PX[o].h - PAD * 2 - 18, s = 1;
+    f.style.width = W + 'px'; f.style.transform = '';
+    for (var i = 0; i < 4; i++) {
+      var sw = Math.max(f.scrollWidth, W / s), sh = f.scrollHeight;
+      var ns = Math.min(1, W / sw * s, H / sh);
+      if (Math.abs(ns - s) < 0.005) break;
+      s = ns; f.style.width = (W / s) + 'px';
+      if (f.scrollHeight * s <= H && f.scrollWidth * s <= W + 1) break;
+    }
+    if (f.scrollHeight * s > H) s = H / f.scrollHeight;
+    if (s < 1) f.style.transform = 'scale(' + s.toFixed(4) + ')';
+    return s;
+  }
+  async function render(pages, pdf, first, onPage) {
+    injectCss();
+    var el = stage(), isFirst = first;
+    for (var i = 0; i < pages.length; i++) {
+      var p = pages[i], sz = PX[p.o];
+      el.innerHTML = '<div class="p5pg' + (useTH ? ' thsn' : '') + '" style="width:' + sz.w + 'px;height:' + sz.h + 'px"><div class="p5fit">' + p.html + '</div><div class="p5no">หน้า ' + (i + 1) + '/' + pages.length + '</div></div>';
+      var imgs = el.querySelectorAll('img');
+      await Promise.all(Array.prototype.map.call(imgs, function (im) { return im.complete ? 0 : new Promise(function (r) { im.onload = im.onerror = r; }); }));
+      fit(el.firstChild, p.o);
+      if (onPage) onPage(i, pages.length);
+      var cv = await window.html2canvas(el.firstChild, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true, width: sz.w, height: sz.h, windowWidth: sz.w });
+      var land = p.o === 'l';
+      if (!isFirst) pdf.addPage('a4', land ? 'landscape' : 'portrait');
+      isFirst = false;
+      pdf.addImage(cv.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, land ? 297 : 210, land ? 210 : 297);
+    }
+    el.innerHTML = '';
+  }
+  function fileSafe(s) { return String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim(); }
+  function nameOf(rec) { var m = rec.data.meta; return fileSafe('ปพ.5_' + (m.levelName || 'ป.' + m.level) + '-' + m.room + '_' + m.code + '_' + m.subject + '_ปี' + m.year); }
+  var busy = false, useTH = false;
+  async function run(recs, ctx, fileName) {
+    if (busy) return; busy = true;
+    var ld = window.PP5PinPad && PP5PinPad.loading ? PP5PinPad.loading('กำลังเตรียมสร้าง PDF ปพ.5...') : { set: function () {}, done: function () {} };
+    try {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      useTH = await loadTHSN(ctx.store);
+      await loadLibs();
+      var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }), first = true, total = 0;
+      for (var r = 0; r < recs.length; r++) {
+        var rec = recs[r], pages = pagesOf(rec, ctx), m = rec.data.meta;
+        await render(pages, pdf, first, function (i, nn) { ld.set('กำลังสร้าง PDF ' + (recs.length > 1 ? '(' + (r + 1) + '/' + recs.length + ') ' : '') + m.subject + ' · หน้า ' + (i + 1) + '/' + nn); });
+        first = false; total += pages.length;
+      }
+      var blob = pdf.output('blob');
+      if (ctx.save) ctx.save(blob, fileName + '.pdf');
+      if (ctx.toast) ctx.toast('สร้าง PDF ปพ.5 แล้ว ' + total + ' หน้า' + (recs.length > 1 ? ' (' + recs.length + ' วิชา)' : ''), 'ok');
+    } catch (e) {
+      console.error(e);
+      if (ctx.toast) ctx.toast('สร้าง PDF ไม่สำเร็จ: ' + (e && e.message ? e.message : e), 'err');
+    } finally { ld.done(); busy = false; }
+  }
+  // ---------- PDF รูปแบบไฟล์ Excel ต้นฉบับ (ทุกชีตตามหน้ากระดาษของไฟล์) ----------
+  function loadOne(list) {
+    list = [].concat(list);
+    return list.reduce(function (p, src) {
+      return p.catch(function () {
+        return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+      });
+    }, Promise.reject());
+  }
+  function colIdx(l) { var n = 0; for (var i = 0; i < l.length; i++) n = n * 26 + (l.charCodeAt(i) - 64); return n - 1; }
+  function attr(x, k) { var m = x.match(new RegExp('\\b' + k + '="([^"]*)"')); return m ? m[1] : null; }
+  // ชีตที่เป็นช่องกรอก: หน้าไหนไม่มีข้อมูลที่ครูกรอกเลย → ไม่ใส่ใน PDF (เร็วขึ้น)
+  var INPUT_SHEET = /^(บันทึกมาเรียน|คะแนนเก็บ|ประเมินคุณลักษณะ|ประเมินการ(อ่าน|คิด|เขียน)|ประเมินกิจกรรม)/;
+  async function sharedStrings(zip) {
+    var f = zip.file('xl/sharedStrings.xml'); if (!f) return [];
+    var x = await f.async('string');
+    return (x.match(/<si>[\s\S]*?<\/si>/g) || []).map(function (si) { return (si.match(/<t[^>]*>([^<]*)<\/t>/g) || []).map(function (t) { return t.replace(/<[^>]+>/g, ''); }).join(''); });
+  }
+  function filledCells(x, ss) {
+    var rows = {}, cells = [], re = /<c r="([A-Z]+)(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, m;
+    while ((m = re.exec(x))) {
+      var col = colIdx(m[1]), row = +m[2] - 1, inner = m[4] || '', vm = inner.match(/<v>([^<]*)<\/v>/), im = inner.match(/<t[^>]*>([^<]*)<\/t>/);
+      var val = vm ? vm[1] : im ? im[1] : '';
+      if (/t="s"/.test(m[3]) && vm) val = ss[+vm[1]] || '';
+      if (col === 0 && /^\d+$/.test(String(val).trim()) && +val >= 1 && +val <= 60) rows[row] = 1;   // แถวนักเรียน (คอลัมน์ "ที่")
+      if (col >= 3 && !/<f[ >\/]/.test(inner) && String(val).trim() !== '' && !/^(ส|อา|หยุด)$/.test(String(val).trim())) cells.push([row, col]);
+    }
+    return cells.filter(function (p) { return rows[p[0]]; });
+  }
+  // อ่านลำดับชีต การซ่อน ขนาดพื้นที่ แนวกระดาษ และตัวแบ่งหน้า จากไฟล์ .xlsm
+  async function layoutOf(zip) {
+    var ss = await sharedStrings(zip);
+    var wb = await zip.file('xl/workbook.xml').async('string'), rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    var rid = {}; (rels.match(/<Relationship [^>]*>/g) || []).forEach(function (r) { rid[attr(r, 'Id')] = attr(r, 'Target'); });
+    var out = [];
+    var sheets = wb.match(/<sheet [^>]*>/g) || [];
+    for (var i = 0; i < sheets.length; i++) {
+      var sh = sheets[i], name = attr(sh, 'name').replace(/&amp;/g, '&'), state = attr(sh, 'state');
+      if (state === 'hidden' || state === 'veryHidden' || /^(ตั้งค่า|สารบัญ|อ่านก่อน)/.test(name)) continue;
+      var t = (rid[attr(sh, 'r:id')] || '').replace(/^\/?xl\//, ''), f = zip.file('xl/' + t);
+      if (!f) continue;
+      var x = await f.async('string');
+      var dim = (x.match(/<dimension ref="([^"]+)"/) || [])[1] || '', m = dim.match(/:?([A-Z]+)(\d+)$/);
+      var ps = (x.match(/<pageSetup[^>]*>/) || [''])[0];
+      var brk = function (tag) { var b = (x.match(new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)</' + tag + '>')) || [])[1] || ''; return (b.match(/<brk [^>]*>/g) || []).map(function (q) { return +attr(q, 'id'); }).filter(function (v) { return v > 0; }); };
+      out.push({ name: name, rows: m ? +m[2] : 0, cols: m ? colIdx(m[1]) + 1 : 0, portrait: attr(ps, 'orientation') !== 'landscape', rowBrk: brk('rowBreaks'), colBrk: brk('colBreaks'),
+        filled: INPUT_SHEET.test(name) ? filledCells(x, ss) : null });
+    }
+    // หน้าปกขึ้นก่อน (เหมือนการพิมพ์เล่ม ปพ.5)
+    out.sort(function (a, b) { return (/^ปกหน้า/.test(b.name) ? 1 : 0) - (/^ปกหน้า/.test(a.name) ? 1 : 0); });
+    return out;
+  }
+  function segs(brks, n) { var cut = [0].concat(brks.filter(function (v) { return v < n; }).sort(function (a, b) { return a - b; })), o = []; for (var i = 0; i < cut.length; i++) { var e = i + 1 < cut.length ? cut[i + 1] : n; if (e > cut[i]) o.push([cut[i], e]); } return o; }
+  // ฟอนต์ TH SarabunPSK ไม่มีใน Google Sheets → ใช้ Sarabun (ฟอนต์เดียวกันจาก Google) ขนาดเทียบเท่า
+  async function fixFonts(zip) {
+    var f = zip.file('xl/styles.xml'); if (!f) return;
+    var x = await f.async('string');
+    x = x.replace(/<font>([\s\S]*?)<\/font>|<font ([^>]*)>([\s\S]*?)<\/font>/g, function (all) {
+      if (!/<name val="(TH Sarabun[^"]*|Angsana New|AngsanaUPC|TH Niramit AS)"/.test(all)) return all;
+      return all.replace(/<name val="[^"]*"/, '<name val="Sarabun"').replace(/<sz val="([\d.]+)"/, function (q, v) { return '<sz val="' + Math.max(6, Math.round(+v * 0.78 * 2) / 2) + '"'; });
+    });
+    zip.file('xl/styles.xml', x);
+  }
+  // เตรียมไฟล์ก่อนแปลง: (1) ลบปุ่ม/ไอคอนที่ Excel ตั้งไว้ "ไม่พิมพ์" (เช่น ปุ่มเครื่องมือมุมขวาบน)
+  //                     (2) ขยายความกว้างคอลัมน์ — Google Sheets แปลงความกว้างแคบกว่า Excel ทำให้ตารางดูบีบ
+  var COL_K = 1.25;
+  async function prepXlsx(zip) {
+    await fixFonts(zip);
+    var names = Object.keys(zip.files);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i], f = zip.file(n);
+      if (!f) continue;
+      if (/^xl\/drawings\/drawing\d+\.xml$/.test(n)) {
+        var d = await f.async('string');
+        var d2 = d.replace(/<xdr:(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b[\s\S]*?<\/xdr:\1>/g, function (a) { return /fPrintsWithSheet="0"/.test(a) ? '' : a; });
+        if (d2 !== d) zip.file(n, d2);
+      } else if (/^xl\/worksheets\/sheet\d+\.xml$/.test(n)) {
+        var x = await f.async('string');
+        x = x.replace(/(<col\b[^>]*\bwidth=")([\d.]+)"/g, function (q, a, w) { return a + (+w * COL_K).toFixed(3) + '"'; })
+          .replace(/(<sheetFormatPr\b[^>]*\bdefaultColWidth=")([\d.]+)"/, function (q, a, w) { return a + (+w * COL_K).toFixed(3) + '"'; });
+        zip.file(n, x);
+      }
+    }
+  }
+  // ฟอนต์ TH Sarabun New จาก Google Drive (ใช้กับ PDF สรุปย่อ)
+  var thsn = null;
+  function loadTHSN(store) {
+    if (thsn) return thsn;
+    if (!store || !store.fontTTF) return Promise.resolve(false);
+    // ใช้กฎ @font-face แบบ data URL (html2canvas คัดลอกหน้าไปวาดใหม่ — ฟอนต์ที่เพิ่มด้วย FontFace API จะไม่ติดไป ทำให้คำห่างกัน)
+    thsn = store.fontTTF().then(function (r) {
+      if (!r || !r.regular) return false;
+      var css = "@font-face{font-family:'THSarabunNew';src:url(data:font/ttf;base64," + r.regular + ") format('truetype');font-weight:400;font-style:normal}";
+      if (r.bold) css += "@font-face{font-family:'THSarabunNew';src:url(data:font/ttf;base64," + r.bold + ") format('truetype');font-weight:700;font-style:normal}";
+      var st = document.createElement('style'); st.id = 'p5-thsn'; st.textContent = css; document.head.appendChild(st);
+      return Promise.all([document.fonts.load('400 20px THSarabunNew', 'ก'), r.bold ? document.fonts.load('700 20px THSarabunNew', 'ก') : 0]).then(function () { return true; });
+    }).catch(function (e) { console.warn('font', e); thsn = null; return false; });
+    return thsn;
+  }
+  function b64u8(b) { return Uint8Array.from(atob(b), function (ch) { return ch.charCodeAt(0); }); }
+  function u8b64(u8) { var s = '', k = 0x8000; for (var i = 0; i < u8.length; i += k) s += String.fromCharCode.apply(null, u8.subarray(i, i + k)); return btoa(s); }
+  // ลายเซ็นข้อมูลของวิชา: ไม่เปลี่ยน = ใช้ PDF เดิมได้
+  function stampOf(rec) { return [rec.uploadedAt || '', (rec.data.students || []).length, JSON.stringify(rec.data.students.map(function (x) { return [x.no, x.id]; })).length, 'v3'].join('|'); }
+  async function oneExcelPdf(rec, ctx, ld, tag) {
+    var store = ctx.store, stamp = stampOf(rec), id = null;
+    if (store.xpdfCacheGet) {
+      ld.set(tag + 'กำลังตรวจหา PDF ที่สร้างไว้แล้ว...');
+      try { var c = await store.xpdfCacheGet(rec.key, stamp); if (c && c.b64) return { bytes: b64u8(c.b64), cached: true }; } catch (e) {}
+    }
+    ld.set(tag + 'กำลังเตรียมไฟล์ Excel ต้นฉบับ...');
+    var blob = await ctx.build(rec);
+    var zip = await window.JSZip.loadAsync(await blob.arrayBuffer());
+    var lay = await layoutOf(zip);
+    await prepXlsx(zip);
+    var up = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+    ld.set(tag + 'กำลังแปลงไฟล์บน Google Drive...');
+    var st = await store.xpdfStart(up, nameOf(rec) + '.xlsm');
+    id = st.id;
+    try {
+      var jobs = [];
+      lay.forEach(function (L) {
+        var g = st.sheets[L.name];
+        if (!g) return;
+        var R = segs(L.rowBrk, L.rows || g.rows), C = segs(L.colBrk, L.cols || g.cols), ranges = [];
+        C.forEach(function (c) { R.forEach(function (r) { ranges.push([r[0], c[0], r[1], c[1]]); }); });   // ลงก่อนแล้วไปขวา (แบบ Excel)
+        if (L.filled) ranges = ranges.filter(function (rg) { return L.filled.some(function (p) { return p[0] >= rg[0] && p[0] < rg[2] && p[1] >= rg[1] && p[1] < rg[3]; }); });   // หน้าที่ยังไม่ได้กรอก → ตัดออก
+        if (ranges.length) jobs.push({ gid: g.gid, ranges: ranges, portrait: L.portrait });
+      });
+      // ส่งเป็นชุด ๆ ละไม่เกิน ~12 หน้า (เซิร์ฟเวอร์ดึงพร้อมกันทีละหลายหน้า)
+      var groups = [], cur = [], n = 0, total = 0;
+      jobs.forEach(function (jb) { if (n + jb.ranges.length > 12 && cur.length) { groups.push(cur); cur = []; n = 0; } cur.push(jb); n += jb.ranges.length; total += jb.ranges.length; });
+      if (cur.length) groups.push(cur);
+      var doc = await window.PDFLib.PDFDocument.create(), done = 0;
+      for (var gi = 0; gi < groups.length; gi++) {
+        ld.set(tag + 'กำลังสร้าง PDF หน้า ' + (done + 1) + '–' + Math.min(total, done + groups[gi].reduce(function (a, jb) { return a + jb.ranges.length; }, 0)) + ' จาก ' + total);
+        var res = store.xpdfRun ? await store.xpdfRun(id, groups[gi]) : await Promise.all(groups[gi].map(function (jb) { return store.xpdfPart(id, jb.gid, jb.ranges, jb.portrait); }));
+        for (var a = 0; a < res.length; a++) for (var k = 0; k < res[a].length; k++) {
+          var src = await window.PDFLib.PDFDocument.load(b64u8(res[a][k]));
+          (await doc.copyPages(src, src.getPageIndices())).forEach(function (pg) { doc.addPage(pg); });
+          done++;
+        }
+      }
+      if (!doc.getPageCount()) throw new Error('ไม่มีหน้าที่พิมพ์ได้ในไฟล์นี้');
+      var bytes = await doc.save();
+      if (store.xpdfCachePut) store.xpdfCachePut(rec.key, stamp, new Blob([bytes], { type: 'application/pdf' }), nameOf(rec) + '_รูปแบบต้นฉบับ.pdf').catch(function () {});
+      return { bytes: bytes, cached: false };
+    } finally {
+      try { await store.xpdfEnd(id); } catch (e3) {}
+    }
+  }
+  async function excelPdf(recs, ctx, fileName) {
+    if (busy) return; busy = true;
+    recs = [].concat(recs);
+    var ld = window.PP5PinPad && PP5PinPad.loading ? PP5PinPad.loading('กำลังเตรียมไฟล์ Excel ต้นฉบับ...') : { set: function () {}, done: function () {} };
+    var t0 = Date.now();
+    try {
+      await loadLibs();
+      if (!window.PDFLib) await loadOne(window.PP5_PDFLIB || ['vendor/pdf-lib.min.js']);
+      var out = recs.length > 1 ? await window.PDFLib.PDFDocument.create() : null, single = null, nCache = 0;
+      for (var ri = 0; ri < recs.length; ri++) {
+        var tag = recs.length > 1 ? '(' + (ri + 1) + '/' + recs.length + ') ' + recs[ri].data.meta.subject + ' · ' : '';
+        var r = await oneExcelPdf(recs[ri], ctx, ld, tag);
+        if (r.cached) nCache++;
+        if (!out) { single = r.bytes; break; }
+        var src = await window.PDFLib.PDFDocument.load(r.bytes);
+        (await out.copyPages(src, src.getPageIndices())).forEach(function (pg) { out.addPage(pg); });
+      }
+      var bytes = single || await out.save();
+      var pages = single ? (await window.PDFLib.PDFDocument.load(single)).getPageCount() : out.getPageCount();
+      var name = (recs.length > 1 ? fileSafe(fileName || 'ปพ.5 ทุกวิชา') : nameOf(recs[0])) + '_รูปแบบต้นฉบับ.pdf';
+      var blob = new Blob([bytes], { type: 'application/pdf' });
+      // วิชาเดียว: สำเนาใน Drive เก็บไว้แล้วตอนสร้าง → ดาวน์โหลดอย่างเดียว
+      if (recs.length === 1 && ctx.download) ctx.download(blob, name); else if (ctx.save) ctx.save(blob, name);
+      if (ctx.toast) ctx.toast('PDF ปพ.5 รูปแบบต้นฉบับ ' + pages + ' หน้า · ' + Math.round((Date.now() - t0) / 1000) + ' วินาที' + (nCache ? ' (ใช้ไฟล์ที่สร้างไว้แล้ว ' + nCache + ' วิชา)' : ''), 'ok');
+    } catch (e) {
+      console.error(e);
+      var m = e && e.message ? e.message : String(e);
+      if (/NEED_DRIVE_API/.test(m)) m = 'ต้องเปิด "Drive API" ในโปรเจกต์ Apps Script ก่อน (เมนูซ้าย "บริการ" กด + เลือก Drive API แล้วกดเพิ่ม)';
+      if (ctx.toast) ctx.toast('สร้าง PDF รูปแบบต้นฉบับไม่สำเร็จ: ' + m, 'err');
+    } finally {
+      ld.done(); busy = false;
+    }
+  }
+
+  window.PP5Pdf = {
+    excel: excelPdf, layoutOf: layoutOf, segs: segs,
+    pagesOf: pagesOf, fit: fit, css: injectCss,
+    subject: function (rec, ctx) { return run([rec], ctx, nameOf(rec)); },
+    classBook: function (recs, ctx, name) { return run(recs, ctx, fileSafe(name || 'ปพ.5 ทุกวิชา')); }
+  };
+})();
+
+</script>
