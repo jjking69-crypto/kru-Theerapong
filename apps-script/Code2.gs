@@ -103,6 +103,16 @@ function api_fontTTF(pin) {
   }
   return { regular: get('THSarabunNew.ttf'), bold: get('THSarabunNew Bold.ttf') };
 }
+/** อ่าน Google Sheets ทั้งไฟล์เป็น .xlsx (base64) — ใช้นำเข้าคะแนนสอบทั้งโรงเรียน (ระบบโรงเรียน/แอดมิน) */
+function api_sheetXlsx(pin, id) {
+  noKru_(need_(pin));
+  id = String(id || '');
+  var m = id.match(/\/d\/([A-Za-z0-9_\-]{20,})/); if (m) id = m[1];
+  if (!/^[A-Za-z0-9_\-]{20,}$/.test(id)) throw new Error('ลิงก์ Google Sheets ไม่ถูกต้อง');
+  var r = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + id + '/export?format=xlsx', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('เปิดไฟล์ไม่ได้ (รหัส ' + r.getResponseCode() + ') — ตรวจว่าบัญชีที่ติดตั้งระบบเปิดไฟล์นี้ได้');
+  return Utilities.base64Encode(r.getContent());
+}
 function api_xpdfEnd(pin, id) {
   checkPin_(pin);
   if (cache_().get('xpdf:' + id)) { trashById_(id); cache_().remove('xpdf:' + id); }

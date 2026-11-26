@@ -311,18 +311,213 @@
     else if (roster.url) window.open(roster.url, '_blank', 'noopener');
   }
   function renderRosterBar() {
-    if (DB !== LocalDB && !canManage()) { var rb0 = $('rosterBar'); if (rb0) { rb0.innerHTML = ''; rb0.hidden = true; } return; }   // ครู: ดูทะเบียนได้ที่เมนู "ทะเบียนรายชื่อ"
+    var exBtn = canImport() ? '<button class="btn" data-rb="exam" title="ใส่คะแนนสอบลงช่องปลายภาคของ ปพ.5 ทุกห้อง ทุกวิชา จากไฟล์ Google Sheets / Excel">📥 นำเข้าคะแนนสอบ</button>' : '';
+    if (DB !== LocalDB && !canManage()) {   // ครู: ดูทะเบียนได้ที่เมนู "ทะเบียนรายชื่อ" · ระบบโรงเรียน: มีปุ่มนำเข้าคะแนนสอบ
+      var rb0 = $('rosterBar'); if (!rb0) return;
+      if (exBtn) { rb0.hidden = false; rb0.innerHTML = '<div class="card roster-bar ex-bar"><span>📥 นำเข้าคะแนนสอบ (ปลายภาค) ปพ.5 ทั้งโรงเรียนจากไฟล์เดียว</span><div class="rb-a">' + exBtn + '</div></div>'; }
+      else { rb0.innerHTML = ''; rb0.hidden = true; }
+      return;
+    }
     var el = $('rosterBar');
     if (!el) return;
     el.hidden = false;
     if (!roster || !roster.data) {
-      el.innerHTML = '<div class="card roster-bar empty"><span>📋 ยังไม่มีทะเบียนรายชื่อนักเรียน' + (canManage() ? '' : ' (แอดมินอัปโหลดได้ที่ระบบแอดมิน)') + '</span>' + (canManage() ? '<button class="btn pri" data-rb="up">อัปโหลดไฟล์รายชื่อ (.docx)</button>' : '') + '</div>';
+      el.innerHTML = '<div class="card roster-bar empty"><span>📋 ยังไม่มีทะเบียนรายชื่อนักเรียน' + (canManage() ? '' : ' (แอดมินอัปโหลดได้ที่ระบบแอดมิน)') + '</span>' + (canManage() ? '<button class="btn pri" data-rb="up">อัปโหลดไฟล์รายชื่อ (.docx)</button>' : '') + exBtn + '</div>';
       return;
     }
     var d = roster.data, dt = d.date ? d.date.display : (d.dateText || 'ไม่ระบุวันที่');
     el.innerHTML = '<div class="card roster-bar"><span class="rb-ic" aria-hidden="true"><i>✓</i>📄</span><div class="rb-t"><b>รายชื่อนักเรียนปีการศึกษา ' + esc(d.year || '') + ' อัปเดตตามข้อมูลวันที่ ' + esc(dt) + '</b>' +
       '<span>' + d.classes.length + ' ห้อง · ' + d.total + ' คน · ไฟล์ ' + esc(roster.fileName || '') + (d.warnings.length ? ' · <span class="badge warn">ข้อควรตรวจ ' + d.warnings.length + '</span>' : '') + '</span></div>' +
-      '<div class="rb-a"><button class="btn" data-rb="view">ดูรายชื่อ</button><button class="btn" data-rb="dl">⬇ ดาวน์โหลดไฟล์</button>' + (canManage() ? '<button class="btn pri" data-rb="up">อัปโหลดรายชื่อใหม่</button>' : '') + '</div></div>';
+      '<div class="rb-a"><button class="btn" data-rb="view">ดูรายชื่อ</button><button class="btn" data-rb="dl">⬇ ดาวน์โหลดไฟล์</button>' + exBtn + (canManage() ? '<button class="btn pri" data-rb="up">อัปโหลดรายชื่อใหม่</button>' : '') + '</div></div>';
+  }
+
+  // ---------- นำเข้าคะแนนสอบ (ช่อง "ปลายภาค" ของ ปพ.5) ทั้งโรงเรียน จากไฟล์ Google Sheets / Excel ----------
+  // ไฟล์: แผ่นละห้อง (ชื่อแผ่น 11 = ป.1/1, 62 = ป.6/2) · หัวตารางมี "ชื่อ" และชื่อวิชา (ตามด้วยคะแนนเต็มได้)
+  // จับคู่นักเรียนด้วยชื่อ-สกุล (ไม่สนคำนำหน้า/ช่องว่าง) · ชื่อไม่ตรงแต่เลขประจำตัวตรงและชื่อหรือสกุลตรง → ใช้ได้ · ไม่พบชื่อในระบบ = ข้าม
+  var EXAM_SUBJ = [[/ทุจริต/, 'cor'], [/ประวัติ/, 'his'], [/สังคม/, 'soc'], [/ภาษาไทย|^\s*ไทย/, 'th'], [/คณิต/, 'ma'], [/วิทย/, 'sci'], [/สุขศึกษา|พลศึกษา/, 'pe'], [/ศิลป/, 'art'], [/การงาน/, 'work'], [/อังกฤษ/, 'eng']];
+  function canImport() { return DB === LocalDB || DB.role === 'admin' || DB.role === 'teacher'; }
+  function exNk(s) { return String(s == null ? '' : s).replace(/[\s​ ]+/g, '').replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|น\.ส\.|นาง)/, ''); }
+  function exParts(s) { var t = String(s == null ? '' : s).replace(/[​ ]/g, ' ').trim().replace(/^(เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|นาย|นางสาว|น\.ส\.|นาง)\s*/, '').split(/\s+/); return { first: t[0] || '', last: t.slice(1).join('') }; }
+  function parseExamBook(wb) {
+    var out = [];
+    wb.SheetNames.forEach(function (sn) {
+      var dg = sn.replace(/\D/g, '');
+      if (!/^[1-6]\d{1,2}$/.test(dg)) return;
+      var level = +dg[0], room = +dg.slice(1);
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: null });
+      var hr = -1, nameC = -1, idC = -1;
+      for (var r = 0; r < Math.min(rows.length, 12) && hr < 0; r++) {
+        (rows[r] || []).forEach(function (v, c) { if (nameC < 0 && /ชื่อ/.test(String(v || ''))) { nameC = c; hr = r; } });
+      }
+      if (hr < 0) return;
+      var subjects = [];
+      rows[hr].forEach(function (v, c) {
+        var t = String(v == null ? '' : v); if (c === nameC) return;
+        if (/เลขประจำตัว|^\s*(เลข)?ที่\s*$/.test(t)) { if (/ประจำตัว/.test(t)) idC = c; return; }
+        var hit = EXAM_SUBJ.filter(function (x) { return x[0].test(t); })[0];
+        if (!hit || subjects.some(function (x) { return x.slot === hit[1]; })) return;
+        var mx = t.match(/(\d+(?:\.\d+)?)\s*$/);
+        subjects.push({ slot: hit[1], label: t.replace(/\s*\d+(?:\.\d+)?\s*$/, '').replace(/\s+/g, ' ').trim(), max: mx ? +mx[1] : null, col: c });
+      });
+      var list = [];
+      for (var i = hr + 1; i < rows.length; i++) {
+        var row = rows[i] || [], nm = row[nameC];
+        if (nm == null || !String(nm).trim() || /ชื่อ/.test(String(nm)) && /สกุล/.test(String(nm))) continue;
+        var vals = {};
+        subjects.forEach(function (sb) { var v = row[sb.col]; if (v === '' || v == null) return; var n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, '')); if (isFinite(n)) vals[sb.slot] = n; });
+        list.push({ id: idC >= 0 && row[idC] != null ? String(row[idC]).replace(/\.0+$/, '').replace(/\s+/g, '') : '', name: String(nm).replace(/\s+/g, ' ').trim(), vals: vals });
+      }
+      if (subjects.length && list.length) out.push({ sheet: sn, level: level, room: room, subjects: subjects, rows: list });
+    });
+    return out;
+  }
+  function examCtx(cls) {
+    return Object.assign(ctxFor(cls), {
+      coreSlot: function (slot) { return CORE.filter(function (c) { return c.slot === slot; })[0] || null; },
+      libSync: libSync,
+      masterRoster: function () { var c = rosterClass(cls); return c ? { students: c.students, teachers: c.teachers } : null; }
+    });
+  }
+  function exMatch(stu, rows) {
+    var used = {}, pairs = stu.map(function () { return null; });
+    stu.forEach(function (s, i) { var n = exNk(s.name || PP5Model.fullName(s)); if (!n) return; for (var k = 0; k < rows.length; k++) if (!used[k] && exNk(rows[k].name) === n) { pairs[i] = k; used[k] = 1; return; } });
+    stu.forEach(function (s, i) {
+      if (pairs[i] != null || !s.id) return;
+      for (var k = 0; k < rows.length; k++) {
+        if (used[k] || !rows[k].id || String(rows[k].id) !== String(s.id).replace(/\s+/g, '')) continue;
+        var a = exParts(rows[k].name), f = exNk(s.first), l = exNk(s.last);
+        if ((f && f === a.first) || (l && l === a.last)) { pairs[i] = k; used[k] = 1; s._exFuzzy = rows[k].name; }
+        return;
+      }
+    });
+    return { pairs: pairs, used: used };
+  }
+  async function planExam(book, year) {
+    var plan = [];
+    for (var b = 0; b < book.length; b++) {
+      var sh = book[b], cls = { year: year, level: sh.level, room: sh.room };
+      var need = recsOf(cls).filter(function (r) { return !r.data; });
+      if (need.length && DB.ensureData) await DB.ensureData(need);
+      var c = examCtx(cls);
+      for (var j = 0; j < sh.subjects.length; j++) {
+        var sb = sh.subjects[j], key = classKey(year, sh.level, sh.room) + '|' + sb.slot;
+        var rec = records.filter(function (r) { return r.key === key && r.data; })[0];
+        var item = { cls: cls, sheet: sh.sheet, slot: sb.slot, label: sb.label, max: sb.max, rec: rec || null, isNew: !rec, data: null, n: 0, over: [], fuzzy: [], missing: [], notFound: [], err: '' };
+        try {
+          var data;
+          if (rec) data = PP5Model.fillPP5(JSON.parse(JSON.stringify(rec.data)), false);
+          else {
+            data = PP5Editor.newPP5Data(c, sb.slot);
+            if (!data.indicators.length) {
+              var lib = await libFor(sh.level, sb.slot, sh.room);
+              if (lib) { ['code', 'subject', 'hours', 'credit', 'maxCollect', 'maxFinal'].forEach(function (k) { if (lib[k] != null && lib[k] !== '') data.meta[k] = lib[k]; }); data.indicators = lib.indicators; if (lib.standards && lib.standards.length) data.standards = lib.standards; data = PP5Model.fillPP5(data, true); }
+            }
+          }
+          if (!data.students.length) { item.err = 'ยังไม่มีรายชื่อนักเรียนของห้องนี้ (อัปโหลดทะเบียนรายชื่อก่อน)'; plan.push(item); continue; }
+          var mf = data.meta.maxFinal == null ? 30 : +data.meta.maxFinal, m = exMatch(data.students, sh.rows);
+          data.students.forEach(function (s, i) {
+            var k = m.pairs[i], fz = s._exFuzzy; delete s._exFuzzy;
+            if (k == null) { if (s.name || s.first) item.missing.push(s.name || PP5Model.fullName(s)); return; }
+            var v = sh.rows[k].vals[sb.slot];
+            if (v == null) { item.missing.push(s.name); return; }
+            var r = s.result = s.result || {};
+            r.final = v; r.total = null; r.grade = ''; r.pass = null;
+            item.n++;
+            if (v > mf) item.over.push(s.name + ' ' + v + '/' + mf);
+            if (fz) item.fuzzy.push(s.name + ' ← ' + fz);
+          });
+          sh.rows.forEach(function (row, k) { if (!m.used[k] && row.vals[sb.slot] != null) item.notFound.push(row.name); });
+          item.data = PP5Model.fillPP5(data, false);
+          item.mf = mf;
+        } catch (e) { console.error(e); item.err = e && e.message ? e.message : String(e); }
+        plan.push(item);
+      }
+    }
+    return plan;
+  }
+  function openExamImport() {
+    if (!canImport()) { toast('นำเข้าคะแนนได้ที่ระบบโรงเรียน/แอดมิน', 'info'); return; }
+    var year = state.year || curYear();
+    $('modalTitle').textContent = '📥 นำเข้าคะแนนสอบ (ปลายภาค) ปพ.5 ทั้งโรงเรียน';
+    $('modalBody').innerHTML = '<p class="sub">ใส่คะแนนลงช่อง <b>"ปลายภาค"</b> ของ ปพ.5 ทุกวิชา ทุกห้อง ปีการศึกษา <b>' + esc(year) + '</b> (เปลี่ยนปีได้ที่ตัวเลือกปีด้านบน)<br>' +
+      'ไฟล์: แผ่นละห้อง ชื่อแผ่น <b>11</b> = ป.1/1 … <b>62</b> = ป.6/2 · หัวตารางมีคอลัมน์ "ชื่อ – สกุล" และชื่อวิชา · จับคู่ด้วย<b>ชื่อ-สกุล</b> ใครไม่มีชื่อในระบบจะข้าม · วิชาที่ยังไม่มี ปพ.5 ระบบสร้างให้</p>' +
+      '<div class="ex-in">' + (DB.sheetXlsx ? '<label>ลิงก์ Google Sheets<input id="exUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..."></label><span class="ex-or">หรือ</span>' : '') +
+      '<label>ไฟล์ Excel (.xlsx)<input id="exFile" type="file" accept=".xlsx,.xls,.xlsm"></label></div>' +
+      '<div class="mn-acts"><span style="flex:1"></span><button type="button" class="btn" data-exact="close">ยกเลิก</button><button type="button" class="btn pri" data-exact="read">🔍 อ่านไฟล์และตรวจชื่อ</button></div><div id="exOut"></div>';
+    var plan = null;
+    $('modalBody').onchange = null;
+    $('modalBody').onclick = async function (e) {
+      var a = e.target.closest('[data-exact]'); if (!a) return;
+      var act = a.dataset.exact;
+      if (act === 'close') { $('modal').close(); return; }
+      if (act === 'read') {
+        var f = $('exFile').files[0], url = $('exUrl') ? $('exUrl').value.trim() : '';
+        if (!f && !url) { toast('ใส่ลิงก์ Google Sheets หรือเลือกไฟล์ Excel', 'err'); return; }
+        try {
+          setBusy('กำลังอ่านไฟล์...');
+          var bytes = f ? new Uint8Array(await f.arrayBuffer()) : await DB.sheetXlsx(url);
+          var book = parseExamBook(XLSX.read(bytes, { type: 'array' }));
+          if (!book.length) throw new Error('ไม่พบแผ่นงานห้องเรียน (ชื่อแผ่นควรเป็น 11, 12, … 62 และมีหัวตาราง "ชื่อ")');
+          setBusy('กำลังจับคู่รายชื่อ...');
+          plan = await planExam(book, year);
+          $('exOut').innerHTML = examReport(plan);
+        } catch (er) { console.error(er); toast('อ่านไฟล์ไม่สำเร็จ: ' + (er && er.message ? er.message : er), 'err'); }
+        finally { setBusy(''); }
+        return;
+      }
+      if (act === 'save' && plan) {
+        var todo = plan.filter(function (it) { return it.data && it.n; }), ok = 0, bad = [];
+        if (!todo.length) { toast('ไม่มีคะแนนที่จะบันทึก', 'info'); return; }
+        if (!confirm('บันทึกคะแนนปลายภาค ' + todo.length + ' วิชา (สร้างใหม่ ' + todo.filter(function (x) { return x.isNew; }).length + ') ?')) return;
+        for (var i = 0; i < todo.length; i++) {
+          var it = todo[i];
+          setBusy('กำลังบันทึก ' + (i + 1) + '/' + todo.length + ' · ป.' + it.cls.level + '/' + it.cls.room + ' ' + (it.data.meta.subject || it.label));
+          try { await saveEdited('pp5', it.data, it.rec ? it.rec.key : null); ok++; }
+          catch (er) { console.error(er); bad.push('ป.' + it.cls.level + '/' + it.cls.room + ' ' + it.label + ': ' + (er && er.message ? er.message : er)); }
+        }
+        setBusy('');
+        $('modal').close();
+        toast('บันทึกคะแนนปลายภาคแล้ว ' + ok + ' วิชา' + (bad.length ? ' · ไม่สำเร็จ ' + bad.length + ' (' + bad.slice(0, 3).join(' / ') + ')' : ''), bad.length ? 'err' : 'ok');
+        render();
+      }
+    };
+    $('modal').showModal();
+  }
+  function examReport(plan) {
+    var byCls = {}, order = [];
+    plan.forEach(function (it) { var k = it.cls.level + '/' + it.cls.room; if (!byCls[k]) { byCls[k] = []; order.push(k); } byCls[k].push(it); });
+    var slots = CORE.map(function (c) { return c.slot; }).filter(function (sl) { return plan.some(function (it) { return it.slot === sl; }); });
+    var tot = plan.reduce(function (a, it) { return a + it.n; }, 0), nNew = plan.filter(function (it) { return it.isNew && it.n; }).length;
+    var head = '<tr><th class="l">ห้อง</th>' + slots.map(function (sl) { return '<th>' + esc(SHORT[sl] || sl) + '</th>'; }).join('') + '</tr>';
+    var body = order.map(function (k) {
+      return '<tr><th class="l">ป.' + k + '</th>' + slots.map(function (sl) {
+        var it = byCls[k].filter(function (x) { return x.slot === sl; })[0];
+        if (!it) return '<td class="ex-na">–</td>';
+        if (it.err) return '<td class="ex-bad" title="' + esc(it.err) + '">⚠️</td>';
+        var warn = it.missing.length || it.over.length || it.fuzzy.length;
+        return '<td class="' + (warn ? 'ex-warn' : 'ex-ok') + '" title="' + esc((it.isNew ? 'สร้าง ปพ.5 ใหม่ · ' : '') + 'ใส่คะแนน ' + it.n + ' คน' + (it.missing.length ? ' · ไม่มีคะแนน ' + it.missing.length + ' คน' : '')) + '">' + (it.isNew ? '<i>ใหม่</i>' : '') + it.n + (it.missing.length ? '<small>/' + (it.n + it.missing.length) + '</small>' : '') + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    var notes = [];
+    plan.forEach(function (it) {
+      var w = 'ป.' + it.cls.level + '/' + it.cls.room + ' ' + it.label;
+      if (it.err) notes.push('<li class="bad"><b>' + esc(w) + '</b>: ' + esc(it.err) + '</li>');
+      if (it.over.length) notes.push('<li class="bad"><b>' + esc(w) + '</b> เกินคะแนนเต็ม: ' + esc(it.over.join(', ')) + '</li>');
+      if (it.fuzzy.length) notes.push('<li><b>' + esc(w) + '</b> ชื่อสะกดต่าง (จับคู่ด้วยเลขประจำตัว): ' + esc(it.fuzzy.join(', ')) + '</li>');
+    });
+    // ชื่อในไฟล์ที่ไม่พบในระบบ (นับครั้งเดียวต่อห้อง) และนักเรียนในระบบที่ไม่มีคะแนน
+    order.forEach(function (k) {
+      var nf = {}, ms = {};
+      byCls[k].forEach(function (it) { it.notFound.forEach(function (n) { nf[n] = 1; }); it.missing.forEach(function (n) { ms[n] = 1; }); });
+      var a = Object.keys(nf), b = Object.keys(ms);
+      if (a.length) notes.push('<li><b>ป.' + k + '</b> ชื่อในไฟล์ที่ไม่พบในระบบ (ข้าม) ' + a.length + ' คน: ' + esc(a.join(', ')) + '</li>');
+      if (b.length) notes.push('<li><b>ป.' + k + '</b> นักเรียนในระบบที่ไม่มีคะแนนในไฟล์ ' + b.length + ' คน: ' + esc(b.join(', ')) + '</li>');
+    });
+    return '<h3 class="ex-h">ผลการตรวจ: ใส่คะแนนได้ ' + tot + ' ช่อง · ' + plan.filter(function (it) { return it.n; }).length + ' วิชา' + (nNew ? ' (สร้าง ปพ.5 ใหม่ ' + nNew + ' วิชา)' : '') + '</h3>' +
+      '<p class="sub">ตัวเลข = จำนวนนักเรียนที่ใส่คะแนน · <span class="ex-k ex-ok">เขียว</span> ครบ · <span class="ex-k ex-warn">เหลือง</span> มีคนที่ไม่มีคะแนน/ชื่อสะกดต่าง · <i>ใหม่</i> = สร้าง ปพ.5 ให้ · ยังไม่บันทึกจนกว่าจะกดปุ่มด้านล่าง</p>' +
+      '<div class="tbl-wrap mn-wrap"><table class="mn-tbl ex-tbl"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' +
+      (notes.length ? '<details class="ex-notes"' + (notes.length < 12 ? ' open' : '') + '><summary>รายละเอียดที่ควรตรวจ (' + notes.length + ')</summary><ul>' + notes.join('') + '</ul></details>' : '<p class="ok">✓ ชื่อตรงกันทุกคน</p>') +
+      '<div class="mn-acts"><span style="flex:1"></span><button type="button" class="btn" data-exact="close">ยกเลิก</button><button type="button" class="btn pri" data-exact="save">💾 บันทึกคะแนนทั้งหมด</button></div>';
   }
 
   // ---------- เลือกข้อมูลของห้องปัจจุบัน ----------
@@ -1555,6 +1750,7 @@
     if (!b) return;
     if (b.dataset.rb === 'up') $('fileRoster').click();
     else if (b.dataset.rb === 'dl') downloadRoster();
+    else if (b.dataset.rb === 'exam') openExamImport();
     else if (b.dataset.rb === 'view' && leaveEditor()) { state.tab = 'roster'; render(); }
   });
   $('fileOne').addEventListener('change', function (e) {

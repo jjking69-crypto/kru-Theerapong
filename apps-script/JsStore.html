@@ -207,6 +207,7 @@
     xpdfCacheGet: function (key, stamp) { return call('api_xpdfCacheGet', [key, stamp]); },
     xpdfCachePut: async function (key, stamp, blob, name) { return call('api_xpdfCachePut', [key, stamp, await blobToB64(blob), name]); },
     fontTTF: function () { return call('api_fontTTF'); },
+    sheetXlsx: function (id) { return call('api_sheetXlsx', [id]).then(function (b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }); },
     saveOutput: async function (blob, name) {
       if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');
       return call('api_saveOutput', [name, await blobToB64(blob), blob.type || 'application/pdf']);

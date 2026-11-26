@@ -71,15 +71,9 @@
     }, 600);
   }
   window.addEventListener('beforeunload', function (e) { if (ed && ed.dirty) { draftSave(); e.preventDefault(); e.returnValue = ''; } });
-  function open(opt, c) {
-    ctx = c;
-    var cls = c.classInfo(), data, oldKey = null;
-    if (opt.key) {
-      var rec = c.findRecord(opt.key);
-      if (!rec || !rec.data) { c.toast('ไม่พบข้อมูลที่จะแก้ไข', 'err'); return; }
-      data = clone(rec.data); oldKey = rec.key;
-      if (opt.kind === 'pp5') data = M().fillPP5(data, false); else data = M().fillPP6(data, false);
-    } else if (opt.kind === 'pp5') {
+  // ปพ.5 ใหม่ของห้อง/วิชา (รายชื่อจากทะเบียน · ตัวชี้วัดจากคลัง) — ใช้ทั้งตอนกรอกในระบบและนำเข้าคะแนนสอบ
+  function newPP5Data(c, slot) {
+    var cls = c.classInfo(), data, opt = { slot: slot };
       var tt = window.PP5Teachers ? PP5Teachers.forClass(cls.level, cls.room, opt.slot) : [];
       var base = { year: cls.year, level: cls.level, room: cls.room, school: window.PP5Teachers ? PP5Teachers.SCHOOL : schoolOf(c), teacher: tt[0] || teacherOf(c), students: rosterFromClass(c) };
       var core = c.coreSlot(opt.slot);
@@ -97,6 +91,18 @@
         var other = PP5Library.keys().filter(function (k) { return k.split('|')[1] === opt.slot; })[0];
         if (other) data.standards = PP5Library.get(other.split('|')[0], opt.slot).standards;
       }
+    return data;
+  }
+  function open(opt, c) {
+    ctx = c;
+    var cls = c.classInfo(), data, oldKey = null;
+    if (opt.key) {
+      var rec = c.findRecord(opt.key);
+      if (!rec || !rec.data) { c.toast('ไม่พบข้อมูลที่จะแก้ไข', 'err'); return; }
+      data = clone(rec.data); oldKey = rec.key;
+      if (opt.kind === 'pp5') data = M().fillPP5(data, false); else data = M().fillPP6(data, false);
+    } else if (opt.kind === 'pp5') {
+      data = newPP5Data(c, opt.slot);
     } else {
       var hr = teacherOf(c);
       if (window.PP5Teachers) hr = PP5Teachers.fullName(hr);
@@ -705,7 +711,7 @@
   }
 
   window.PP5Editor = {
-    open: open, close: close, render: render,
+    open: open, close: close, render: render, newPP5Data: newPP5Data,
     active: function () { return !!ed; },
     drafts: draftList, dropDraft: draftDel,
     kind: function () { return ed ? ed.kind : null; },
