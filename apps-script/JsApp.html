@@ -1537,6 +1537,7 @@
       if (!part.length) return next();
       DB.ensureData(part).then(function () {
         if (!state.level && state.tab === 'subjects' && isKru() && !(window.PP5Editor && PP5Editor.active())) renderMine();   // อัปเดตป้ายครบ/ไม่ครบในภาพรวม
+        renderSide();   // ตัวนับ กรอกครบ/ทั้งหมด ในเมนูซ้าย
         setTimeout(next, 300);
       }, function () {});
     })();
@@ -1657,7 +1658,7 @@
         lastLv = it.level; return;
       }
       var info = slotInfo(it.slot, null), rec = records.filter(function (r) { return r.year === yr && r.level === it.level && r.room === it.room && r.slot === it.slot; })[0];
-      if (rec) done++;
+      if (recComplete(rec, 'pp5')) done++;
       var name = rec && rec.data ? rec.data.meta.subject : info.name, d = rec && rec.uploadedAt ? new Date(rec.uploadedAt) : null;
       h += (lastLv !== it.level ? '<div class="mine-lv">ประถมศึกษาปีที่ ' + it.level + '</div>' : '') +
         '<div class="mine-it' + (rec ? ' has' : '') + '"><div class="slot-ic" style="background:' + info.color + '">' + esc(info.letter) + '</div>' +
@@ -1667,7 +1668,7 @@
     });
     h += '</div>';
     var nSub = items.filter(function (x) { return x.slot !== '+'; }).length;
-    $('banner').innerHTML = '<div class="bnr" style="--bc:#1d5bd8"><div class="bi">📘</div><div class="bm"><div class="bk">ปพ.5 · วิชาที่ฉันสอน</div><div class="bt">' + esc(String(DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, 'ครู')) + '</div><div class="bs">ปีการศึกษา ' + esc(yr) + ' · ทุกชั้นเรียงจาก ป.1 → ป.6 · กดปุ่มได้เลยไม่ต้องเลือกห้อง</div></div><div class="bx"><span class="bx-ic">📚</span><span>ทำแล้ว<b>' + done + '/' + nSub + '</b></span></div></div>';
+    $('banner').innerHTML = '<div class="bnr" style="--bc:#1d5bd8"><div class="bi">📘</div><div class="bm"><div class="bk">ปพ.5 · วิชาที่ฉันสอน</div><div class="bt">' + esc(String(DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, 'ครู')) + '</div><div class="bs">ปีการศึกษา ' + esc(yr) + ' · ทุกชั้นเรียงจาก ป.1 → ป.6 · กดปุ่มได้เลยไม่ต้องเลือกห้อง</div></div><div class="bx"><span class="bx-ic">📚</span><span>กรอกครบ<b>' + done + '/' + nSub + '</b></span></div></div>';
     var tdl = kruTodo();
     if (!mineLoading && DB.ensureData) {
       var needL = records.filter(function (r) { return r.year === yr && !r.data && (kruSubs().some(function (x) { var q = x.split('|'); return q[0] === r.level + '/' + r.room && q[1] === r.slot; }) || kruPP6().indexOf(r.level + '/' + r.room) >= 0); });
@@ -2154,15 +2155,31 @@
   // ---------- แถบเมนูด้านซ้าย ----------
   var SIDE_TABS = [['track', '📋', 'ติดตามงาน'], ['check', '🔎', 'ตรวจสอบ'], ['subjects', '📘', 'รายวิชา (ปพ.5)'], ['report', '📗', 'ใบรายงาน (ปพ.6)'], ['summary', '📊', 'สรุปทั้งห้อง'], ['student', '🧒', 'รายบุคคล'], ['publish', '📢', 'ประกาศผล'], ['roster', '👥', 'ทะเบียนรายชื่อ']];
   // ความคืบหน้าปีปัจจุบัน: [ทำแล้ว, ทั้งหมด] (จำนวนเล่ม ปพ.)
+  // ความคืบหน้า = จำนวนเล่มที่ "กรอกครบ" ตามภาคเรียนปัจจุบัน (ภาค 2 นับตั้งแต่ 1 ก.พ.) — มีไฟล์แต่ยังกรอกไม่ครบ = ยังไม่นับ
+  var cpMemo = {};
+  function recComplete(rec, kind) {
+    if (!rec || !rec.data) return false;
+    var k = rec.key + '|' + (rec.uploadedAt || 0) + '|' + (rec.virtual ? 'v' + (rec.data.students || []).length : '');
+    if (rec.virtual || cpMemo[k] == null) {
+      var v = PP5Model.completeness(kind, rec.data).missing === 0;
+      if (rec.virtual) return v;
+      cpMemo[k] = v;
+    }
+    return cpMemo[k];
+  }
+  function slotDone(l, r, sl) {
+    var yr = state.year;
+    if (sl === 'pp6') { var cls = { year: yr, level: l, room: r }; return recComplete(virtualPP6(cls, recsOf(cls)), 'pp6'); }
+    return recComplete(records.filter(function (x) { return x.year === yr && x.level === l && x.room === r && x.slot === sl; })[0], 'pp5');
+  }
   function progress(kind) {
-    var yr = state.year, has = function (l, r, sl) { return records.some(function (x) { return x.year === yr && x.level === l && x.room === r && x.slot === sl; }); };
     if (isKru()) {
-      if (kind === 'pp5') { var ss = kruSubs().filter(function (x) { return !/\|\+$/.test(x); }); return [ss.filter(function (x) { var p = x.split('|'), c = p[0].split('/'); return has(+c[0], +c[1], p[1]); }).length, ss.length]; }
-      var hs = kruPP6(); return [hs.filter(function (c) { var p = c.split('/'); return has(+p[0], +p[1], 'pp6'); }).length, hs.length];
+      if (kind === 'pp5') { var ss = kruSubs().filter(function (x) { return !/\|\+$/.test(x); }); return [ss.filter(function (x) { var p = x.split('|'), c = p[0].split('/'); return slotDone(+c[0], +c[1], p[1]); }).length, ss.length]; }
+      var hs = kruPP6(); return [hs.filter(function (c) { var p = c.split('/'); return slotDone(+p[0], +p[1], 'pp6'); }).length, hs.length];
     }
     var cls = allClasses(), core = CORE.map(function (c) { return c.slot; });
-    if (kind === 'pp5') { var n = 0; cls.forEach(function (c) { var p = c.split('/'); core.forEach(function (sl) { if (has(+p[0], +p[1], sl)) n++; }); }); return [n, cls.length * core.length]; }
-    return [cls.filter(function (c) { var p = c.split('/'); return has(+p[0], +p[1], 'pp6'); }).length, cls.length];
+    if (kind === 'pp5') { var n = 0; cls.forEach(function (c) { var p = c.split('/'); core.forEach(function (sl) { if (slotDone(+p[0], +p[1], sl)) n++; }); }); return [n, cls.length * core.length]; }
+    return [cls.filter(function (c) { var p = c.split('/'); return slotDone(+p[0], +p[1], 'pp6'); }).length, cls.length];
   }
   function renderSide() {
     var el = $('sideNav');
@@ -2179,7 +2196,7 @@
       SIDE_TABS.filter(function (t) { return t[0] !== 'track' || adm || dir; }).map(function (t) {
         var cnt = t[0] === 'subjects' ? progress('pp5') : t[0] === 'report' ? progress('pp6') : null;
         return '<button type="button" class="sn-i' + (state.tab === t[0] ? ' on' : '') + '" data-side="' + t[0] + '"><span>' + t[1] + '</span>' + t[2] +
-          (cnt && cnt[1] ? '<em class="sn-cnt' + (cnt[0] >= cnt[1] ? ' full' : '') + '" title="ทำแล้ว ' + cnt[0] + ' จาก ' + cnt[1] + ' เล่ม">' + cnt[0] + '/' + cnt[1] + '</em>' : '') + '</button>';
+          (cnt && cnt[1] ? '<em class="sn-cnt' + (cnt[0] >= cnt[1] ? ' full' : '') + '" title="กรอกครบ (ภาคเรียนปัจจุบัน) ' + cnt[0] + ' จาก ' + cnt[1] + ' เล่ม">' + cnt[0] + '/' + cnt[1] + '</em>' : '') + '</button>';
       }).join('') +
       (kru ? '<button type="button" class="sn-i" data-kru="mine"><span>⚙️</span>วิชาที่ฉันสอน</button>' : '') +
       (DB === LocalDB ? '' : '<div class="sn-sec">สลับระบบ</div>' +
