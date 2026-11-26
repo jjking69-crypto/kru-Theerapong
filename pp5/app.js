@@ -625,7 +625,14 @@
       hb.onclick = openHelp; document.body.appendChild(hb);
     }
     // ทัวร์แนะนำครั้งแรก (เฉพาะระบบออนไลน์ ไม่รบกวนตอนเปิดหน้าต่างอื่นอยู่)
-    if (DB === LocalDB || touring || ($('modal') && $('modal').open) || document.querySelector('.pinpad')) return;
+    if (touring || ($('modal') && $('modal').open) || document.querySelector('.pinpad')) return;
+    // กรอกครบทุกวิชาของภาคนี้ + ยังไม่ได้บันทึกไฟล์ลงเครื่อง → เตือน (ครั้งเดียวต่อการเข้าใช้)
+    if (isKru() && state.tab === 'subjects' && !state.level && !(window.PP5Editor && PP5Editor.active())) {
+      var tl = kruTodo(), alld = tl.length && tl.every(function (it) { return it.state === 'ok'; });
+      var shown = false; try { shown = !!sessionStorage.getItem(backupKey() + ':shown'); } catch (e) {}
+      if (alld && !backupInfo().at && !shown) { try { sessionStorage.setItem(backupKey() + ':shown', '1'); } catch (e) {} openBackup(true); return; }
+    }
+    if (DB === LocalDB) return;
     startTour(tourKey(), false);
   }
 
@@ -1601,9 +1608,13 @@
       return '<li class="td-' + it.state + '"><span class="td-ic">' + (it.state === 'new' ? '🆕' : '❗') + '</span><span class="td-t"><b>ป.' + esc(it.cls) + ' ' + esc(it.name) + '</b><small>' + t + '</small></span>' +
         '<button class="btn pri" data-todo="' + esc(it.kind + '|' + it.cls + '|' + it.slot) + '">' + (it.state === 'new' ? '✏️ เริ่มกรอก' : '➡ ไปกรอกต่อ') + '</button></li>';
     }).join('');
-    return '<div class="card todo-card' + (todo.length ? '' : ' all-ok') + '"><div class="td-h"><h3>' + (todo.length ? '📝 งานที่ต้องทำ (' + todo.length + ')' : '🎉 กรอกครบทุกวิชาแล้ว') + '</h3>' +
+    var allDone = !todo.length && !loading && list.length, bk = allDone ? backupInfo() : null;
+    var bkHtml = !allDone ? '' : bk.at
+      ? '<div class="bk-note ok">✓ บันทึกไฟล์ลงเครื่องแล้วเมื่อ ' + esc(fmtWhen(bk.at)) + ' <button class="btn" data-todo="backup">⬇ ดาวน์โหลดอีกครั้ง</button></div>'
+      : '<div class="bk-note">💾 <b>กรุณาบันทึกไฟล์จากระบบลงเครื่องของท่าน</b> เพื่อป้องกันการสูญหาย <button class="btn pri" data-todo="backup">⬇ บันทึกไฟล์ลงเครื่อง</button></div>';
+    return '<div class="card todo-card' + (todo.length ? '' : ' all-ok') + '"><div class="td-h"><h3>' + (todo.length ? '📝 งานที่ต้องทำ (' + todo.length + ')' : '🎉 กรอกครบทุกวิชาของภาค ' + PP5Model.activeTerm(state.year) + ' แล้ว') + '</h3>' +
       '<span class="sub">เสร็จแล้ว ' + ok + '/' + list.length + (loading ? ' · กำลังโหลดข้อมูล…' : '') + '</span><button class="btn" data-todo="check">📋 ตรวจความพร้อมก่อนส่ง</button></div>' +
-      (todo.length ? '<ul class="td-list">' + li + '</ul>' + (todo.length > 8 ? '<p class="sub">และอีก ' + (todo.length - 8) + ' รายการ · กด "ตรวจความพร้อมก่อนส่ง" เพื่อดูทั้งหมด</p>' : '') : '') + '</div>';
+      (todo.length ? '<ul class="td-list">' + li + '</ul>' + (todo.length > 8 ? '<p class="sub">และอีก ' + (todo.length - 8) + ' รายการ · กด "ตรวจความพร้อมก่อนส่ง" เพื่อดูทั้งหมด</p>' : '') : '') + bkHtml + '</div>';
   }
   async function openTodo(key) {
     var p = key.split('|'), kind = p[0], c = p[1].split('/'), slot = p[2];
@@ -1638,6 +1649,52 @@
       w.document.write('<!doctype html><meta charset="utf-8"><title>ตรวจความพร้อมก่อนส่ง</title><style>body{font-family:Sarabun,"TH Sarabun New",sans-serif;padding:24px;font-size:16px}h2{margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #999;padding:6px 8px;text-align:left}th{background:#eee}.rd-ok td:nth-child(3){color:#15803d}.rd-miss td:nth-child(3),.rd-new td:nth-child(3){color:#b91c1c}</style>' +
         '<h2>ตรวจความพร้อมก่อนส่ง ปพ.5 / ปพ.6</h2><div>' + esc(who) + ' · ปีการศึกษา ' + esc(state.year) + ' · ' + esc(when) + ' · พร้อมส่ง ' + ok + '/' + list.length + '</div>' + tbl + '<script>setTimeout(function(){print()},300)<\/script>');
       w.document.close();
+    };
+    $('modal').showModal();
+  }
+  // ---------- กรอกครบทุกวิชาของภาคแล้ว → เตือนให้บันทึกไฟล์ลงเครื่อง (กันข้อมูลสูญหาย) ----------
+  function backupKey() { return 'pp5-backup:' + String(DB.me && DB.me.name || DB.role || '') + ':' + state.year + ':t' + PP5Model.activeTerm(state.year); }
+  function backupInfo() { var at = 0; try { at = +localStorage.getItem(backupKey()) || 0; } catch (e) {} return { at: at }; }
+  async function fileOf(it) {
+    var rec = it.rec, d = rec.data, name;
+    if (DB.getFile && !rec.virtual) { var f = await DB.getFile(rec.key); if (f && f.bytes) return { name: f.name, blob: new Blob([f.bytes]) }; }
+    if (rec.blob && !rec.virtual) return { name: rec.fileName, blob: rec.blob };
+    var built = await buildFile(it.kind, d);
+    name = fileNameFor(it.kind, d.meta, built.ext);
+    return { name: name, blob: built.blob };
+  }
+  function openBackup(auto) {
+    var list = kruTodo().filter(function (it) { return it.rec && it.rec.data; }), term = PP5Model.activeTerm(state.year);
+    $('modalTitle').textContent = '💾 บันทึกไฟล์ลงเครื่องของท่าน';
+    $('modalBody').innerHTML = (auto ? '<div class="bk-hero">🎉 <b>กรอกครบทุกวิชาของภาค ' + term + ' แล้ว</b></div>' : '') +
+      '<p class="sub" style="font-size:15.5px"><b>กรุณาบันทึกไฟล์จากระบบลงเครื่องคอมพิวเตอร์หรือมือถือของท่าน เพื่อป้องกันการสูญหาย</b><br>ไฟล์เป็น Excel รูปแบบต้นฉบับ (เปิดด้วย Excel หรือ Google Sheets ได้) · แนะนำเก็บไว้อีกที่ เช่น แฟลชไดรฟ์ หรือ Google Drive ของท่านเอง</p>' +
+      '<div class="bk-list">' + list.map(function (it, i) { return '<div class="vh-it"><div><b>ป.' + esc(it.cls) + ' ' + esc(it.name) + '</b><span>' + (it.kind === 'pp6' ? 'ปพ.6' : 'ปพ.5') + '</span></div><button class="btn" data-bk="' + i + '">⬇ ไฟล์นี้</button></div>'; }).join('') + '</div>' +
+      '<div class="mn-acts"><button class="btn" data-bk="later">ไว้ทีหลัง</button><span style="flex:1"></span><button class="btn pri" data-bk="all">⬇ ดาวน์โหลดทั้งหมด (ไฟล์ ZIP ' + list.length + ' ไฟล์)</button></div>';
+    function mark() { try { localStorage.setItem(backupKey(), String(Date.now())); } catch (e) {} }
+    $('modalBody').onchange = null;
+    $('modalBody').onclick = async function (e) {
+      var b = e.target.closest('[data-bk]'); if (!b) return;
+      var v = b.dataset.bk;
+      if (v === 'later') { $('modal').close(); toast('อย่าลืมบันทึกไฟล์ลงเครื่องนะครับ (ปุ่มอยู่ในกล่องงานที่ต้องทำ)', 'info'); return; }
+      try {
+        if (v === 'all') {
+          if (!window.JSZip) throw new Error('โหลดตัวสร้างไฟล์ ZIP ไม่สำเร็จ — ลองกดดาวน์โหลดทีละไฟล์');
+          var zip = new window.JSZip(), used = {};
+          for (var i = 0; i < list.length; i++) {
+            setBusy('กำลังเตรียมไฟล์ ' + (i + 1) + '/' + list.length + ' : ป.' + list[i].cls + ' ' + list[i].name);
+            var f = await fileOf(list[i]), nm = f.name; if (used[nm]) nm = nm.replace(/(\.\w+)$/, ' (' + (i + 1) + ')$1'); used[nm] = 1;
+            zip.file(nm, await f.blob.arrayBuffer());
+          }
+          setBusy('กำลังรวมไฟล์...');
+          var out = await zip.generateAsync({ type: 'blob' });
+          downloadBlob(out, 'สำรอง ปพ.5-ปพ.6 ' + String(DB.me && DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, 'ครู') + ' ปี' + state.year + ' ภาค' + term + '.zip');
+          mark(); $('modal').close(); toast('ดาวน์โหลดไฟล์สำรองแล้ว ' + list.length + ' ไฟล์ · เก็บไว้ในเครื่องของท่าน', 'ok'); render();
+        } else {
+          setBusy('กำลังเตรียมไฟล์...');
+          var g = await fileOf(list[+v]); downloadBlob(g.blob, g.name); b.textContent = '✓ ดาวน์โหลดแล้ว'; mark();
+        }
+      } catch (er) { console.error(er); toast('ดาวน์โหลดไม่สำเร็จ: ' + (er && er.message ? er.message : er), 'err'); }
+      finally { setBusy(''); }
     };
     $('modal').showModal();
   }
@@ -1678,7 +1735,7 @@
     view.onchange = null;
     view.onclick = async function (e) {
       var td = e.target.closest('[data-todo]');
-      if (td) { if (td.dataset.todo === 'check') openReadiness(); else openTodo(td.dataset.todo); return; }
+      if (td) { if (td.dataset.todo === 'check') openReadiness(); else if (td.dataset.todo === 'backup') openBackup(false); else openTodo(td.dataset.todo); return; }
       var b = e.target.closest('[data-mine]'); if (!b) return;
       var p = b.dataset.cls.split('/'), act = b.dataset.mine;
       state.level = +p[0]; state.room = +p[1]; state.student = null;
