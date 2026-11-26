@@ -146,7 +146,7 @@
     var p = c.split('/'), y = +(S.oldY || $('supOldY').value);
     try {
       localStorage.setItem('pp5-goto', JSON.stringify({ year: y, level: +p[0], room: +p[1], edit: true, section: 'roster', at: Date.now() }));
-      var ap = localStorage.getItem('pp5-admin-pin'); if (ap) localStorage.setItem('pp5-pin', ap);
+      var ap = sessionStorage.getItem('pp5-admin-pin'); if (ap) { sessionStorage.setItem('pp5-pin', ap); sessionStorage.setItem('pp5-want', 'admin'); }
     } catch (e) {}
     var base = window.PP5_HOME || '';
     if (base) window.open(base + '?page=admin', '_top'); else toast('ไม่พบลิงก์ระบบครู', 'err');

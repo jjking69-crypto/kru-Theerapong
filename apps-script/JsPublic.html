@@ -294,6 +294,13 @@
     function login(want) {
       var L = LOGIN[want] || LOGIN.teacher, n = info.pinLen && info.pinLen[want];
       var url = want === 'admin' ? (info.superUrl || '') : (info.adminUrl || '');
+      // ครูที่เคยเข้าแล้ว (ยังไม่กดออก) → เข้าได้เลย
+      var kp = ''; try { kp = want === 'kru' ? localStorage.getItem('pp5-kru-pin') || '' : ''; } catch (e) {}
+      if (kp && url) {
+        try { sessionStorage.setItem('pp5-pin', kp); sessionStorage.setItem('pp5-want', 'kru'); } catch (e) {}
+        if (window.PP5PinPad && PP5PinPad.loading) PP5PinPad.loading(L.load);
+        window.open(url, '_top'); return;
+      }
       if (!window.PP5PinPad) { if (url) window.open(url, '_top'); return; }
       PP5PinPad.ask({
         title: L.t, digits: n || 0,
@@ -311,7 +318,12 @@
         }
       }).then(function (p) {
         if (p == null) return;
-        try { localStorage.setItem(want === 'admin' ? 'pp5-admin-pin' : 'pp5-pin', p); } catch (e) {}
+        // ครู: จำรหัสไว้ในเครื่องจนกว่าจะกดออก · ระบบอื่น: จำเฉพาะแท็บนี้ (เข้าครั้งหน้าต้องกดรหัสใหม่)
+        try {
+          sessionStorage.setItem(want === 'admin' ? 'pp5-admin-pin' : 'pp5-pin', p);
+          if (want !== 'admin') sessionStorage.setItem('pp5-want', want);
+          if (want === 'kru') localStorage.setItem('pp5-kru-pin', p);
+        } catch (e) {}
         if (PP5PinPad.loading) PP5PinPad.loading(L.load);
         if (url) window.open(url, '_top');
       });

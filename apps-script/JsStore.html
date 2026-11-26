@@ -12,9 +12,27 @@
   ];
   function b64ToBytes(b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
 
-  var PIN_KEY = window.PP5_PIN_KEY || 'pp5-pin';
-  function getPin() { try { return localStorage.getItem(PIN_KEY) || ''; } catch (e) { return window.__pp5pin || ''; } }
-  function setPin(v) { window.__pp5pin = v; try { localStorage.setItem(PIN_KEY, v); } catch (e) { /* ใช้ค่าในหน่วยความจำ */ } }
+  // รหัสผ่าน: ครูรายบุคคล = จำไว้ในเครื่อง (localStorage) จนกว่าจะกดออก/เปลี่ยนคน
+  //          ระบบโรงเรียน / ผู้อำนวยการ / แอดมิน = จำเฉพาะแท็บนี้ (sessionStorage) และต้องกดรหัสทุกครั้งที่สลับเข้า
+  var PIN_KEY = window.PP5_PIN_KEY || 'pp5-pin', KRU_KEY = 'pp5-kru-pin', ADMIN_PAGE = !!window.PP5_NEED_ADMIN;
+  function sGet(k) { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function sSet(k, v) { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch (e) {} }
+  function lGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+  // รหัสแบบเก่าที่เคยจำไว้ถาวร (ทุกบทบาท) → ลบทิ้ง
+  try { localStorage.removeItem('pp5-pin'); localStorage.removeItem('pp5-admin-pin'); } catch (e) {}
+  function wantRole() { return ADMIN_PAGE ? 'admin' : sGet('pp5-want'); }
+  function getPin() {
+    if (window.__pp5pin != null) return window.__pp5pin;
+    var p = sGet(PIN_KEY), w = wantRole();
+    if (!p && !ADMIN_PAGE && (!w || w === 'kru')) p = lGet(KRU_KEY);   // ครู: ใช้รหัสที่จำไว้
+    return p;
+  }
+  function setPin(v, role) {
+    window.__pp5pin = v || null; sSet(PIN_KEY, v);
+    if (v && role === 'kru' && !ADMIN_PAGE) { lSet(KRU_KEY, v); sSet('pp5-want', 'kru'); }
+  }
+  var ROLE_TH = { kru: 'ครู', teacher: 'ระบบโรงเรียน', director: 'ผู้อำนวยการ', admin: 'แอดมิน' };
 
   function raw(fn, args) {
     return new Promise(function (res, rej) {
@@ -32,16 +50,21 @@
       google.script.run.withSuccessHandler(function (r) { pinLen = r || {}; res(pinLen); }).withFailureHandler(function () { res({}); }).api_pinInfo();
     });
   }
+  var gotRole = null;
   function askPin(msg) {
     if (asking) return asking;
     asking = getPinLen().then(function (pl) { return window.PP5PinPad.ask({
       digits: (window.PP5_NEED_ADMIN ? pl.admin : 0) || 0,   // หน้าครู: รหัสครู 4 หลัก / ระบบโรงเรียน 8 หลัก / ผอ. → กดแล้วกดตกลง
       home: window.PP5_HOME || '',
-      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : 'เข้าสู่ระบบ', sub: msg || 'ครู: เบอร์โทร 4 ตัวท้าย · ระบบโรงเรียน / ผู้อำนวยการ: รหัสของระบบ', length: 12, autoSubmit: false,
+      title: window.PP5_NEED_ADMIN ? 'เข้าสู่ระบบผู้ดูแล (แอดมิน)' : wantRole() ? 'เข้าสู่' + (wantRole() === 'kru' ? 'ระบบครู' : ROLE_TH[wantRole()] === 'ระบบโรงเรียน' ? 'ระบบโรงเรียน' : 'ระบบ' + ROLE_TH[wantRole()]) : 'เข้าสู่ระบบ',
+      sub: msg || (wantRole() === 'kru' ? 'กดรหัสครู (เบอร์โทร 4 ตัวท้าย)' : wantRole() && wantRole() !== 'admin' ? 'กดรหัส' + ROLE_TH[wantRole()] : 'ครู: เบอร์โทร 4 ตัวท้าย · ระบบโรงเรียน / ผู้อำนวยการ: รหัสของระบบ'), length: 12, autoSubmit: false,
       check: function (p) {
         return new Promise(function (res) {
           google.script.run.withSuccessHandler(function (r) {
-            if (r && r.role && window.PP5_NEED_ADMIN && r.role !== 'admin') return res('รหัสนี้เป็นรหัสครู ใช้เข้าระบบครูเท่านั้น');
+            if (r && r.role && window.PP5_NEED_ADMIN && r.role !== 'admin') return res('รหัสนี้ไม่ใช่รหัสผู้ดูแลระบบ');
+            var w = wantRole();
+            if (r && r.role && w && w !== r.role && !(w === 'teacher' && r.role === 'admin')) return res('รหัสนี้เป็นรหัส' + (ROLE_TH[r.role] || '') + ' ไม่ใช่รหัส' + ROLE_TH[w]);
+            if (r && r.role) gotRole = r.role;
             res(r && r.role ? true : (r && r.locked ? 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาที' : 'รหัสไม่ถูกต้อง'));
           })
             .withFailureHandler(function () { res('เชื่อมต่อไม่สำเร็จ ลองใหม่'); }).api_checkPin(p);
@@ -50,7 +73,7 @@
     }); }).then(function (p) {
       asking = null;
       if (p == null) throw new Error('ต้องใส่รหัสผ่านเพื่อเข้าใช้งาน');
-      setPin(p);
+      setPin(p, gotRole);
       var bl = document.getElementById('bootText'); if (bl) bl.textContent = 'รหัสถูกต้อง กำลังเปิดระบบ...';
       return p;
     });
@@ -66,10 +89,20 @@
       throw err;
     });
   }
-  // ออกจากระบบ → กลับหน้าแรกเสมอ · switchOnly = ล้างรหัสแล้วอยู่หน้าเดิม (เพื่อกดรหัสใหม่ตอนสลับระบบ)
+  // ออกจากระบบ → ล้างรหัสทั้งหมด (รวมรหัสครูที่จำไว้) แล้วกลับหน้าแรก
+  // switchOnly = ล้างรหัสของแท็บนี้แล้วโหลดใหม่ (กดรหัสใหม่)
   window.PP5_LOGOUT = function (switchOnly) {
-    setPin(''); try { localStorage.removeItem(PIN_KEY); } catch (e) {}
+    window.__pp5pin = null; sSet(PIN_KEY, ''); sSet('pp5-want', '');
+    if (!switchOnly) { lSet(KRU_KEY, ''); sSet('pp5-pin', ''); sSet('pp5-admin-pin', ''); }
     if (!switchOnly && window.PP5_HOME) { window.open(window.PP5_HOME, '_top'); return; }
+    location.reload();
+  };
+  // สลับระบบ: ครู = ใช้รหัสที่จำไว้ (ถ้ามี) · ระบบอื่น = ต้องกดรหัสใหม่ทุกครั้ง
+  window.PP5_SWITCH = function (want, adminUrl) {
+    window.__pp5pin = null;
+    sSet('pp5-pin', ''); sSet('pp5-admin-pin', '');
+    if (want === 'admin') { if (adminUrl) window.open(adminUrl, '_top'); return; }
+    sSet('pp5-want', want);
     location.reload();
   };
 

@@ -1906,9 +1906,9 @@
   function switchTo(want) {
     var base = window.PP5_HOME || (DB.publicUrl || '').replace(/\?.*$/, '');
     var now = DB.role === 'admin' ? 'admin' : DB.role === 'director' ? 'director' : DB.role === 'kru' ? 'kru' : 'teacher';
+    if (want === now && want !== 'admin') return false;
+    if (window.PP5_SWITCH) { PP5_SWITCH(want, base ? base + '?page=super' : ''); return true; }
     if (want === 'admin') { if (base) window.open(base + '?page=super', '_top'); return true; }
-    if (want === now) return false;
-    try { localStorage.removeItem('pp5-pin'); } catch (er) {}
     if (window.PP5_LOGOUT) PP5_LOGOUT(true); else location.reload();
     return true;
   }
