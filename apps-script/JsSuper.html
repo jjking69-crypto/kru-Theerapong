@@ -5,7 +5,7 @@
   var DB = window.PP5_STORE, $ = function (id) { return document.getElementById(id); };
   function esc(v) { return v == null ? '' : String(v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function toast(msg, kind) {
-    var t = document.createElement('div'); t.className = 'toast ' + (kind || 'info'); t.textContent = msg;
+    var t = document.createElement('div'); t.className = 'toast ' + (kind || 'info'); t.textContent = kind === 'err' && window.PP5Friendly ? PP5Friendly(msg) : msg;
     $('toasts').appendChild(t); setTimeout(function () { t.remove(); }, 4200);
   }
   function fmtDate(ms) { if (!ms) return '-'; var d = new Date(ms); return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); }
@@ -352,6 +352,24 @@
   function histCard() {
     return '<section class="card sup-card"><h2>📚 ผลการเรียนย้อนหลังรายคน / ผลจากโรงเรียนอื่น</h2><p class="sub">ค้นด้วยเลขประจำตัวนักเรียน เห็นทุกปีตั้งแต่ ป.1 ถึงปีปัจจุบัน · ปีที่นักเรียนยังไม่ได้เรียนที่นี่ (ย้ายมา) เพิ่มผลการเรียนจากโรงเรียนเดิมได้</p><div id="supHist"></div></section>';
   }
+  // ประวัติการแก้ไข: ใคร ทำอะไร กับวิชา/ห้องไหน เมื่อไร
+  function logCard() {
+    var L = S.log, q = (S.logQ || '').trim();
+    var SH = { th: 'ไทย', ma: 'คณิต', sci: 'วิทย์', soc: 'สังคม', his: 'ประวัติ', pe: 'สุขศึกษา', art: 'ศิลปะ', work: 'การงาน', eng: 'อังกฤษ', cor: 'ทุจริต', pp6: 'ปพ.6' };
+    var where = function (k) { if (!k) return ''; var p = k.split('|'); return 'ปี ' + p[0] + ' ป.' + p[1] + '/' + p[2] + ' ' + (SH[p[3]] || (p[3] || '').replace(/^x-[^-]*-/, '')); };
+    var rows = (L || []).map(function (x) { return { t: new Date(x.at).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }), by: x.by, what: x.what, w: where(x.key) }; })
+      .filter(function (r) { return !q || (r.by + ' ' + r.what + ' ' + r.w).indexOf(q) >= 0; });
+    return '<section class="card sup-card" id="supLog"><h2>🧾 ประวัติการแก้ไข</h2><p class="sub">ใครบันทึก อัปโหลด ลบ หรือย้อนกลับข้อมูลวิชาไหน เมื่อไร (เก็บ 1,500 รายการล่าสุด)</p>' +
+      (L ? '<div class="log-bar"><input id="supLogQ" type="search" placeholder="ค้นหา เช่น ชื่อครู, ป.4/1, คณิต" value="' + esc(q) + '"><button class="btn" id="supLogLoad">↻ โหลดใหม่</button></div>' +
+        (rows.length ? '<div class="tbl-wrap"><table class="log-tbl"><thead><tr><th>เวลา</th><th>ผู้ทำ</th><th>รายการ</th><th>วิชา/ห้อง</th></tr></thead><tbody>' +
+          rows.slice(0, 300).map(function (r) { return '<tr><td>' + esc(r.t) + '</td><td>' + esc(r.by) + '</td><td>' + esc(r.what) + '</td><td>' + esc(r.w) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<p class="sub">ไม่พบรายการ</p>')
+        : '<div class="slot-acts"><button class="btn pri" id="supLogLoad">ดูประวัติการแก้ไข</button></div>') + '</section>';
+  }
+  async function loadLog() {
+    if (!DB.log) return;
+    try { S.log = await DB.log(500); } catch (e) { toast(e.message, 'err'); return; }
+    render(); var c = $('supLog'); if (c) c.scrollIntoView({ block: 'start' });
+  }
   function pinCard() {
     return '<section class="card sup-card"><h2>🔑 รหัสเข้าใช้</h2><p class="sub">รหัสระบบโรงเรียน (แก้ได้ทุกชั้นทุกวิชา) รหัสผู้อำนวยการ และรหัสแอดมิน ตั้งไว้ใน Code.gs (TEACHER_PIN / DIRECTOR_PIN / ADMIN_PIN) · รหัสครูรายบุคคลตั้งที่การ์ด "ครูรายบุคคล" ด้านบน</p></section>';
   }
@@ -422,10 +440,11 @@
 
   function render() {
     $('sup').innerHTML = '<div class="bnr" style="--bc:#7f1d1d"><div class="bi">🛡</div><div><div class="bk">เฉพาะผู้ดูแลระบบหลัก</div><div class="bt">ระบบผู้ดูแล (แอดมิน)</div><div class="bs">แยกจากระบบครู · ครูไม่เห็นหน้านี้</div></div></div>' +
-      pubCard() + termsCard() + oldPP6Card() + '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + tplCard() + dataCard() + pinCard();
+      pubCard() + termsCard() + oldPP6Card() + '<div class="sup-grid">' + flagsCard() + rosterCard() + '</div>' + kruCard() + importCard() + libCard() + histCard() + driveCard() + yearCard() + brandCard() + overviewCard() + logCard() + tplCard() + dataCard() + pinCard();
     if (window.PP5History) PP5History.mount($('supHist'), { store: DB, toast: toast });
     var main = $('sup');
     main.oninput = function (e) {
+      if (e.target.id === 'supLogQ') { S.logQ = e.target.value; clearTimeout(S.logT); S.logT = setTimeout(function () { var pos = e.target.selectionStart; render(); var i = $('supLogQ'); if (i) { i.focus(); i.setSelectionRange(pos, pos); } }, 300); return; }
       if (e.target.id !== 'supFileQ') return;
       var q = e.target.value.trim().toLowerCase();
       Array.prototype.forEach.call(main.querySelectorAll('.sup-cls'), function (c) { c.hidden = q && c.dataset.q.indexOf(q) < 0; });
@@ -442,6 +461,7 @@
     main.onclick = function (e) {
       if (kruClick(e)) return;
       if (e.target.id === 'supTermSave') { saveTerms(); return; }
+      if (e.target.id === 'supLogLoad') { loadLog(); return; }
       var o6 = e.target.closest('[data-old6]'); if (o6) { openOld6(o6.dataset.old6); return; }
       var pc = e.target.closest('[data-pubc]');
       if (pc) {

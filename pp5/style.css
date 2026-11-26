@@ -863,3 +863,42 @@ td.g-sel input, td.g-sel select { background: transparent !important; }
 .ed-mode button.on { background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; border-color: #1d4ed8; box-shadow: 0 6px 16px -6px #1d4ed8; }
 .ed-mode button.on small { color: #e0e7ff; }
 .ed-mode button.on::after { content: "✓ ใช้อยู่"; font: 700 11px "Sarabun", sans-serif; background: #fff; color: #1d4ed8; border-radius: 999px; padding: 1px 8px; margin-top: 4px; }
+
+/* ฉบับก่อนหน้า */
+.vh-list { display: grid; gap: 8px; margin: 10px 0; }
+.vh-it { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line, #e2e8f0); border-radius: 12px; background: #fff; }
+.vh-it > div { flex: 1; display: grid; gap: 2px; } .vh-it span { font-size: 13.5px; color: #64748b; }
+.vh-it.cur { background: #eff6ff; border-color: #bfdbfe; } .vh-it em { font-style: normal; font-weight: 700; color: #1d4ed8; font-size: 13px; }
+.log-bar { display: flex; gap: 8px; margin: 8px 0; } .log-bar input { flex: 1; padding: 8px 10px; border: 1px solid var(--line, #cbd5e1); border-radius: 10px; font: inherit; }
+.log-tbl { width: 100%; border-collapse: collapse; font-size: 14px; } .log-tbl th, .log-tbl td { padding: 6px 8px; border-bottom: 1px solid #eef2f7; text-align: left; } .log-tbl td:first-child { white-space: nowrap; color: #64748b; }
+
+/* แถบความคืบหน้าในหน้ากรอก */
+.ed-prog { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff7ed; border: 1.5px solid #fed7aa; border-radius: 14px; padding: 10px 14px; margin: 0 0 12px; }
+.ed-prog.done { background: #f0fdf4; border-color: #bbf7d0; }
+.ed-prog .ep-t { display: grid; gap: 2px; flex: 1 1 260px; } .ed-prog .ep-t b { font-size: 16px; } .ed-prog .ep-t span { font-size: 13.5px; color: #64748b; }
+.ed-prog .ep-bar { flex: 1 1 160px; height: 12px; background: #fde7cf; border-radius: 99px; overflow: hidden; } .ed-prog.done .ep-bar { background: #dcfce7; }
+.ed-prog .ep-bar i { display: block; height: 100%; background: linear-gradient(90deg, #f59e0b, #22c55e); border-radius: 99px; }
+
+/* งานที่ต้องทำ */
+.todo-card { border: 2px solid #fdba74; background: #fffbeb; margin-bottom: 14px; }
+.todo-card.all-ok { border-color: #86efac; background: #f0fdf4; }
+.td-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .td-h h3 { margin: 0; font-size: 19px; } .td-h .sub { flex: 1; margin: 0; }
+.td-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.td-list li { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid #fde68a; border-radius: 12px; padding: 8px 12px; }
+.td-list li.td-new { border-color: #bfdbfe; }
+.td-ic { font-size: 20px; } .td-t { flex: 1; display: grid; } .td-t small { color: #64748b; font-size: 13.5px; }
+.rd-tbl { width: 100%; border-collapse: collapse; font-size: 14.5px; } .rd-tbl th, .rd-tbl td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; text-align: left; }
+.rd-tbl tr.rd-ok td:nth-child(3) { color: #15803d; font-weight: 700; } .rd-tbl tr.rd-miss td:nth-child(3), .rd-tbl tr.rd-new td:nth-child(3) { color: #b91c1c; font-weight: 700; }
+
+/* ❓ วิธีใช้ + ทัวร์แนะนำ */
+.help-fab { position: fixed; right: 18px; bottom: 18px; z-index: 8000; border: 0; border-radius: 999px; padding: 10px 16px; background: #f59e0b; color: #fff; font: 700 16px "Sarabun", sans-serif; box-shadow: 0 8px 20px -8px #b45309; cursor: pointer; }
+.help-fab:hover { background: #d97706; }
+body.editing .help-fab, .g-selbar ~ .help-fab { bottom: 18px; }
+.g-selbar { bottom: 74px !important; }
+.help-ol { margin: 6px 0 12px; padding-left: 22px; display: grid; gap: 10px; font-size: 16.5px; line-height: 1.55; }
+.tour-ov { position: fixed; inset: 0; z-index: 9500; }
+.tour-hole { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(15, 23, 42, .62); border: 3px solid #facc15; transition: all .25s; pointer-events: none; }
+.tour-tip { position: fixed; background: #fff; border-radius: 14px; padding: 14px 16px; box-shadow: 0 16px 40px -12px #0008; }
+.tour-tip p { margin: 0 0 10px; font-size: 16.5px; line-height: 1.5; }
+.tour-tip > div { display: flex; align-items: center; gap: 8px; } .tour-n { flex: 1; color: #64748b; font-size: 13px; }
+@media print { .help-fab, .tour-ov { display: none !important; } }

@@ -107,7 +107,7 @@
       if (window.PP5Teachers) hr = PP5Teachers.fullName(hr);
       data = M().newPP6({ year: cls.year, level: cls.level, room: cls.room, school: 'โรงเรียน' + (window.PP5Teachers ? PP5Teachers.SCHOOL : 'วัดทุ่งแฝก'), teacher: hr, students: rosterFromClass(c) });
     }
-    ed = { kind: opt.kind, data: data, oldKey: oldKey, section: 'info', dirty: false, intent: opt.intent || 'online', slot: opt.slot || null, cls: { year: cls.year, level: cls.level, room: cls.room } };
+    ed = { kind: opt.kind, data: data, oldKey: oldKey, section: opt.section || 'info', dirty: false, intent: opt.intent || 'online', slot: opt.slot || null, cls: { year: cls.year, level: cls.level, room: cls.room } };
     // มีข้อมูลที่กรอกค้างไว้ (ยังไม่บันทึก) ของวิชา/ห้องนี้ → กรอกต่อจากเดิม
     var dr = draftGet(targetOf(ed));
     if (dr && dr.data) {
@@ -141,7 +141,35 @@
   function recompute() {
     if (ed.kind === 'pp5') M().fillPP5(ed.data, true); else M().fillPP6(ed.data, true);
   }
-  function touch() { ed.dirty = true; var b = document.getElementById('edDirty'); if (b) b.hidden = false; draftSave(); }
+  function touch() { ed.dirty = true; ed.gen = (ed.gen || 0) + 1; var b = document.getElementById('edDirty'); if (b) b.hidden = false; draftSave(); scheduleAuto(); }
+  // ---------- บันทึกอัตโนมัติ: แก้แล้ว ~1.5 นาที ระบบบันทึกขึ้น Google Drive ให้เอง (ไม่ต้องกดบันทึก) ----------
+  var AUTO_MS = window.PP5_AUTO_MS || 90000, autoTimer = null, autoBusy = false;
+  function autoStatus(t) { var b = document.getElementById('edDraft'); if (b) { b.hidden = false; b.textContent = t; } }
+  function scheduleAuto() {
+    if (autoTimer || !ctx || !ctx.store || !ctx.store() || !ed || ed.intent === 'excel') return;
+    autoTimer = setTimeout(runAuto, AUTO_MS);
+  }
+  async function runAuto() {
+    autoTimer = null;
+    if (!ed || !ed.dirty || autoBusy) return;
+    var d = cleaned();
+    if (validate(d).length || overMax(d).length || !d.students.length) { autoStatus('⚠️ ยังบันทึกอัตโนมัติไม่ได้ (มีช่องที่ต้องแก้) · ข้อมูลจำไว้ในเครื่องแล้ว'); return; }
+    var mine = ed, gen = ed.gen;
+    autoBusy = true; autoStatus('☁️ กำลังบันทึกอัตโนมัติ...');
+    try {
+      var t0 = targetOf(mine);
+      var rec = await ctx.saveEdited(mine.kind, d, mine.oldKey, { auto: true });
+      mine.oldKey = rec.key;
+      if (mine.gen === gen) { mine.dirty = false; clearTimeout(draftTimer); draftDel(t0); draftDel(targetOf({ oldKey: rec.key })); }
+      if (ed === mine) {
+        var dd = document.getElementById('edDirty'); if (dd) dd.hidden = !mine.dirty;
+        autoStatus('☁️ บันทึกอัตโนมัติแล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (e) {
+      console.warn('autosave', e);
+      if (ed === mine) autoStatus('⚠️ บันทึกอัตโนมัติไม่สำเร็จ — ข้อมูลยังจำไว้ในเครื่อง กด "บันทึกในระบบ" อีกครั้ง');
+    } finally { autoBusy = false; if (ed && ed.dirty) scheduleAuto(); }
+  }
 
   // ---------- หน้าจอ ----------
   function render(view, c) {
@@ -160,6 +188,13 @@
       var miss = cp.bySec[s[0]] || 0;
       return '<button data-sec="' + s[0] + '" class="' + (ed.section === s[0] ? 'on' : '') + (miss ? ' miss' : '') + '"' + (miss ? ' title="ยังไม่ได้กรอก ' + miss + ' ช่อง"' : '') + '><i>' + (i + 1) + '</i>' + s[1] + (miss ? '<em class="st-miss">' + miss + '</em>' : '') + '</button>';
     }).join('') + '</nav>';
+    if (cp.total) {
+      var pct = Math.round((cp.total - cp.missing) / cp.total * 100);
+      var left = SECTIONS[ed.kind].filter(function (x) { return cp.bySec[x[0]]; }).map(function (x) { return x[1] + ' (' + cp.bySec[x[0]] + ')'; });
+      h += '<div class="ed-prog' + (pct >= 100 ? ' done' : '') + '"><div class="ep-t"><b>' + (pct >= 100 ? '✅ กรอกครบแล้ว' : 'กรอกแล้ว ' + pct + '%') + '</b>' +
+        (left.length ? '<span>เหลือ: ' + esc(left.join(' · ')) + '</span>' : '<span>ภาค ' + cp.term + (cp.term < 2 ? ' (ภาค 2 จะนับตั้งแต่ 1 ก.พ.)' : '') + '</span>') +
+        '</div><div class="ep-bar"><i style="width:' + pct + '%"></i></div>' + (left.length ? '<button class="btn pri" data-ed="gomiss">➡ ไปช่องที่ยังไม่กรอก</button>' : '') + '</div>';
+    }
     if (isDataSection()) {
       var md = edMode();
       h += '<div class="ed-mode" role="group" aria-label="รูปแบบการกรอก"><span>รูปแบบการกรอก</span>' +
@@ -231,6 +266,7 @@
   function isDataSection() { return ['info', 'roster', 'ind', 'subj'].indexOf(ed.section) < 0; }
   function grid(el, opt) {
     opt.onChange = opt.onChange || function () { recompute(); touch(); };
+    opt.onOver = function (c, v) { ctx.toast('⚠️ ' + (c.group ? c.group + ' · ' : '') + c.label + ': คะแนนเต็ม ' + c.max + ' แต่กรอก ' + v + ' — กรุณาแก้ (บันทึกไม่ได้จนกว่าจะแก้)', 'err'); };
     if (opt.rowLabel === studentLabel && window.PP5Quick && edMode() === 'quick') return new window.PP5Quick(el, opt);
     opt.onFill = function (n, v) { ctx.toast((v === '' ? 'ล้างแล้ว ' : 'ใส่ค่าแล้ว ') + n + ' ช่อง', 'ok'); };
     opt.onPaste = function (n) { ctx.toast('วางข้อมูลแล้ว ' + n + ' ช่อง', 'ok'); recompute(); touch(); grid(el, opt); };
@@ -297,6 +333,28 @@
     return res;
   }
   var ACTIONS = {
+    // ไปขั้นแรกที่ยังกรอกไม่ครบ แล้วเลือกช่องว่างช่องแรก
+    gomiss: function () {
+      var cp = M().completeness(ed.kind, ed.data), sec = SECTIONS[ed.kind].filter(function (x) { return cp.bySec[x[0]]; })[0];
+      if (!sec) { ctx.toast('กรอกครบแล้ว', 'ok'); return; }
+      ed.section = sec[0]; ctx.rerender();
+      setTimeout(function () {
+        var c = document.querySelector('#edBody td.g-req input, #edBody td.g-req select, #edBody .g-req input');
+        if (c) { c.scrollIntoView({ block: 'center', inline: 'center' }); try { c.focus({ preventScroll: true }); } catch (e) { c.focus(); } if (c.select) c.select(); }
+      }, 80);
+    },
+    // ตัวชี้วัด: ใส่คะแนนเต็มให้ทุกคน (เฉพาะช่องที่ยังว่าง) ของภาคที่เลือก แล้วค่อยแก้คนที่ไม่เต็ม
+    fullAll: function (b) {
+      var tm = +b.dataset.t, n = 0, inds = (ed.data.indicators || []).filter(function (i) { return (i.term || 1) === tm && i.max != null; });
+      if (!inds.length) { ctx.toast('ภาค ' + tm + ' ยังไม่มีตัวชี้วัด', 'info'); return; }
+      if (!confirm('ใส่คะแนนเต็มให้ทุกคน ในตัวชี้วัดภาค ' + tm + ' (' + inds.length + ' ตัว) เฉพาะช่องที่ยังว่าง?\nช่องที่กรอกไว้แล้วไม่เปลี่ยน · แล้วค่อยแก้เฉพาะคนที่ไม่ได้เต็ม')) return;
+      ed.data.students.forEach(function (st) {
+        if (!(st.first || st.name)) return;
+        inds.forEach(function (i) { var v = st.scores[i.idx]; if (v == null || v === '') { st.scores[i.idx] = i.max; n++; } });
+        if (st.result) st.result.collectManual = false;
+      });
+      recompute(); touch(); ctx.rerender(); ctx.toast('ใส่คะแนนเต็มแล้ว ' + n + ' ช่อง · แก้เฉพาะคนที่ไม่ได้เต็มได้เลย', 'ok');
+    },
     fillAll: function (b) {
       var v = b.dataset.v;
       if (!ed.fillApply || !confirm('ใส่ "' + v + '" ให้นักเรียนทุกคน ทุกข้อ? (ทับค่าเดิม)')) return;
@@ -424,12 +482,17 @@
       el.innerHTML = tools('ถ้ากรอกช่อง <b>"คะแนนเก็บ"</b> เอง ระบบจะเฉลี่ยลงตัวชี้วัดของ <select id="edDistTerm" class="ed-mini">' +
         [0, 1, 2].map(function (t) { return '<option value="' + t + '"' + ((ed.distTerm || 0) === t ? ' selected' : '') + '>' + (t ? 'ภาคเรียนที่ ' + t : 'อัตโนมัติ (ตอนนี้ภาค ' + termNow(d.meta.year) + ')') + '</option>'; }).join('') + '</select>' +
         '<span class="sub" style="margin:0">ภาค 2 เริ่ม 1 ก.พ. ทุกปี</span>') +
+        tools('<b>⚡ กรอกเร็ว:</b> <button class="btn" data-ed="fullAll" data-t="1">ทุกคนได้เต็ม · ภาค 1</button><button class="btn" data-ed="fullAll" data-t="2">ทุกคนได้เต็ม · ภาค 2</button>' +
+          '<span class="sub" style="margin:0">ใส่เต็มเฉพาะช่องที่ยังว่าง แล้วค่อยแก้คนที่ไม่เต็ม · หรือใช้ช่อง "⚡ เต็มทั้งแถว" ทีละคน</span>') +
         hint('<b>สูตรคะแนนเก็บ = คะแนนตัวชี้วัดที่ได้ ÷ คะแนนเต็มรวมทุกตัวชี้วัด (' + (mx.indTotal || 0) + ') × ' + mx.collect + '</b> (ปัดเศษ) เช่น ได้ 80 จาก ' + (mx.indTotal || 100) + ' = ' + Math.round(80 / (mx.indTotal || 100) * mx.collect) + '/' + mx.collect + ' · ไม่ใช่นำคะแนนมาบวกกันตรง ๆ<br>กรอกคะแนนแต่ละตัวชี้วัด (ระบบคิดคะแนนเก็บให้) <b>หรือ</b> กรอกคะแนนเก็บเองแล้วระบบเฉลี่ยลงตัวชี้วัดภาค ' + tn + ' · ลบช่องคะแนนเก็บ = กลับไปคิดจากตัวชี้วัด · ช่องสีแดง = เกินคะแนนเต็ม') + '<div class="ed-g"></div>';
       var dt = el.querySelector('#edDistTerm'); if (dt) dt.onchange = function () { ed.distTerm = +dt.value || 0; ctx.rerender(); };
-      var cols = inds.map(function (i) {
+      var full = { label: '⚡ เต็มทั้งแถว', sub: 'ทุกตัวชี้วัดของคนนี้', type: 'select', w: 104, rerender: true, cls: 'g-rowfill',
+        options: [{ v: '', t: '—' }, { v: 't1', t: 'เต็ม ภาค 1' }, { v: 't2', t: 'เต็ม ภาค 2' }, { v: 'all', t: 'เต็มทั้งปี' }], get: function () { return ''; },
+        set: function (st, v) { if (!v) return; inds.forEach(function (i) { var t = i.term || 1; if (i.max != null && (v === 'all' || v === 't' + t)) st.scores[i.idx] = i.max; }); if (st.result) st.result.collectManual = false; } };
+      var cols = [full].concat(inds.map(function (i) {
         return { label: i.code || ('#' + i.idx), sub: '/' + (i.max == null ? '?' : i.max), group: 'ภาคเรียนที่ ' + (i.term || 1), type: 'num', w: 54, max: i.max, min: 0, req: needT(i.term || 1),
           get: function (s) { return s.scores[i.idx]; }, set: function (s, v) { if (v == null) delete s.scores[i.idx]; else s.scores[i.idx] = v; if (s.result) s.result.collectManual = false; } };
-      });
+      }));
       cols.push({ label: 'ปลายภาค', sub: '/' + mx.final, group: 'สรุป', type: 'num', w: 64, max: mx.final, min: 0, req: needT(2), get: function (s) { return s.result.final; }, set: function (s, v) { s.result.final = v; } });
       cols.push({ label: 'ร/มส', group: 'สรุป', type: 'select', options: ['', 'ร', 'มส'], w: 56, get: function (s) { return s.result.rms; }, set: function (s, v) { s.result.rms = v; } });
       cols.push({ label: 'รวมตัวชี้วัด', sub: '/' + (mx.indTotal || 0), group: 'สรุป', type: 'ro', w: 64, get: function (s) { return s.result.indTotal; } });
@@ -677,9 +740,43 @@
     if (dup.length) errs.push('เลขประจำตัวซ้ำกัน: ' + dup.join(', '));
     return errs;
   }
+  // คะแนนที่เกินคะแนนเต็ม: [{ sec, who, what, v, max }]
+  function overMax(d) {
+    var out = [], nm = function (s) { return s.name || M().fullName(s); };
+    function chk(sec, s, what, v, max) { if (typeof v === 'number' && max != null && v > max) out.push({ sec: sec, who: nm(s), what: what, v: v, max: max }); }
+    if (ed.kind === 'pp5') {
+      var mx = d.maxima || {};
+      d.students.forEach(function (s) {
+        (d.indicators || []).forEach(function (i) { chk('scores', s, 'ตัวชี้วัด ' + (i.code || '#' + i.idx), (s.scores || {})[i.idx], i.max); });
+        var r = s.result || {};
+        chk('scores', s, 'ปลายภาค', r.final, mx.final);
+        chk('scores', s, 'คะแนนเก็บ', r.collect, mx.collect);
+        (d.characteristicItems || []).forEach(function (it) { chk('char', s, 'คุณลักษณะข้อ ' + it.no, ((s.characteristics || {}).items || {})[it.no], it.max); });
+      });
+    } else {
+      var tm = d.meta.termMax || 50;
+      d.students.forEach(function (s) {
+        ['t1', 't2'].forEach(function (t) {
+          (d.subjects || []).forEach(function (sub) {
+            var x = (s[t] || {})[sub.code]; if (!x) return;
+            var tot = (typeof x.collect === 'number' ? x.collect : 0) + (typeof x.exam === 'number' ? x.exam : 0);
+            chk(t, s, (sub.name || sub.code) + ' ภาค ' + t.slice(1) + ' (เก็บ+สอบ)', tot, tm);
+          });
+        });
+      });
+    }
+    return out;
+  }
+  function overMsg(o) { return o.who + ' · ' + o.what + ' ได้ ' + o.v + ' (เต็ม ' + o.max + ')'; }
   async function save() {
     var d = cleaned(), errs = validate(d);
     if (errs.length) { ctx.toast(errs.join(' · '), 'err'); return; }
+    var om = overMax(d);
+    if (om.length) {
+      ed.section = om[0].sec; ctx.rerender();
+      ctx.toast('❌ ยังบันทึกไม่ได้: มีคะแนนเกินคะแนนเต็ม ' + om.length + ' ช่อง (ช่องสีแดง) — ' + om.slice(0, 3).map(overMsg).join(' / ') + (om.length > 3 ? ' …' : '') + ' · แก้ให้ไม่เกินคะแนนเต็มแล้วกดบันทึกอีกครั้ง', 'err');
+      return;
+    }
     if (!d.students.length && !confirm('ยังไม่มีรายชื่อนักเรียน บันทึกต่อหรือไม่?')) return;
     var noId = d.students.filter(function (s) { return !s.id; }).length;
     try {

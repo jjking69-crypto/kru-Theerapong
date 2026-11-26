@@ -1,3 +1,52 @@
+// ===== ประวัติการแก้ไข (ใคร ทำอะไร เมื่อไร) — เก็บในไฟล์ log.json ในโฟลเดอร์หลัก (1,500 รายการล่าสุด) =====
+var LOG_MAX = 1500;
+function whoOf_(pin) {
+  var role = roleOf_(pin);
+  if (role === 'kru') { var k = kruOf_(pin); return 'ครู' + String(k && k.name || '').replace(/^(นาย|นางสาว|นาง|น\.ส\.)\s*/, ''); }
+  return { admin: 'แอดมิน', teacher: 'ระบบโรงเรียน', director: 'ผู้อำนวยการ' }[role] || '';
+}
+function fmtTh_(t) { if (!t) return '-'; var d = new Date(t); return d.getDate() + '/' + (d.getMonth() + 1) + '/' + (d.getFullYear() + 543) + ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+function logAct_(pin, what, key) {
+  try {
+    var id = props_().getProperty('LOG_ID'), list = [];
+    try { list = JSON.parse(readText_(id) || '[]'); } catch (e) { list = []; }
+    list.unshift({ at: Date.now(), by: whoOf_(pin), what: String(what || '').slice(0, 120), key: key || '' });
+    if (list.length > LOG_MAX) list.length = LOG_MAX;
+    props_().setProperty('LOG_ID', writeText_(rootFolder_(), 'ประวัติการแก้ไข (log).json', id, JSON.stringify(list)));
+  } catch (e) { /* บันทึกประวัติไม่ได้ ไม่ให้กระทบงานหลัก */ }
+}
+/** ประวัติการแก้ไขล่าสุด (ระบบโรงเรียน/แอดมิน/ผอ.) */
+function api_log(pin, n) {
+  var role = checkPin_(pin);
+  if (role === 'kru') throw new Error('ส่วนนี้ใช้ได้เฉพาะระบบโรงเรียน/แอดมิน');
+  var list = []; try { list = JSON.parse(readText_(props_().getProperty('LOG_ID')) || '[]'); } catch (e) { list = []; }
+  return list.slice(0, Math.min(+n || 300, LOG_MAX));
+}
+function api_delete(pin, key) {
+  need_(pin, 'allowDelete');
+  return withLock_(function () {
+    var e = getEntry_(key);
+    if (e) needScope_(pin, 'allowDelete', e.level, e.room, e.slot);
+    if (e) { trashById_(e.fileId); trashById_(e.dataId); (e.hist || []).forEach(function (x) { trashById_(x.fileId); trashById_(x.dataId); }); }
+    props_().deleteProperty(PROP_PREFIX + key);
+    logAct_(pin, 'ลบ', key);
+    return true;
+  });
+}
+function api_clear(pin) {
+  noKru_(need_(pin, 'allowDelete'));
+  return withLock_(function () {
+    allEntries_().forEach(function (e) { trashById_(e.fileId); trashById_(e.dataId); (e.hist || []).forEach(function (x) { trashById_(x.fileId); trashById_(x.dataId); }); props_().deleteProperty(PROP_PREFIX + e.key); });
+    logAct_(pin, 'ล้างข้อมูลทั้งหมด', '');
+    return true;
+  });
+}
+function api_saveOutput(pin, name, b64, mime) {
+  need_(pin, 'allowReport');
+  var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
+  return folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime || 'application/pdf', safeName_(name))).getUrl();
+}
+
 // ===== แม่แบบรูปแบบต้นฉบับ (ปพ.5 ครูหนุ่ม / ปพ.6 ของโรงเรียน) =====
 // คีย์แม่แบบ: "pp5|ชั้น|วิชา" / "pp6|ชั้น" (แม่แบบของห้อง/วิชานั้นจากโฟลเดอร์ต้นฉบับ) หรือ "pp5" / "pp6" (ใช้ได้ทุกชั้น)
 // ===== ปพ.5 เป็น PDF "รูปแบบไฟล์ Excel ต้นฉบับ" (แปลงไฟล์ผ่าน Google Sheets แล้วส่งออกทีละหน้า) =====
@@ -284,25 +333,4 @@ function api_getRoster(pin) {
   var info = JSON.parse(v);
   var t = readText_(info.dataId);
   return t ? { fileName: info.fileName, url: info.url, uploadedAt: info.uploadedAt, data: t } : null;
-}
-
-// ===== ประกาศผล =====
-function getCfg_() {
-  var v = props_().getProperty('PUBLIC_CFG');
-  var cfg = v ? JSON.parse(v) : {};
-  cfg.title = cfg.title || 'ประกาศผลการเรียน';
-  cfg.verify = cfg.verify || 'id';
-  cfg.years = cfg.years || {};
-  return cfg;
-}
-function pubFolder_() { return subFolder_(rootFolder_(), PUB_FOLDER_NAME); }
-function readIndex_() {
-  var t = readText_(props_().getProperty('PUB_INDEX_ID'));
-  var idx = t ? JSON.parse(t) : {};
-  idx.ids = idx.ids || {}; idx.classes = idx.classes || {};
-  return idx;
-}
-function saveIndex_(idx) {
-  var id = writeText_(pubFolder_(), 'index.json', props_().getProperty('PUB_INDEX_ID'), JSON.stringify(idx));
-  props_().setProperty('PUB_INDEX_ID', id);
 }

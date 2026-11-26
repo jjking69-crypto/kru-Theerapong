@@ -1,3 +1,24 @@
+// ===== ประกาศผล =====
+function getCfg_() {
+  var v = props_().getProperty('PUBLIC_CFG');
+  var cfg = v ? JSON.parse(v) : {};
+  cfg.title = cfg.title || 'ประกาศผลการเรียน';
+  cfg.verify = cfg.verify || 'id';
+  cfg.years = cfg.years || {};
+  return cfg;
+}
+function pubFolder_() { return subFolder_(rootFolder_(), PUB_FOLDER_NAME); }
+function readIndex_() {
+  var t = readText_(props_().getProperty('PUB_INDEX_ID'));
+  var idx = t ? JSON.parse(t) : {};
+  idx.ids = idx.ids || {}; idx.classes = idx.classes || {};
+  return idx;
+}
+function saveIndex_(idx) {
+  var id = writeText_(pubFolder_(), 'index.json', props_().getProperty('PUB_INDEX_ID'), JSON.stringify(idx));
+  props_().setProperty('PUB_INDEX_ID', id);
+}
+
 /** เผยแพร่ข้อมูลผลการเรียนของหนึ่งห้อง (pubJson = ผลรายคนที่หน้าเว็บรวบรวมแล้ว) */
 function api_publish(pin, key, pubJson) {
   if (checkPin_(pin) !== 'admin') throw new Error('การอัปเดตหน้าประกาศผลทำได้ที่ระบบแอดมิน');

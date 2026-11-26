@@ -244,15 +244,22 @@ function api_save(pin, entry, fileB64, dataJson) {
     }
     var dataFolder = subFolder_(rootFolder_(), DATA_FOLDER_NAME);
     var dataFile = dataFolder.createFile(safeName_(entry.key) + '.json', dataJson, 'application/json');
-    if (old) { if (file) trashById_(old.fileId); trashById_(old.dataId); }
+    // เก็บฉบับก่อนหน้าไว้ย้อนกลับได้ (5 ฉบับล่าสุด) แทนการทิ้งทันที
+    var hist = (old && old.hist) || [];
+    if (old && old.dataId) {
+      hist.unshift({ dataId: old.dataId, fileId: file ? old.fileId : null, fileName: old.fileName, origName: old.origName, at: old.uploadedAt || 0, by: old.by || '' });
+      while (hist.length > HIST_MAX) { var x = hist.pop(); trashById_(x.dataId); trashById_(x.fileId); }
+    } else if (old && file) trashById_(old.fileId);
     var saved = {
       key: entry.key, year: entry.year, level: entry.level, room: entry.room, stage: entry.stage || 'ป',
       slot: entry.slot, fileName: entry.fileName, origName: entry.origName, size: entry.size,
       uploadedAt: entry.uploadedAt || Date.now(), school: entry.school || '',
       fileId: file ? file.getId() : (old && old.fileId) || null, url: file ? file.getUrl() : (old && old.url) || null,
-      dataId: dataFile.getId(), settings: old && old.settings ? old.settings : (entry.settings || null)
+      dataId: dataFile.getId(), settings: old && old.settings ? old.settings : (entry.settings || null),
+      by: whoOf_(pin), hist: hist
     };
     putEntry_(saved);
+    logAct_(pin, entry.origName === '(กรอกในระบบ)' ? (entry.auto ? 'บันทึกอัตโนมัติ' : 'บันทึก (กรอกในระบบ)') : 'อัปโหลดไฟล์ ' + (entry.origName || ''), entry.key);
     return saved;
   });
 }
@@ -286,25 +293,32 @@ function api_saveSettings(pin, key, settingsJson) {
     return true;
   });
 }
-function api_delete(pin, key) {
-  need_(pin, 'allowDelete');
+// ===== ฉบับก่อนหน้า (ย้อนกลับได้) =====
+var HIST_MAX = 5;
+/** รายการฉบับก่อนหน้าของวิชา/ห้องนี้ (ใหม่ → เก่า) */
+function api_versions(pin, key) {
+  var e = getEntry_(key);
+  if (!e) return [];
+  needScope_(pin, null, e.level, e.room, e.slot);
+  return (e.hist || []).map(function (x, i) { return { i: i, at: x.at, by: x.by || '', origName: x.origName || '', fileName: x.fileName || '' }; });
+}
+/** ย้อนกลับไปใช้ฉบับที่ i · ฉบับปัจจุบันถูกเก็บไว้ในรายการแทน (ย้อนกลับมาได้อีก) */
+function api_restore(pin, key, i) {
+  need_(pin, 'allowEdit');
   return withLock_(function () {
     var e = getEntry_(key);
-    if (e) needScope_(pin, 'allowDelete', e.level, e.room, e.slot);
-    if (e) { trashById_(e.fileId); trashById_(e.dataId); }
-    props_().deleteProperty(PROP_PREFIX + key);
-    return true;
+    if (!e) throw new Error('ไม่พบข้อมูลนี้ในระบบ');
+    needScope_(pin, 'allowEdit', e.level, e.room, e.slot);
+    var hist = e.hist || [], v = hist[i];
+    if (!v) throw new Error('ไม่พบฉบับที่เลือก');
+    hist.splice(i, 1);
+    hist.unshift({ dataId: e.dataId, fileId: v.fileId ? e.fileId : null, fileName: e.fileName, origName: e.origName, at: e.uploadedAt || 0, by: e.by || '' });
+    e.dataId = v.dataId;
+    if (v.fileId) { e.fileId = v.fileId; try { e.url = DriveApp.getFileById(v.fileId).getUrl(); } catch (er) { /* ไม่เป็นไร */ } }
+    e.fileName = v.fileName || e.fileName; e.origName = v.origName || e.origName; e.uploadedAt = Date.now(); e.by = whoOf_(pin);
+    e.hist = hist.slice(0, HIST_MAX);
+    putEntry_(e);
+    logAct_(pin, 'ย้อนกลับฉบับก่อนหน้า (' + fmtTh_(v.at) + ')', key);
+    return e;
   });
-}
-function api_clear(pin) {
-  noKru_(need_(pin, 'allowDelete'));
-  return withLock_(function () {
-    allEntries_().forEach(function (e) { trashById_(e.fileId); trashById_(e.dataId); props_().deleteProperty(PROP_PREFIX + e.key); });
-    return true;
-  });
-}
-function api_saveOutput(pin, name, b64, mime) {
-  need_(pin, 'allowReport');
-  var folder = subFolder_(rootFolder_(), PDF_FOLDER_NAME);
-  return folder.createFile(Utilities.newBlob(Utilities.base64Decode(b64), mime || 'application/pdf', safeName_(name))).getUrl();
 }

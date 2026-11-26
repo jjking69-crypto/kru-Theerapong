@@ -112,7 +112,7 @@
   function toast(msg, kind) {
     var el = document.createElement('div');
     el.className = 'toast ' + (kind || 'info');
-    el.textContent = msg;
+    el.textContent = kind === 'err' && window.PP5Friendly ? PP5Friendly(msg) : msg;
     $('toasts').appendChild(el);
     setTimeout(function () { el.remove(); }, kind === 'err' ? 7000 : 4200);
   }
@@ -227,6 +227,17 @@
         var slot = isPP6 ? 'pp6' : slotOf(meta);
         var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
         var existed = records.filter(function (r) { return r.key === key; })[0];
+        // มีข้อมูลของวิชา/ห้องนี้อยู่แล้ว → ถามก่อนทับ (ข้อมูลเดิมย้อนกลับได้ที่ "ฉบับก่อนหน้า")
+        if (existed && !existed.virtual) {
+          setBusy('');
+          var whereX = isPP6 ? 'ป.' + meta.level + '/' + meta.room + ' ใบรายงาน ปพ.6' : 'ป.' + meta.level + '/' + meta.room + ' วิชา ' + (meta.subject || meta.code || '');
+          var how = existed.origName === '(กรอกในระบบ)' ? 'กรอกในระบบ' : 'อัปโหลดไฟล์ ' + (existed.origName || existed.fileName || '');
+          if (!confirm('⚠️ ' + whereX + ' มีข้อมูลอยู่แล้ว\n(' + how + ' เมื่อ ' + fmtWhen(existed.uploadedAt) + (existed.by ? ' โดย ' + existed.by : '') + ')\n\n' +
+            'ไฟล์ "' + f.name + '" จะแทนที่ข้อมูลเดิมทั้งหมด รวมคะแนนที่กรอกในระบบ\n\nกด ตกลง = อัปโหลดทับ' + (DB.versions ? ' (ย้อนกลับได้ที่ปุ่ม 🕘 ฉบับก่อนหน้า)' : '') + '\nกด ยกเลิก = ไม่อัปโหลดไฟล์นี้')) {
+            toast('ไม่ได้อัปโหลด ' + f.name + ' (ข้อมูลเดิมยังอยู่)', 'info'); continue;
+          }
+          setBusy('กำลังอ่านไฟล์ ' + f.name + '...');
+        }
         if (isPP6 && existed && existed.data && !Object.keys(data.images || {}).length && existed.data.images) {
           data.images = existed.data.images; data.allImages = existed.data.allImages || [];
         }
@@ -519,6 +530,105 @@
       '<div class="mn-acts"><span style="flex:1"></span><button type="button" class="btn" data-exact="close">ยกเลิก</button><button type="button" class="btn pri" data-exact="save">💾 บันทึกคะแนนทั้งหมด</button></div>';
   }
 
+  // ---------- ❓ วิธีใช้ (ตามหน้าที่เปิดอยู่) + ทัวร์แนะนำครั้งแรก ----------
+  var HELP = {
+    mine: ['วิชาที่ฉันสอน (หน้าแรกของครู)', [
+      '📝 กล่อง <b>"งานที่ต้องทำ"</b> บอกว่าวิชาไหนยังไม่เริ่มหรือยังขาดอะไร — กด <b>"ไปกรอกต่อ"</b> ระบบพาไปช่องที่ยังว่างให้เลย',
+      '✏️ กด <b>"กรอกคะแนน"</b> ที่วิชานั้น เพื่อกรอกในระบบ (ไม่ต้องใช้ Excel)',
+      '📄 <b>PDF ฉบับเต็ม</b> = พิมพ์เล่ม ปพ.5 · <b>ดาวน์โหลด Excel</b> = เอาไปทำในคอม แล้ว <b>อัปโหลดไฟล์ใหม่ทับ</b> กลับมา',
+      '🕘 <b>ฉบับก่อนหน้า</b> = เผลออัปโหลดทับ/กรอกผิด ย้อนกลับได้ (เก็บ 5 ครั้งล่าสุด)',
+      '⚙️ <b>เพิ่ม/ลด วิชาที่ฉันสอน</b> อยู่ท้ายหน้า · 📋 <b>ตรวจความพร้อมก่อนส่ง</b> สรุปทุกวิชา พิมพ์ได้']],
+    subjects: ['รายวิชา (ปพ.5) ของห้องนี้', [
+      'เลือกห้องที่แถบด้านบน (ป.1 → ป.6) แล้วดูการ์ดแต่ละวิชา',
+      '✏️ <b>กรอกคะแนน</b> = กรอกในระบบ · ⇪ <b>อัปโหลด</b> = ส่งไฟล์ Excel ที่ทำในคอม (ระบบจะถามก่อนทับข้อมูลเดิม)',
+      'ป้ายเขียว ✔ = กรอกครบ · ป้ายแดง = ยังขาดข้อมูล',
+      '🕘 <b>ฉบับก่อนหน้า</b> = ย้อนกลับไปใช้ข้อมูลที่บันทึกไว้ก่อน']],
+    report: ['ใบรายงาน (ปพ.6)', [
+      'ระบบดึงคะแนนจาก ปพ.5 ทุกวิชาของห้องมาให้อัตโนมัติ',
+      'กด <b>"แก้ไขในระบบ"</b> เพื่อกรอกเวลาเรียน สุขภาพ อ่านคิดเขียน คุณลักษณะ สมรรถนะ',
+      '🖨 <b>PDF ทั้งห้อง</b> = พิมพ์ใบรายงานทุกคน · ดูส่วน "ตรวจสอบ" ว่าข้อมูลครบหรือยัง']],
+    publish: ['ประกาศผล', ['กด <b>คัดลอกลิงก์</b> หรือ <b>ส่งทาง LINE</b> ให้ผู้ปกครอง', 'ผู้ปกครองกรอกเลขประจำตัวนักเรียนเพื่อดูผล', 'แอดมินเป็นผู้อัปเดตผลบนหน้าประกาศ']],
+    roster: ['ทะเบียนรายชื่อ', ['รายชื่อนักเรียนของโรงเรียน (ข้อมูลหลัก) ใช้เป็นรายชื่อเริ่มต้นเมื่อสร้าง ปพ.5 / ปพ.6', 'ถ้าเลขที่หรือเลขประจำตัวไม่ตรง ระบบยึดตามทะเบียนนี้']],
+    editor: ['หน้ากรอกคะแนน', [
+      'ทำทีละขั้นตามปุ่มด้านบน (ซ้าย → ขวา) · ขั้นที่มี<b style="color:#e11d48">ตัวเลขแดง</b> = ยังกรอกไม่ครบ',
+      'แถบ <b>"กรอกแล้ว …%"</b> บอกความคืบหน้า · กด <b>"ไปช่องที่ยังไม่กรอก"</b> ระบบพาไปเอง',
+      '⚡ กรอกเร็ว: <b>"ทุกคนได้เต็ม"</b> / <b>"⚡ ทั้งแถว"</b> / แถบ <b>"ใส่ทุกคน"</b> แล้วค่อยแก้เฉพาะคน',
+      '🖱️ ลากเมาส์คลุมหลายช่อง แล้วพิมพ์ค่า + Enter = ใส่ทุกช่องที่เลือก · Delete = ล้าง',
+      'ช่องสีแดง = เกินคะแนนเต็ม (ต้องแก้ก่อนบันทึก) · ช่องสีเหลือง = ยังไม่ได้กรอก',
+      '☁️ ระบบ<b>บันทึกอัตโนมัติ</b>ทุกประมาณ 1–2 นาที และจำไว้ในเครื่องเสมอ · กด <b>"บันทึกในระบบ"</b> เมื่อกรอกเสร็จ']]
+  };
+  function helpKey() {
+    if (window.PP5Editor && PP5Editor.active()) return 'editor';
+    if (state.tab === 'subjects') return !state.level && isKru() ? 'mine' : 'subjects';
+    return HELP[state.tab] ? state.tab : 'subjects';
+  }
+  function openHelp() {
+    var k = helpKey(), H = HELP[k];
+    $('modalTitle').textContent = '❓ วิธีใช้ · ' + H[0];
+    $('modalBody').innerHTML = '<ol class="help-ol">' + H[1].map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ol>' +
+      '<div class="mn-acts">' + (TOURS[tourKey()] ? '<button class="btn" data-hp="tour">▶ ดูทัวร์แนะนำหน้านี้</button>' : '') + '<span style="flex:1"></span><button class="btn pri" data-hp="close">เข้าใจแล้ว</button></div>';
+    $('modalBody').onchange = null;
+    $('modalBody').onclick = function (e) {
+      var b = e.target.closest('[data-hp]'); if (!b) return;
+      $('modal').close();
+      if (b.dataset.hp === 'tour') setTimeout(function () { startTour(tourKey(), true); }, 200);
+    };
+    $('modal').showModal();
+  }
+  var TOURS = {
+    mine: [['.todo-card', '📝 งานที่ต้องทำ: วิชาไหนยังไม่เริ่มหรือยังขาดอะไร จะขึ้นตรงนี้ กด "ไปกรอกต่อ" ได้เลย'],
+      ['.mine-it .btn.pri', '✏️ กดปุ่มนี้เพื่อกรอกคะแนนวิชานั้น'],
+      ['.mine-foot [data-kru=mine]', '⚙️ เพิ่มหรือลดวิชา/ห้องที่สอน และห้องประจำชั้น ปพ.6'],
+      ['.sn-i[data-side=report]', '📗 ใบรายงาน ปพ.6 ของห้องประจำชั้น'],
+      ['#helpBtn', '❓ สงสัยตรงไหน กดปุ่มนี้ได้ทุกหน้า']],
+    subjects: [['#pkBar, .pk-bar', '🏫 เลือกห้องที่นี่ (ป.1 → ป.6)'], ['.slot .btn.pri', '✏️ กรอกคะแนนวิชานั้น'], ['.sn-i[data-side=report]', '📗 ใบรายงาน ปพ.6'], ['#helpBtn', '❓ ดูวิธีใช้ได้ทุกหน้า']],
+    editor: [['.ed-steps', '1️⃣ ทำทีละขั้นจากซ้ายไปขวา · ตัวเลขแดง = ยังไม่ครบ'], ['.ed-prog', '📊 ความคืบหน้า · กด "ไปช่องที่ยังไม่กรอก" ระบบพาไปเอง'],
+      ['.ed-mode', '🖥️ เลือกรูปแบบ: ทีละช่อง (มือถือ) หรือ ตาราง (คอม)'], ['[data-ed=save]', '💾 กดบันทึกเมื่อเสร็จ (ระบบบันทึกอัตโนมัติให้ด้วย)']]
+  };
+  function tourKey() { var k = helpKey(); return TOURS[k] ? k : null; }
+  var touring = false;
+  function startTour(key, force) {
+    if (!key || touring) return;
+    var done = false; try { done = !!localStorage.getItem('pp5-tour:' + key); } catch (e) {}
+    if (done && !force) return;
+    var vis = function (sel) { var el = document.querySelector(sel); return el && el.getClientRects().length ? el : null; };
+    var steps = TOURS[key].filter(function (x) { return vis(x[0]); });
+    if (!steps.length) return;
+    touring = true;
+    var ov = document.createElement('div'); ov.className = 'tour-ov';
+    ov.innerHTML = '<div class="tour-hole"></div><div class="tour-tip"><p></p><div><span class="tour-n"></span><button class="btn" data-tr="skip">ข้าม</button><button class="btn pri" data-tr="next">ถัดไป ›</button></div></div>';
+    document.body.appendChild(ov);
+    var i = 0, hole = ov.querySelector('.tour-hole'), tip = ov.querySelector('.tour-tip');
+    function end() { touring = false; ov.remove(); window.removeEventListener('resize', show); try { localStorage.setItem('pp5-tour:' + key, '1'); } catch (e) {} }
+    function show() {
+      var el = vis(steps[i][0]);   // หาใหม่ทุกครั้ง (หน้าอาจวาดใหม่หลังโหลดข้อมูล)
+      if (!el) { if (i < steps.length - 1) { i++; show(); } else end(); return; }
+      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      setTimeout(function () {
+        el = vis(steps[i][0]) || el;
+        var r = el.getBoundingClientRect(), pad = 6;
+        hole.style.cssText = 'left:' + (r.left - pad) + 'px;top:' + (r.top - pad) + 'px;width:' + (r.width + pad * 2) + 'px;height:' + (r.height + pad * 2) + 'px';
+        tip.querySelector('p').textContent = steps[i][1];
+        tip.querySelector('.tour-n').textContent = (i + 1) + '/' + steps.length;
+        tip.querySelector('[data-tr=next]').textContent = i === steps.length - 1 ? 'เข้าใจแล้ว ✓' : 'ถัดไป ›';
+        var below = r.bottom + 170 < innerHeight, tw = Math.min(340, innerWidth - 24);
+        tip.style.cssText = 'width:' + tw + 'px;left:' + Math.max(12, Math.min(innerWidth - tw - 12, r.left)) + 'px;' + (below ? 'top:' + (r.bottom + 14) + 'px' : 'top:' + Math.max(12, r.top - 160) + 'px');
+      }, 250);
+    }
+    ov.onclick = function (e) { var b = e.target.closest('[data-tr]'); if (!b) return; if (b.dataset.tr === 'skip' || i === steps.length - 1) end(); else { i++; show(); } };
+    window.addEventListener('resize', show);
+    show();
+  }
+  function afterRender() {
+    if (!$('helpBtn')) {
+      var hb = document.createElement('button'); hb.id = 'helpBtn'; hb.type = 'button'; hb.className = 'help-fab'; hb.innerHTML = '❓ <span>วิธีใช้</span>'; hb.title = 'วิธีใช้หน้านี้';
+      hb.onclick = openHelp; document.body.appendChild(hb);
+    }
+    // ทัวร์แนะนำครั้งแรก (เฉพาะระบบออนไลน์ ไม่รบกวนตอนเปิดหน้าต่างอื่นอยู่)
+    if (DB === LocalDB || touring || ($('modal') && $('modal').open) || document.querySelector('.pinpad')) return;
+    startTour(tourKey(), false);
+  }
+
   // ---------- เลือกข้อมูลของห้องปัจจุบัน ----------
   // ปีการศึกษาปัจจุบัน (ตามวันที่: เปิดภาคเรียน พ.ค.)
   function curYear() { return DB.curYear || thaiYear(); }
@@ -783,19 +893,21 @@
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
   }
-  async function saveEdited(kind, data, oldKey) {
+  async function saveEdited(kind, data, oldKey, opt) {
+    opt = opt || {};
     var meta = data.meta, slot = kind === 'pp6' ? 'pp6' : slotOf(meta);
     var key = classKey(meta.year, meta.level, meta.room) + '|' + slot;
     var existing = records.filter(function (r) { return r.key === key; })[0];
     var old = oldKey ? records.filter(function (r) { return r.key === oldKey; })[0] : null;
-    if (existing && key !== oldKey && !confirm('มีข้อมูลวิชานี้อยู่แล้ว (' + existing.fileName + ') ต้องการแทนที่หรือไม่?')) throw new Error('ยกเลิกการบันทึก');
+    if (opt.auto && existing && key !== oldKey && !existing.virtual) throw new Error('มีข้อมูลวิชานี้อยู่แล้ว — กด "บันทึกในระบบ" เพื่อยืนยัน');
+    if (existing && key !== oldKey && !existing.virtual && !confirm('มีข้อมูลวิชานี้อยู่แล้ว (' + existing.fileName + ') ต้องการแทนที่หรือไม่?')) throw new Error('ยกเลิกการบันทึก');
     if (kind === 'pp5') learnLib(data, 'กรอกในระบบ ' + (meta.levelName || '') + '/' + meta.room);
     var built = await buildFile(kind, data);
     var blob = built.blob;
     var rec = {
       key: key, year: meta.year, level: meta.level, room: meta.room, slot: slot,
       fileName: fileNameFor(kind, meta, built.ext), origName: '(กรอกในระบบ)', size: blob.size, uploadedAt: Date.now(), blob: blob,
-      data: data, settings: (existing && existing.settings) || (old && old.settings) || undefined
+      data: data, settings: (existing && existing.settings) || (old && old.settings) || undefined, auto: !!opt.auto
     };
     var saved = await DB.put(rec);
     if (saved && typeof saved === 'object') Object.assign(rec, saved);
@@ -807,6 +919,7 @@
   var termsAll = {};   // วันเปิด-ปิดภาคเรียนรายปี (แอดมินตั้ง)
   var editorCtx = {
     terms: function () { return termsAll; },
+    store: function () { return DB === LocalDB ? null : DB; },
     esc: esc, toast: toast, setBusy: setBusy,
     rerender: function () { render(); },
     classInfo: curClass,
@@ -995,7 +1108,8 @@
     });
   }
 
-  function render() {
+  function render() { renderMain(); setTimeout(afterRender, 80); }
+  function renderMain() {
     renderSide();
     renderPicker();
     renderRosterBar();
@@ -1196,6 +1310,7 @@
         (DB.xpdfStart ? '<button class="btn" data-act="pdf5b" data-key="' + esc(rec.key) + '">🧾 PDF สรุปย่อ</button>' : '') +
         '<button class="btn" data-act="download" data-key="' + esc(rec.key) + '">⬇ ดาวน์โหลด Excel</button>' +
         (readOnly() ? '' : '<button class="btn" data-act="replace" data-slot="' + esc(slot) + '">⇪ อัปโหลดไฟล์ใหม่ทับ</button>' +
+          (DB.versions ? '<button class="btn" data-act="hist" data-key="' + esc(rec.key) + '" title="ย้อนกลับไปใช้ข้อมูลที่บันทึกไว้ก่อนหน้า">🕘 ฉบับก่อนหน้า</button>' : '') +
           '<button class="btn danger" data-act="delete" data-key="' + esc(rec.key) + '">🗑 ลบวิชานี้</button>') +
         '</div></div>';
     });
@@ -1442,7 +1557,88 @@
     var b = function (act, label, cls) { return '<button class="btn' + (cls ? ' ' + cls : '') + '" data-mine="' + act + '" data-cls="' + c + '" data-slot="' + slot + '"' + (rec ? ' data-key="' + esc(rec.key) + '"' : '') + '>' + label + '</button>'; };
     if (!rec) return (canEdit ? b('online', '✏️ กรอกคะแนน', 'pri') : '') + (canUp ? b('upload', '⇪ อัปโหลด Excel') : '') + b('template', '⬇ ดาวน์โหลดไฟล์ Excel เปล่า');
     return (canEdit ? b('edit', '✏️ กรอกคะแนน', 'pri') : '') + b('open', '👁 ดูคะแนน') + b('pdf', '📄 PDF ฉบับเต็ม') + (DB.xpdfStart ? b('pdfb', '🧾 PDF สรุปย่อ') : '') +
-      b('download', '⬇ ดาวน์โหลด Excel') + (canUp ? b('upload', '⇪ อัปโหลดไฟล์ใหม่ทับ') : '') + (f.allowDelete !== false || adm ? b('delete', '🗑 ลบ', 'danger') : '');
+      b('download', '⬇ ดาวน์โหลด Excel') + (canUp ? b('upload', '⇪ อัปโหลดไฟล์ใหม่ทับ') : '') + (DB.versions && canEdit ? b('hist', '🕘 ฉบับก่อนหน้า') : '') + (f.allowDelete !== false || adm ? b('delete', '🗑 ลบ', 'danger') : '');
+  }
+  // ---------- งานที่ต้องทำ (ครู): วิชา/ห้องที่ยังไม่เริ่ม หรือยังกรอกไม่ครบ ----------
+  var SEC_TH = { pp5: { scores: 'คะแนน', att: 'เวลาเรียน', char: 'คุณลักษณะ', rtw: 'อ่านคิดเขียน', act: 'กิจกรรม' },
+    pp6: { t1: 'คะแนนภาค 1', t2: 'คะแนนภาค 2', att: 'เวลาเรียน', health: 'สุขภาพ', rtw: 'อ่านคิดเขียน', char: 'คุณลักษณะ', comp: 'สมรรถนะ' } };
+  var mineLoading = false;
+  function kruTodo() {
+    var yr = state.year, out = [];
+    kruSubs().forEach(function (x) {
+      var p = x.split('|'), c = p[0].split('/'), lv = +c[0], rm = +c[1], sl = p[1];
+      if (sl === '+') return;
+      var info = slotInfo(sl, null), rec = records.filter(function (r) { return r.year === yr && r.level === lv && r.room === rm && r.slot === sl; })[0];
+      var it = { kind: 'pp5', cls: lv + '/' + rm, level: lv, room: rm, slot: sl, name: rec && rec.data ? rec.data.meta.subject : info.name, rec: rec || null };
+      if (!rec) { it.state = 'new'; out.push(it); return; }
+      if (!rec.data) { it.state = 'load'; out.push(it); return; }
+      var cp = PP5Model.completeness('pp5', rec.data);
+      it.cp = cp; it.state = cp.missing ? 'miss' : 'ok'; out.push(it);
+    });
+    kruPP6().forEach(function (cc) {
+      var p = cc.split('/'), cls = { year: yr, level: +p[0], room: +p[1] }, rs = recsOf(cls);
+      var rec = virtualPP6(cls, rs);
+      var it = { kind: 'pp6', cls: cc, level: cls.level, room: cls.room, slot: 'pp6', name: 'ใบรายงาน ปพ.6 (ประจำชั้น)', rec: rec || null };
+      if (!rec) it.state = rs.some(function (r) { return !r.data; }) ? 'load' : 'new';
+      else { it.cp = PP5Model.completeness('pp6', rec.data); it.state = it.cp.missing ? 'miss' : 'ok'; }
+      out.push(it);
+    });
+    out.sort(function (a, b) { return a.level - b.level || a.room - b.room || (a.kind === 'pp6') - (b.kind === 'pp6'); });
+    return out;
+  }
+  function todoMissText(it) {
+    if (!it.cp) return '';
+    var sec = SEC_TH[it.kind];
+    return Object.keys(it.cp.bySec).filter(function (k) { return it.cp.bySec[k]; }).map(function (k) { return (sec[k] || k) + ' ' + it.cp.bySec[k] + ' ช่อง'; }).join(' · ');
+  }
+  function firstMissSec(it) { var k = it.cp && Object.keys(SEC_TH[it.kind]).filter(function (x) { return it.cp.bySec[x]; })[0]; return k || null; }
+  function todoCard(list) {
+    var todo = list.filter(function (it) { return it.state === 'new' || it.state === 'miss'; }), ok = list.filter(function (it) { return it.state === 'ok'; }).length;
+    var loading = list.some(function (it) { return it.state === 'load'; });
+    var li = todo.slice(0, 8).map(function (it) {
+      var t = it.state === 'new' ? '<b>ยังไม่เริ่ม</b>' : 'ยังขาด: ' + esc(todoMissText(it));
+      return '<li class="td-' + it.state + '"><span class="td-ic">' + (it.state === 'new' ? '🆕' : '❗') + '</span><span class="td-t"><b>ป.' + esc(it.cls) + ' ' + esc(it.name) + '</b><small>' + t + '</small></span>' +
+        '<button class="btn pri" data-todo="' + esc(it.kind + '|' + it.cls + '|' + it.slot) + '">' + (it.state === 'new' ? '✏️ เริ่มกรอก' : '➡ ไปกรอกต่อ') + '</button></li>';
+    }).join('');
+    return '<div class="card todo-card' + (todo.length ? '' : ' all-ok') + '"><div class="td-h"><h3>' + (todo.length ? '📝 งานที่ต้องทำ (' + todo.length + ')' : '🎉 กรอกครบทุกวิชาแล้ว') + '</h3>' +
+      '<span class="sub">เสร็จแล้ว ' + ok + '/' + list.length + (loading ? ' · กำลังโหลดข้อมูล…' : '') + '</span><button class="btn" data-todo="check">📋 ตรวจความพร้อมก่อนส่ง</button></div>' +
+      (todo.length ? '<ul class="td-list">' + li + '</ul>' + (todo.length > 8 ? '<p class="sub">และอีก ' + (todo.length - 8) + ' รายการ · กด "ตรวจความพร้อมก่อนส่ง" เพื่อดูทั้งหมด</p>' : '') : '') + '</div>';
+  }
+  async function openTodo(key) {
+    var p = key.split('|'), kind = p[0], c = p[1].split('/'), slot = p[2];
+    state.level = +c[0]; state.room = +c[1]; state.student = null; state.tab = kind === 'pp6' ? 'report' : 'subjects';
+    var need = records.filter(function (r) { return r.year === state.year && r.level === state.level && r.room === state.room && !r.data; });
+    if (need.length && DB.ensureData) { setBusy('กำลังโหลดข้อมูล ป.' + p[1] + '...'); try { await DB.ensureData(need); } finally { setBusy(null); } }
+    var it = kruTodo().filter(function (x) { return x.kind === kind && x.cls === p[1] && x.slot === slot; })[0];
+    render();
+    if (kind === 'pp6') { var p6 = pp6Record(); if (p6) PP5Editor.open({ kind: 'pp6', key: p6.key, section: it && firstMissSec(it) || undefined }, editorCtx); else PP5Editor.open({ kind: 'pp6', slot: 'pp6', intent: 'online' }, editorCtx); return; }
+    if (it && it.rec) PP5Editor.open({ kind: 'pp5', key: it.rec.key, section: firstMissSec(it) || undefined }, editorCtx);
+    else PP5Editor.open({ kind: 'pp5', slot: slot, intent: 'online' }, editorCtx);
+  }
+  // ตรวจความพร้อมก่อนส่ง: สรุปทุกวิชา/ห้องของครู พิมพ์ได้
+  function openReadiness() {
+    var list = kruTodo(), ok = list.filter(function (it) { return it.state === 'ok'; }).length;
+    var st = { ok: '✅ ครบ', miss: '❗ ยังไม่ครบ', new: '🆕 ยังไม่เริ่ม', load: '⏳ กำลังโหลด' };
+    var rows = list.map(function (it) {
+      return '<tr class="rd-' + it.state + '"><td>ป.' + esc(it.cls) + '</td><td>' + esc(it.name) + '</td><td>' + st[it.state] + '</td><td>' + (it.state === 'ok' ? '-' : it.state === 'new' ? 'ยังไม่มีข้อมูล' : esc(todoMissText(it))) + '</td></tr>';
+    }).join('');
+    var who = String(DB.me && DB.me.name || ''), when = new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' });
+    var tbl = '<table class="rd-tbl"><thead><tr><th>ห้อง</th><th>วิชา</th><th>สถานะ</th><th>สิ่งที่ยังขาด</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    $('modalTitle').textContent = '📋 ตรวจความพร้อมก่อนส่ง';
+    $('modalBody').innerHTML = '<p class="sub">' + esc(who) + ' · ปีการศึกษา ' + esc(state.year) + ' · ตรวจเมื่อ ' + esc(when) + '<br><b>พร้อมส่ง ' + ok + ' จาก ' + list.length + ' รายการ</b>' +
+      (PP5Model.activeTerm(state.year) < 2 ? ' · ช่องของภาค 2 ยังไม่นับจนถึง 1 ก.พ.' : '') + '</p><div class="tbl-wrap">' + tbl + '</div>' +
+      '<div class="mn-acts"><span style="flex:1"></span><button class="btn" data-rd="close">ปิด</button><button class="btn pri" data-rd="print">🖨 พิมพ์รายการ</button></div>';
+    $('modalBody').onchange = null;
+    $('modalBody').onclick = function (e) {
+      var b = e.target.closest('[data-rd]'); if (!b) return;
+      if (b.dataset.rd === 'close') { $('modal').close(); return; }
+      var w = window.open('', '_blank');
+      if (!w) { toast('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ — อนุญาตป๊อปอัปแล้วลองใหม่', 'err'); return; }
+      w.document.write('<!doctype html><meta charset="utf-8"><title>ตรวจความพร้อมก่อนส่ง</title><style>body{font-family:Sarabun,"TH Sarabun New",sans-serif;padding:24px;font-size:16px}h2{margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #999;padding:6px 8px;text-align:left}th{background:#eee}.rd-ok td:nth-child(3){color:#15803d}.rd-miss td:nth-child(3),.rd-new td:nth-child(3){color:#b91c1c}</style>' +
+        '<h2>ตรวจความพร้อมก่อนส่ง ปพ.5 / ปพ.6</h2><div>' + esc(who) + ' · ปีการศึกษา ' + esc(state.year) + ' · ' + esc(when) + ' · พร้อมส่ง ' + ok + '/' + list.length + '</div>' + tbl + '<script>setTimeout(function(){print()},300)<\/script>');
+      w.document.close();
+    };
+    $('modal').showModal();
   }
   function renderMine() {
     var yr = state.year, order = CORE.map(function (c) { return c.slot; });
@@ -1471,10 +1667,17 @@
     h += '</div>';
     var nSub = items.filter(function (x) { return x.slot !== '+'; }).length;
     $('banner').innerHTML = '<div class="bnr" style="--bc:#1d5bd8"><div class="bi">📘</div><div class="bm"><div class="bk">ปพ.5 · วิชาที่ฉันสอน</div><div class="bt">' + esc(String(DB.me.name || '').replace(/^(นาย|นางสาว|นาง)/, 'ครู')) + '</div><div class="bs">ปีการศึกษา ' + esc(yr) + ' · ทุกชั้นเรียงจาก ป.1 → ป.6 · กดปุ่มได้เลยไม่ต้องเลือกห้อง</div></div><div class="bx"><span class="bx-ic">📚</span><span>ทำแล้ว<b>' + done + '/' + nSub + '</b></span></div></div>';
-    view.innerHTML = (items.length ? h : '<div class="card empty-state"><b>ยังไม่ได้เลือกวิชาที่สอน</b><br><button class="btn pri" data-kru="mine">⚙️ วิชาที่ฉันสอน</button></div>') +
+    var tdl = kruTodo();
+    if (!mineLoading && DB.ensureData) {
+      var needL = records.filter(function (r) { return r.year === yr && !r.data && (kruSubs().some(function (x) { var q = x.split('|'); return q[0] === r.level + '/' + r.room && q[1] === r.slot; }) || kruPP6().indexOf(r.level + '/' + r.room) >= 0); });
+      if (needL.length) { mineLoading = true; DB.ensureData(needL).then(function () { mineLoading = false; if (state.tab === 'subjects' && isKru() && !state.level && !PP5Editor.active()) render(); }, function () { mineLoading = false; }); }
+    }
+    view.innerHTML = (tdl.length ? todoCard(tdl) : '') + (items.length ? h : '<div class="card empty-state"><b>ยังไม่ได้เลือกวิชาที่สอน</b><br><button class="btn pri" data-kru="mine">⚙️ วิชาที่ฉันสอน</button></div>') +
       '<div class="mine-foot"><button class="btn" data-kru="mine">⚙️ เพิ่ม/ลด วิชาที่ฉันสอน</button></div>';
     view.onchange = null;
     view.onclick = async function (e) {
+      var td = e.target.closest('[data-todo]');
+      if (td) { if (td.dataset.todo === 'check') openReadiness(); else openTodo(td.dataset.todo); return; }
       var b = e.target.closest('[data-mine]'); if (!b) return;
       var p = b.dataset.cls.split('/'), act = b.dataset.mine;
       state.level = +p[0]; state.room = +p[1]; state.student = null;
@@ -1493,8 +1696,42 @@
       else if (act === 'pdf' && rec && rec.data) { if (DB.xpdfStart) PP5Pdf.excel(rec, pdfCtx); else PP5Pdf.subject(rec, pdfCtx); }
       else if (act === 'pdfb' && rec && rec.data) PP5Pdf.subject(rec, pdfCtx);
       else if (act === 'download' && rec) download(rec);
+      else if (act === 'hist' && rec) openVersions(rec);
       else if (act === 'delete' && rec) removeRecord(rec);
     };
+  }
+  // ---------- ฉบับก่อนหน้า: ย้อนกลับไปใช้ข้อมูลที่บันทึกไว้ก่อน (ระบบเก็บ 5 ฉบับล่าสุด) ----------
+  function fmtWhen(t) { return t ? new Date(t).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'; }
+  async function openVersions(rec) {
+    if (!DB.versions) { toast('ใช้ได้เมื่อเปิดระบบผ่านเว็บของโรงเรียน', 'info'); return; }
+    var list;
+    try { setBusy('กำลังโหลดฉบับก่อนหน้า...'); list = await DB.versions(rec.key); }
+    catch (e) { toast(e && e.message ? e.message : String(e), 'err'); return; } finally { setBusy(''); }
+    var src = function (o) { return o === '(กรอกในระบบ)' ? '✏️ กรอกในระบบ' : '📄 อัปโหลดไฟล์ ' + esc(o || ''); };
+    $('modalTitle').textContent = '🕘 ฉบับก่อนหน้า · ' + (rec.data && rec.data.meta ? (rec.data.meta.subject || '') + ' ' : '') + 'ป.' + rec.level + '/' + rec.room;
+    $('modalBody').innerHTML = '<p class="sub">ระบบเก็บข้อมูลที่บันทึกไว้ 5 ครั้งล่าสุด ถ้าเผลออัปโหลดทับหรือกรอกผิด กด <b>"↩ ใช้ฉบับนี้"</b> เพื่อย้อนกลับ (ฉบับปัจจุบันจะถูกเก็บไว้ ย้อนกลับมาได้อีก)</p>' +
+      '<div class="vh-list"><div class="vh-it cur"><div><b>ฉบับปัจจุบัน</b><span>' + fmtWhen(rec.uploadedAt) + (rec.by ? ' · โดย ' + esc(rec.by) : '') + ' · ' + src(rec.origName) + '</span></div><em>ใช้อยู่</em></div>' +
+      (list.length ? list.map(function (v) {
+        return '<div class="vh-it"><div><b>' + fmtWhen(v.at) + '</b><span>' + (v.by ? 'โดย ' + esc(v.by) + ' · ' : '') + src(v.origName) + '</span></div><button class="btn" data-vh="' + v.i + '">↩ ใช้ฉบับนี้</button></div>';
+      }).join('') : '<p class="sub">ยังไม่มีฉบับก่อนหน้า (จะเริ่มเก็บตั้งแต่การบันทึกครั้งถัดไป)</p>') + '</div>' +
+      '<div class="mn-acts"><span style="flex:1"></span><button type="button" class="btn" data-vh="close">ปิด</button></div>';
+    $('modalBody').onchange = null;
+    $('modalBody').onclick = async function (e) {
+      var b = e.target.closest('[data-vh]'); if (!b) return;
+      if (b.dataset.vh === 'close') { $('modal').close(); return; }
+      var v = list.filter(function (x) { return String(x.i) === b.dataset.vh; })[0];
+      if (!confirm('ย้อนกลับไปใช้ข้อมูลเมื่อ ' + fmtWhen(v && v.at) + ' ?\n(ข้อมูลปัจจุบันจะถูกเก็บไว้ในรายการ ย้อนกลับมาได้อีก)')) return;
+      try {
+        setBusy('กำลังย้อนกลับ...');
+        var saved = await DB.restore(rec.key, +b.dataset.vh);
+        Object.assign(rec, saved); rec.data = null;
+        await DB.ensureData([rec]);
+        $('modal').close();
+        toast('ย้อนกลับเป็นข้อมูลเมื่อ ' + fmtWhen(v && v.at) + ' แล้ว', 'ok');
+        render();
+      } catch (er) { toast(er && er.message ? er.message : String(er), 'err'); } finally { setBusy(''); }
+    };
+    $('modal').showModal();
   }
   function openSubject(key) {
     var rec = records.filter(function (r) { return r.key === key; })[0];
@@ -1827,6 +2064,7 @@
       else if (act === 'online' || act === 'template') PP5Editor.open({ kind: a.dataset.slot === 'pp6' ? 'pp6' : 'pp5', slot: a.dataset.slot, intent: act === 'template' ? 'excel' : 'online' }, editorCtx);
       else if (act === 'edit' && rec) PP5Editor.open({ kind: rec.slot === 'pp6' ? 'pp6' : 'pp5', key: rec.key }, editorCtx);
       else if (act === 'replace') pickFor(a.dataset.slot);
+      else if (act === 'hist' && rec) openVersions(rec);
       else if (act === 'download' && rec) download(rec);
       // รุ่น Apps Script: PDF รูปแบบไฟล์ Excel ต้นฉบับ (ทุกชีต) · รุ่นในเครื่อง: เล่มสรุป
       else if (act === 'pdf5' && rec) { if (rec.data) { if (DB.xpdfStart) PP5Pdf.excel(rec, pdfCtx); else PP5Pdf.subject(rec, pdfCtx); } }

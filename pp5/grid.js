@@ -290,6 +290,7 @@
       var r = +t.dataset.r, ci = +t.dataset.c, c = o.cols[ci];
       var ok = self.setCell(r, ci, t.value);
       var td = t.parentNode, v = self.get(o.rows[r], c);
+      if (ok && c.type === 'num' && v != null && c.max != null && v > c.max && o.onOver) o.onOver(c, v);
       td.classList.toggle('g-bad', !ok || (c.type === 'num' && v != null && ((c.max != null && v > c.max) || (c.min != null && v < c.min))));
       td.classList.toggle('g-req', !!c.req && (v == null || v === ''));
       if (o.onChange) o.onChange(o.rows[r], c);

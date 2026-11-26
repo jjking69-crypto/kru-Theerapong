@@ -113,4 +113,23 @@
     return { set: function (t) { el.querySelector('b').textContent = t; }, done: function () { el.classList.add('done'); setTimeout(function () { el.remove(); }, 350); } };
   }
   root.PP5PinPad = { ask: ask, loading: loading };
+  // แปลงข้อความผิดพลาดทางเทคนิคเป็นภาษาง่าย (ใช้ทุกหน้า)
+  var FR = [
+    [/PIN_LOCKED/, 'ใส่รหัสผิดหลายครั้ง กรุณารอ 10 นาทีแล้วลองใหม่'],
+    [/PIN_REQUIRED/, 'หมดเวลาเข้าระบบ กรุณากดรหัสใหม่'],
+    [/NEED_DRIVE_API/, 'ยังสร้าง PDF ฉบับเต็มไม่ได้ — แอดมินต้องเปิด "บริการ Drive API" ในโปรเจกต์ Apps Script ก่อน'],
+    [/Service invoked too many times|Rate ?Limit|quota|Quota exceeded/i, 'ตอนนี้มีคนใช้งานพร้อมกันมาก รอประมาณ 1 นาทีแล้วลองใหม่'],
+    [/Lock ?timeout|waitLock|Could not obtain lock|ทำงานพร้อมกัน/i, 'ระบบกำลังบันทึกงานของคนอื่นอยู่ รอสักครู่แล้วลองใหม่'],
+    [/QuotaExceededError|storage.*full/i, 'พื้นที่เก็บข้อมูลในเบราว์เซอร์เต็ม — ล้างประวัติเบราว์เซอร์บางส่วนแล้วลองใหม่'],
+    [/Failed to fetch|NetworkError|Network ?error|net::|ERR_|timed? ?out|Timeout|เครือข่าย|ScriptError|We're sorry|Exceeded maximum execution time|server error/i, 'อินเทอร์เน็ตหลุดหรือระบบตอบช้า — ข้อมูลที่กรอกยังจำไว้ในเครื่อง ลองกดใหม่อีกครั้ง'],
+    [/Access denied|Authorization is required|You do not have permission|Requested entity was not found|PERMISSION_DENIED/i, 'ระบบยังไม่ได้รับอนุญาตให้เปิดไฟล์นี้ — แจ้งแอดมินให้ตรวจสิทธิ์การเข้าถึง'],
+    [/TypeError|ReferenceError|SyntaxError|Cannot read propert|is not a function|undefined is not|null is not/, 'เกิดข้อผิดพลาดในหน้าเว็บ — ลองรีเฟรชหน้า (กด F5) ถ้ายังไม่หาย ส่งภาพหน้าจอให้แอดมิน']
+  ];
+  root.PP5Friendly = function (msg) {
+    var s = String(msg == null ? '' : msg).replace(/^(Error|Exception|ScriptError):\s*/i, '');
+    var m = s.match(/^([^:]{2,60}?[ก-๙][^:]{0,20}):\s*([\s\S]*)$/), pre = m ? m[1] + ': ' : '', body = m ? m[2] : s;
+    body = body.replace(/^(Error|Exception):\s*/i, '');
+    for (var i = 0; i < FR.length; i++) if (FR[i][0].test(body)) return pre + FR[i][1];
+    return pre + body;
+  };
 })(typeof self !== 'undefined' ? self : this);

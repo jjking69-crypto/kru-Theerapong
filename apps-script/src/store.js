@@ -153,7 +153,7 @@
         key: rec.key, year: rec.year, level: rec.level, room: rec.room, stage: rec.data && rec.data.meta.stage,
         slot: rec.slot, fileName: rec.fileName, origName: rec.origName, size: rec.size, uploadedAt: rec.uploadedAt,
         mime: rec.blob.type || 'application/octet-stream', school: rec.data && rec.data.meta.school || '',
-        settings: rec.settings || null
+        settings: rec.settings || null, auto: !!rec.auto
       };
       var saved = await call('api_save', [entry, b64, JSON.stringify(rec.data)]);
       if (saved && rec.data) IDB.put(rec.key, { at: saved.uploadedAt || 0, data: rec.data });
@@ -239,6 +239,9 @@
     xpdfCacheGet: function (key, stamp) { return call('api_xpdfCacheGet', [key, stamp]); },
     xpdfCachePut: async function (key, stamp, blob, name) { return call('api_xpdfCachePut', [key, stamp, await blobToB64(blob), name]); },
     fontTTF: function () { return call('api_fontTTF'); },
+    versions: function (key) { return call('api_versions', [key]); },
+    restore: function (key, i) { return call('api_restore', [key, i]); },
+    log: function (n) { return call('api_log', [n || 300]); },
     sheetXlsx: function (id) { return call('api_sheetXlsx', [id]).then(function (b64) { var bin = atob(b64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }); },
     saveOutput: async function (blob, name) {
       if (blob.size > MAX_UPLOAD) throw new Error('ไฟล์ใหญ่เกินกว่าจะเก็บสำเนาใน Drive อัตโนมัติ');
